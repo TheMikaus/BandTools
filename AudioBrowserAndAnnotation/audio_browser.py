@@ -4,12 +4,12 @@
 """
 Audio Folder Player with Annotations + Async Waveform (Live Progress + Cache)
 
-What’s new/fixed:
-- Live progress: "Analyzing waveform… NN%" updates as it builds.
-- Waveforms are generated per-file on cache miss (no getting “stuck” after the first).
-- Waveform generation continues even if playback ends.
-- Note input moved to top; "Delete Selected" at the bottom.
-- Clicking the same file again does NOT restart playback.
+Updates in this build:
+- Waveform progress text actually increments: “Analyzing waveform… NN%”.
+  If progress can’t stream for some reason, it shows “Analyzing waveform…” (no stuck 0%).
+- Waveform moved ABOVE the “New note” input in the Annotations tab.
+- (Retained) Per-file async waveform generation with cache (size+mtime+columns),
+  continues even if playback ends; clicking the same file doesn’t restart playback.
 """
 
 from __future__ import annotations
@@ -55,12 +55,18 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen
 )
+# QFileSystemModel can live in QtGui in some PyQt6 builds; fallback to QtWidgets.
+try:
+    from PyQt6.QtGui import QFileSystemModel
+except Exception:
+    from PyQt6.QtWidgets import QFileSystemModel
+
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QHeaderView, QMainWindow, QMessageBox,
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
-    QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QFileSystemModel
+    QToolBar, QStyle, QLabel, QTabWidget, QLineEdit
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -203,8 +209,8 @@ def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
 
 def compute_peaks_progressive(samples: List[float], columns: int, chunk: int):
     """
-    Generator yielding (start_col, peaks_chunk) progressively.
-    peaks_chunk is List[[min,max], ...] with Python floats for cross-thread safety.
+    Yield (start_col, peaks_chunk) progressively.
+    peaks_chunk is List[[min,max], ...] (lists for signal marshalling).
     """
     n = len(samples)
     if n == 0 or columns <= 0:
@@ -255,7 +261,6 @@ def resample_peaks(peaks: List[Tuple[float, float]], width: int) -> List[Tuple[f
 
 # ---------- Waveform worker (threaded with progress + generation id) ----------
 class WaveformWorker(QObject):
-    # gen_id so we can ignore stale signals from old workers
     progress = pyqtSignal(int, str, list, int, int)  # gen_id, path_str, peaks_chunk, done_cols, total_cols
     finished = pyqtSignal(int, str, list, int, int, int, int)  # gen_id, path_str, peaks, duration_ms, columns, size, mtime
     error = pyqtSignal(int, str, str)  # gen_id, path_str, message
@@ -275,15 +280,12 @@ class WaveformWorker(QObject):
             peaks_all: List[Tuple[float, float]] = []
             CHUNK = 100  # columns per emission
             for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK):
-                # Extend final list with Python float tuples
                 for a, b in chunk_peaks:
                     peaks_all.append((float(a), float(b)))
                 done = start + len(chunk_peaks)
-                # Emit chunk as list-of-lists (safer across threads)
                 self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns))
 
             size, mtime = file_signature(p)
-            # Convert peaks_all to list-of-lists for signal
             peaks_payload = [[float(a), float(b)] for (a, b) in peaks_all]
             self.finished.emit(self._gen_id, self._path_str, peaks_payload, int(dur_ms), int(self._columns), int(size), int(mtime))
         except Exception as e:
@@ -310,10 +312,11 @@ class WaveformView(QWidget):
         self._total_cols: int = 0
         self._done_cols: int = 0
 
-        # Generation IDs & thread bookkeeping
+        # Generation IDs & bookkeeping
         self._gen_id_counter: int = 0
         self._active_gen_id: int = -1
-        self._threads: List[QThread] = []   # keep refs so GC doesn’t kill them
+        self._threads: List[QThread] = []              # keep refs to threads
+        self._workers: Dict[int, WaveformWorker] = {}  # keep refs to workers (prevents GC)
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -356,7 +359,7 @@ class WaveformView(QWidget):
             return
 
         # No cache or stale -> start a brand-new worker
-        self._state = "loading"; self._msg = "Analyzing waveform… 0%"
+        self._state = "loading"; self._msg = "Analyzing waveform…"  # start without `%`
         self.update()
 
         self._active_gen_id = self._gen_id_counter = (self._gen_id_counter + 1) % (1 << 31)
@@ -366,19 +369,26 @@ class WaveformView(QWidget):
         thread = QThread(self)
         worker = WaveformWorker(gen_id, str(path), WAVEFORM_COLUMNS)
         worker.moveToThread(thread)
-        thread.started.connect(worker.run)
+        worker.setObjectName(f"WaveformWorker-{gen_id}")
 
-        # Connect with generation check
+        # Keep strong refs so the worker isn't GC'd mid-run
+        self._threads.append(thread)
+        self._workers[gen_id] = worker
+
+        thread.started.connect(worker.run)
         worker.progress.connect(self._on_worker_progress)
         worker.finished.connect(self._on_worker_finished)
         worker.error.connect(self._on_worker_error)
 
-        # Cleanup thread bookkeeping when it ends
-        worker.finished.connect(worker.deleteLater)
+        # Cleanup: when thread finishes, drop refs
+        def _cleanup():
+            worker.deleteLater()
+            if thread in self._threads: self._threads.remove(thread)
+            self._workers.pop(gen_id, None)
+        worker.finished.connect(_cleanup)
+        thread.finished.connect(_cleanup)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: self._threads.remove(thread) if thread in self._threads else None)
 
-        self._threads.append(thread)
         thread.start()
 
     # Signal handlers — ignore anything that doesn't match the active gen_id
@@ -393,10 +403,17 @@ class WaveformView(QWidget):
                 continue
             self._peaks_loading.append((float(a), float(b)))
 
-        self._done_cols = int(done_cols)
+        # Bound done/total to sane values and update message with % if we have progress
         self._total_cols = max(1, int(total_cols))
-        pct = int(round(100.0 * self._done_cols / self._total_cols))
-        self._msg = f"Analyzing waveform… {pct}%"
+        self._done_cols = max(0, min(int(done_cols), self._total_cols))
+        if self._done_cols > 0:
+            pct = int(round(100.0 * self._done_cols / self._total_cols))
+            if pct < 100:  # only show percent while building
+                self._msg = f"Analyzing waveform… {pct}%"
+            else:
+                self._msg = "Analyzing waveform…"
+        else:
+            self._msg = "Analyzing waveform…"
         self._pixmap = None
         self.update()
 
@@ -454,16 +471,17 @@ class WaveformView(QWidget):
                 y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
                 if y1 > y2: y1, y2 = y2, y1
                 p.drawLine(x, y1, x, y2)
-        elif self._state == "loading" and self._peaks_loading:
-            pen_wave = QPen(self._wave); pen_wave.setWidth(1)
-            p.setPen(pen_wave)
-            # Stretch current partial peaks to full width for nicer UX during load
-            partial = resample_peaks(self._peaks_loading, min(W, max(1, self._done_cols)))
-            draw_peaks = resample_peaks(partial, W)
-            for x, (mn, mx) in enumerate(draw_peaks):
-                y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
-                if y1 > y2: y1, y2 = y2, y1
-                p.drawLine(x, y1, x, y2)
+        elif self._state == "loading":
+            if self._peaks_loading:
+                pen_wave = QPen(self._wave); pen_wave.setWidth(1)
+                p.setPen(pen_wave)
+                # Stretch partial to full width for nicer UX
+                partial = resample_peaks(self._peaks_loading, min(W, max(1, self._done_cols)))
+                draw_peaks = resample_peaks(partial, W)
+                for x, (mn, mx) in enumerate(draw_peaks):
+                    y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
+                    if y1 > y2: y1, y2 = y2, y1
+                    p.drawLine(x, y1, x, y2)
             p.setPen(self._message_color)
             p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, self._msg or "Analyzing waveform…")
         else:
@@ -671,33 +689,21 @@ class AudioBrowser(QMainWindow):
 
         self.tabs = QTabWidget(); right_layout.addWidget(self.tabs, 1)
 
-        # Library tab
-        lib_tab = QWidget(); lib_layout = QVBoxLayout(lib_tab)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["File", "Created", "Provided Name (editable)"])
-        hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents); hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
-        self.table.itemChanged.connect(self._on_table_item_changed); lib_layout.addWidget(self.table, 1)
-        self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
-        self.tabs.addTab(lib_tab, "Library")
-
-        # Annotations tab
+        # ---- Annotations tab (Waveform ABOVE "New note") ----
         ann_tab = QWidget(); ann_layout = QVBoxLayout(ann_tab)
 
-        # TOP ROW: New note input (top)
+        # Waveform (async + cached + live progress)
+        self.waveform = WaveformView()
+        self.waveform.bind_player(self.player)
+        ann_layout.addWidget(self.waveform)
+
+        # New note input (below waveform)
         top_controls = QHBoxLayout()
         self.note_input = QLineEdit(); self.note_input.setPlaceholderText("Type to create a note at current time; press Enter to add")
         self.note_input.textEdited.connect(self._on_note_text_edited); self.note_input.returnPressed.connect(self._on_note_return_pressed)
         top_controls.addWidget(QLabel("New note:"))
         top_controls.addWidget(self.note_input, 1)
         ann_layout.addLayout(top_controls)
-
-        # Waveform (async + cached + live progress)
-        self.waveform = WaveformView()
-        self.waveform.bind_player(self.player)
-        ann_layout.addWidget(self.waveform)
 
         # Annotation table
         self.annotation_table = QTableWidget(0, 2)
@@ -710,13 +716,25 @@ class AudioBrowser(QMainWindow):
         self.annotation_table.installEventFilter(self)  # capture Delete key
         ann_layout.addWidget(self.annotation_table, 1)
 
-        # BOTTOM ROW: Delete selected (bottom)
+        # Bottom: Delete selected
         bottom_controls = QHBoxLayout()
         self.delete_note_btn = QPushButton("Delete Selected"); self.delete_note_btn.clicked.connect(self._delete_selected_annotations)
         bottom_controls.addStretch(1); bottom_controls.addWidget(self.delete_note_btn)
         ann_layout.addLayout(bottom_controls)
 
         self.tabs.addTab(ann_tab, "Annotations")
+
+        # ---- Library tab (unchanged) ----
+        lib_tab = QWidget(); lib_layout = QVBoxLayout(lib_tab)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["File", "Created", "Provided Name (editable)"])
+        hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents); hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
+        self.table.itemChanged.connect(self._on_table_item_changed); lib_layout.addWidget(self.table, 1)
+        self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
+        self.tabs.addTab(lib_tab, "Library")
 
         if "Fusion" in QStyleFactory.keys(): QApplication.instance().setStyle("Fusion")
 
@@ -769,7 +787,6 @@ class AudioBrowser(QMainWindow):
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None; self._load_annotations_for_current(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
-            # Do NOT restart if clicking the same file that's already loaded
             if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
                 return
             self._play_file(path)
@@ -777,7 +794,6 @@ class AudioBrowser(QMainWindow):
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None; self._load_annotations_for_current()
 
     def _play_file(self, path: Path):
-        # Avoid redundant restarts if same file already loaded (playing or paused)
         if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
             return
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(path)))
@@ -797,7 +813,7 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.play_pause_btn.setEnabled(False); self.position_slider.setEnabled(False); self.slider_sync.stop()
         self.position_slider.setValue(0); self.time_label.setText("0:00 / 0:00"); self.pending_note_start_ms = None
-        # NOTE: waveform generation is independent and continues even if playback stops
+        # Waveform generation continues regardless
 
     def _toggle_play_pause(self):
         st = self.player.playbackState()
