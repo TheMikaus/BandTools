@@ -4,30 +4,25 @@
 """
 Audio Folder Player with Annotations + Async Waveform (Live Progress + Cache)
 
-New in this build (based on your requests):
-1) Annotations are always kept in time order (auto-sorted after any change).
-2) Each annotation can be flagged as Important (checkbox column).
-3) Folder Notes tab shows a live list of all Important annotations (File – Time – Note).
-4) Double-clicking an Important annotation (Folder Notes tab) jumps to that song/time.
-5) Selecting an annotation highlights the whole row.
-6) Selecting an annotation shows a GREEN marker on the waveform at its time.
-7) You can adjust an annotation’s time:
-   - Edit the time cell directly (supports mm:ss or h:mm:ss), OR
-   - Click-and-drag the GREEN marker on the waveform.
-8) Single-click enables editing in the Annotations table; double-click jumps to that time.
-9) Drag the GREEN marker to change the annotation time (re-sorted on release).
-10) When typing a new note, we remember the time you STARTED typing; if you clear the box, we clear that “captured time” until you type again.
+New in this build:
+1) Annotation table puts the Important marker FIRST (front of the row).
+2) File browser (left tree) shows only: Name, Size/Time, Date/Time Modified.
+   - The Size/Time column shows file size by default.
+   - After you PLAY a given audio file for the first time, it switches to show runtime (cached).
+3) If you move/seek the song AFTER you started typing a new annotation, the note time updates to the NEW position.
+4) A small label before the "New note" box shows the time the note will use (blank if unset).
+5) Volume slider added (does not affect waveform, only audio output).
+6) Double-clicking an annotation jumps AND starts playing.
 
-All earlier features remain:
+Kept from earlier:
 - First-run folder picker; remembers & changeable.
-- Left tree only shows folders + .wav/.wave/.mp3. Double-click folder/file behavior as before.
-- Single-click WAV/MP3 starts playback; slider and waveform support click-to-seek; clicking currently-playing file does not restart.
-- Async waveform generation with live percentage + caching by size/mtime/columns.
-- Per-song general paragraph; folder-level notes; export to CRLF text; batch rename ##_<ProvidedName>.
-- Tabs default order (Folder Notes, Library, Annotations); user-reorder persisted.
+- Left tree only shows folders + .wav/.wave/.mp3; double-click folder opens; double-click file moves to Annotations.
+- Single-click file starts playback; click-to-seek slider & waveform; clicking currently-playing file doesn’t restart.
+- Async waveform build with live percent + caching by size/mtime/columns; draggable green marker reflects selected annotation.
+- Per-song general paragraph; folder-level notes; export to CRLF text (ParentFolder\\FileName headings).
+- Batch rename ##_<ProvidedName>; remaps notes; prompt to open folder after rename.
+- Tabs default order (Folder Notes, Library, Annotations); order persists after user dragging.
 - Auto-switch-to-Annotations toggle and Auto-progress toggle, both persisted.
-
-Note: For MP3 waveform decoding, install FFmpeg for pydub.
 """
 
 from __future__ import annotations
@@ -40,7 +35,6 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     except ImportError:
         if getattr(sys, "frozen", False): return False
         pkg = pip_name or mod_name
-        print(f"[bootstrap] Installing '{pkg}'...")
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
         except subprocess.CalledProcessError:
@@ -67,12 +61,12 @@ from datetime import datetime
 
 from PyQt6.QtCore import (
     QItemSelection, QModelIndex, QSettings, QTimer, Qt, QUrl, QPoint, QSize,
-    pyqtSignal, QRect, QObject, QThread, QDir
+    pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen
 )
-# QFileSystemModel can live in QtGui in some builds; fallback to QtWidgets.
+# QFileSystemModel lives in QtGui on some builds; fallback to QtWidgets if needed
 try:
     from PyQt6.QtGui import QFileSystemModel
 except Exception:
@@ -104,9 +98,11 @@ SETTINGS_KEY_ROOT = "root_dir"
 SETTINGS_KEY_TABS_ORDER = "tabs_order"            # pipe-separated tab names
 SETTINGS_KEY_AUTOPROGRESS = "auto_progress"       # bool
 SETTINGS_KEY_AUTOSWITCH = "auto_switch_ann"       # bool
+SETTINGS_KEY_VOLUME = "volume_0_100"              # int
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"        # versioned format, backward compatible
 WAVEFORM_JSON = ".waveform_cache.json"
+DURATIONS_JSON = ".duration_cache.json" # played durations cache for Size/Time column
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 
 # Waveform cache resolution (number of precomputed columns)
@@ -147,25 +143,34 @@ def file_signature(p: Path) -> Tuple[int, int]:
     except Exception:
         return (0, 0)
 
-def load_waveform_cache(dirpath: Path) -> Dict:
+def load_json(path: Path, default):
     try:
-        fp = dirpath / WAVEFORM_JSON
-        if fp.exists():
-            with open(fp, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict) and "files" in data:
-                    return data
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
     except Exception:
         pass
-    return {"version": 1, "files": {}}
+    return default
+
+def save_json(path: Path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def load_waveform_cache(dirpath: Path) -> Dict:
+    data = load_json(dirpath / WAVEFORM_JSON, None)
+    return data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
 
 def save_waveform_cache(dirpath: Path, cache: Dict) -> None:
-    try:
-        fp = dirpath / WAVEFORM_JSON
-        with open(fp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    save_json(dirpath / WAVEFORM_JSON, cache)
+
+def bytes_to_human(n: int) -> str:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if n < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n/1024:.1f} {unit}" if unit == "KB" else f"{n/1024/1024:.1f} {unit}" if unit == "MB" else f"{n/1024/1024/1024:.1f} {unit}" if unit == "GB" else f"{n/1024/1024/1024/1024:.1f} {unit}"
+        n = n / 1024.0
 
 def _open_path_default(path: Path):
     """Open a file or folder in the OS default application/explorer."""
@@ -335,10 +340,11 @@ class WaveformWorker(QObject):
         except Exception as e:
             self.error.emit(self._gen_id, self._path_str, str(e))
 
-# ---------- Waveform view (async + cached + live progress + draggable marker) ----------
+# ---------- Waveform view (async + cached + draggable marker + seek signal) ----------
 class WaveformView(QWidget):
     markerMoved = pyqtSignal(int)    # ms while dragging
     markerReleased = pyqtSignal(int) # ms on release
+    seekRequested = pyqtSignal(int)  # user-click seek ms
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -404,11 +410,10 @@ class WaveformView(QWidget):
 
     # ----- main API -----
     def set_audio_file(self, path: Optional[Path]):
-        """Set file; if cache miss/stale, start a fresh background build every time."""
         if path is None:
             self.clear(); return
 
-        # Reset view state for the new file
+        # Reset for new file
         self._path = path
         self._pixmap = None; self._pixmap_w = 0
         self._peaks = None; self._peaks_loading = []
@@ -425,8 +430,7 @@ class WaveformView(QWidget):
             self._peaks = [(float(mn), float(mx)) for mn, mx in entry["peaks"]]
             self._duration_ms = int(entry["duration_ms"])
             self._state = "ready"; self._msg = ""
-            self.update()
-            return
+            self.update(); return
 
         # No cache or stale -> start a brand-new worker
         self._state = "loading"; self._msg = "Analyzing waveform…"
@@ -441,7 +445,6 @@ class WaveformView(QWidget):
         worker.moveToThread(thread)
         worker.setObjectName(f"WaveformWorker-{gen_id}")
 
-        # Keep strong refs so the worker isn't GC'd mid-run
         self._threads.append(thread)
         self._workers[gen_id] = worker
 
@@ -450,7 +453,6 @@ class WaveformView(QWidget):
         worker.finished.connect(self._on_worker_finished)
         worker.error.connect(self._on_worker_error)
 
-        # Cleanup: when thread finishes, drop refs
         def _cleanup():
             worker.deleteLater()
             if thread in self._threads: self._threads.remove(thread)
@@ -458,18 +460,14 @@ class WaveformView(QWidget):
         worker.finished.connect(_cleanup)
         thread.finished.connect(_cleanup)
         thread.finished.connect(thread.deleteLater)
-
         thread.start()
 
-    # Signal handlers — ignore anything that doesn't match the active gen_id
     def _on_worker_progress(self, gen_id: int, path_str: str, new_chunk: list, done_cols: int, total_cols: int):
         if gen_id != self._active_gen_id or not self._path or str(self._path) != path_str:
             return
         for pair in new_chunk:
-            try:
-                a, b = pair
-            except Exception:
-                continue
+            try: a, b = pair
+            except Exception: continue
             self._peaks_loading.append((float(a), float(b)))
 
         self._total_cols = max(1, int(total_cols))
@@ -488,9 +486,7 @@ class WaveformView(QWidget):
         self._peaks = [(float(mn), float(mx)) for mn, mx in peaks]
         self._duration_ms = int(duration_ms)
         self._state = "ready"; self._msg = ""
-        # Cache
-        dirpath = self._path.parent
-        cache = load_waveform_cache(dirpath)
+        cache = load_waveform_cache(self._path.parent)
         cache["files"][self._path.name] = {
             "columns": int(columns),
             "size": int(size),
@@ -498,7 +494,7 @@ class WaveformView(QWidget):
             "duration_ms": int(duration_ms),
             "peaks": self._peaks,
         }
-        save_waveform_cache(dirpath, cache)
+        save_waveform_cache(self._path.parent, cache)
         self._pixmap = None
         self.update()
 
@@ -512,7 +508,6 @@ class WaveformView(QWidget):
         self._pixmap = None
         self.update()
 
-    # ---- painting & interaction ----
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.width() != self._pixmap_w: self._pixmap = None
@@ -559,13 +554,11 @@ class WaveformView(QWidget):
         self._ensure_pixmap()
         painter = QPainter(self)
         if self._pixmap: painter.drawPixmap(0, 0, self._pixmap)
-        # playhead (red)
         if self._player and self._duration_ms > 0:
             pos = self._player.position()
             x = int((pos / self._duration_ms) * max(1, self.width()))
             pen = QPen(self._playhead); pen.setWidth(2)
             painter.setPen(pen); painter.drawLine(x, 0, x, self.height())
-        # selected annotation marker (green)
         if self._marker_ms is not None and self._duration_ms > 0:
             x = self._ms_to_x(self._marker_ms)
             pen = QPen(self._marker_color); pen.setWidth(3)
@@ -575,15 +568,14 @@ class WaveformView(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._duration_ms > 0:
             x = int(event.position().x())
-            # If clicking near the marker, begin dragging
             if self._marker_ms is not None:
                 mx = self._ms_to_x(self._marker_ms)
                 if abs(x - mx) <= self._drag_tolerance_px:
                     self._dragging_marker = True
                     event.accept(); return
-            # Otherwise, it’s a seek
             if self._player:
                 ms = self._x_to_ms(x); self._player.setPosition(ms)
+                self.seekRequested.emit(ms)
                 self.update(); event.accept(); return
         super().mousePressEvent(event)
 
@@ -604,6 +596,36 @@ class WaveformView(QWidget):
             event.accept(); return
         super().mouseReleaseEvent(event)
 
+# ---------- File tree proxy: Size/Time column ----------
+class FileInfoProxyModel(QIdentityProxyModel):
+    def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], parent=None):
+        super().__init__(parent)
+        self.setSourceModel(parent_model)
+        self.duration_cache = duration_cache  # key: file name, value: ms
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+            if section == 1:
+                return "Size / Time"
+            if section == 3:
+                return "Date / Time Modified"
+        return super().headerData(section, orientation, role)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return super().data(index, role)
+        if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
+            src = self.mapToSource(index)
+            fi = self.sourceModel().fileInfo(src)  # type: ignore
+            if fi.isDir():
+                return ""
+            fname = fi.fileName()
+            if fname in self.duration_cache and int(self.duration_cache.get(fname, 0)) > 0:
+                return human_time_ms(int(self.duration_cache[fname]))
+            size = int(fi.size())
+            return bytes_to_human(size)
+        return super().data(index, role)
+
 # ---------- Main window ----------
 APP_ICON_NAME = "app_icon.png"
 
@@ -617,8 +639,8 @@ class AudioBrowser(QMainWindow):
         self.root_path: Path = self._load_or_ask_root()
         self.current_audio_file: Optional[Path] = None
         self.pending_note_start_ms: Optional[int] = None
-        self._programmatic_selection = False  # suppress auto-switch when we change selection via code
-        self._uid_counter: int = 1           # for stable note IDs across sessions
+        self._programmatic_selection = False
+        self._uid_counter: int = 1
 
         # Media
         self.audio_output = QAudioOutput()
@@ -626,6 +648,11 @@ class AudioBrowser(QMainWindow):
         self.player.setAudioOutput(self.audio_output)
         self.player.errorOccurred.connect(self._on_media_error)
         self.player.mediaStatusChanged.connect(self._on_media_status)
+        self.player.durationChanged.connect(self._on_duration_changed)
+
+        # Playback volume (persisted)
+        vol = int(self.settings.value(SETTINGS_KEY_VOLUME, 90))
+        self.audio_output.setVolume(max(0.0, min(1.0, vol / 100.0)))
 
         # Stores
         self.provided_names: Dict[str, str] = {}
@@ -633,6 +660,7 @@ class AudioBrowser(QMainWindow):
         self.notes_by_file: Dict[str, List[Dict]] = {}
         self.file_general: Dict[str, str] = {}
         self.folder_notes: str = ""
+        self.played_durations: Dict[str, int] = self._load_duration_cache()  # per file in current root
 
         # UI
         self._init_ui()
@@ -653,11 +681,11 @@ class AudioBrowser(QMainWindow):
         self.slider_sync = QTimer(self); self.slider_sync.setInterval(200)
         self.slider_sync.timeout.connect(self._sync_slider)
         self.player.positionChanged.connect(lambda _: self._sync_slider())
-        self.player.durationChanged.connect(self._on_duration_changed)
 
-        # Waveform marker signals
+        # Waveform integration
         self.waveform.markerMoved.connect(self._on_marker_moved)
         self.waveform.markerReleased.connect(self._on_marker_released)
+        self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
 
         # Restore toggles
         self._restore_toggles()
@@ -695,12 +723,17 @@ class AudioBrowser(QMainWindow):
     def _save_root(self, p: Path):
         self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
         self.statusBar().showMessage(f"Root: {self.root_path}")
-        self.model.setRootPath(str(self.root_path))
+        # Update source model paths and tree root
+        self.fs_model.setRootPath(str(self.root_path))
         self._programmatic_selection = True
         try:
-            self.tree.setRootIndex(self.model.index(str(self.root_path)))
+            src = self.fs_model.index(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(src))
         finally:
             QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+        # Reload per-folder data
+        self.played_durations = self._load_duration_cache()
+        self.file_proxy.duration_cache = self.played_durations
         self._load_names(); self._load_notes(); self._ensure_uids()
         self._refresh_right_table(); self.current_audio_file = None
         self._load_annotations_for_current()
@@ -710,73 +743,54 @@ class AudioBrowser(QMainWindow):
 
     def _names_json_path(self) -> Path: return self.root_path / NAMES_JSON
     def _notes_json_path(self) -> Path: return self.root_path / NOTES_JSON
+    def _dur_json_path(self) -> Path: return self.root_path / DURATIONS_JSON
 
     def _load_names(self):
-        self.provided_names = {}
-        nj = self._names_json_path()
-        try:
-            if nj.exists():
-                with open(nj, "r", encoding="utf-8") as f:
-                    self.provided_names = {k: str(v) for k, v in json.load(f).items()}
-        except Exception:
-            self.provided_names = {}
+        self.provided_names = load_json(self._names_json_path(), {}) or {}
 
     def _save_names(self):
-        try:
-            with open(self._names_json_path(), "w", encoding="utf-8") as f:
-                json.dump(self.provided_names, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            QMessageBox.warning(self, "Save Names Failed", f"Couldn't save provided names:\n{e}")
+        save_json(self._names_json_path(), self.provided_names)
 
     def _load_notes(self):
-        """Load folder notes, per-file general, and per-file timestamped notes (v1/v2 compatible)."""
         self.notes_by_file = {}
         self.file_general = {}
         self.folder_notes = ""
-        pj = self._notes_json_path()
+        data = load_json(self._notes_json_path(), {})
         try:
-            if pj.exists():
-                with open(pj, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                # v2 format
-                if isinstance(data, dict) and "files" in data:
-                    self.folder_notes = str(data.get("folder_notes", "") or "")
-                    files = data.get("files", {}) or {}
-                    for fname, meta in files.items():
-                        if not isinstance(meta, dict): continue
-                        self.file_general[fname] = str(meta.get("general", "") or "")
-                        nlist = meta.get("notes", []) or []
-                        clean = []
-                        for n in nlist:
-                            if not isinstance(n, dict): continue
-                            clean.append({
-                                "uid": int(n.get("uid", 0) or 0),
-                                "ms": int(n.get("ms", 0)),
-                                "text": str(n.get("text", "")),
-                                "important": bool(n.get("important", False))
-                            })
-                        self.notes_by_file[fname] = clean
-                # v1 format
-                elif isinstance(data, dict) and "notes" in data:
-                    m = data.get("notes", {}) or {}
-                    for fname, nlist in m.items():
-                        clean = []
-                        for n in (nlist or []):
-                            if not isinstance(n, dict): continue
-                            clean.append({
-                                "uid": 0,
-                                "ms": int(n.get("ms", 0)),
-                                "text": str(n.get("text", "")),
-                                "important": False
-                            })
-                        self.notes_by_file[fname] = clean
+            # v2
+            if isinstance(data, dict) and "files" in data:
+                self.folder_notes = str(data.get("folder_notes", "") or "")
+                for fname, meta in (data.get("files", {}) or {}).items():
+                    if not isinstance(meta, dict): continue
+                    self.file_general[fname] = str(meta.get("general", "") or "")
+                    nlist = meta.get("notes", []) or []
+                    clean = []
+                    for n in nlist:
+                        if not isinstance(n, dict): continue
+                        clean.append({
+                            "uid": int(n.get("uid", 0) or 0),
+                            "ms": int(n.get("ms", 0)),
+                            "text": str(n.get("text", "")),
+                            "important": bool(n.get("important", False))
+                        })
+                    self.notes_by_file[fname] = clean
+            # v1
+            elif isinstance(data, dict) and "notes" in data:
+                for fname, nlist in (data.get("notes", {}) or {}).items():
+                    clean = []
+                    for n in (nlist or []):
+                        if not isinstance(n, dict): continue
+                        clean.append({
+                            "uid": 0,
+                            "ms": int(n.get("ms", 0)),
+                            "text": str(n.get("text", "")),
+                            "important": False
+                        })
+                    self.notes_by_file[fname] = clean
         except Exception:
-            self.notes_by_file = {}
-            self.file_general = {}
-            self.folder_notes = ""
+            self.notes_by_file = {}; self.file_general = {}; self.folder_notes = ""
 
     def _ensure_uids(self):
-        # assign unique IDs to any note lacking one, and bump counter above max
         mx = self._uid_counter
         for lst in self.notes_by_file.values():
             for n in lst:
@@ -787,7 +801,6 @@ class AudioBrowser(QMainWindow):
         self._uid_counter = mx
 
     def _save_notes(self):
-        """Save in v2 format; backward compatible loader handles older files."""
         try:
             all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys())
             files_payload = {}
@@ -802,14 +815,25 @@ class AudioBrowser(QMainWindow):
                 "folder_notes": self.folder_notes,
                 "files": files_payload,
             }
-            with open(self._notes_json_path(), "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2, ensure_ascii=False)
+            save_json(self._notes_json_path(), payload)
         except Exception as e:
             QMessageBox.warning(self, "Save Notes Failed", f"Couldn't save annotation notes:\n{e}")
 
+    def _load_duration_cache(self) -> Dict[str,int]:
+        d = load_json(self._dur_json_path(), {}) or {}
+        # ensure ints
+        out = {}
+        for k,v in d.items():
+            try: out[str(k)] = int(v)
+            except Exception: pass
+        return out
+
+    def _save_duration_cache(self):
+        save_json(self._dur_json_path(), self.played_durations)
+
     # ---------- UI ----------
     def _init_ui(self):
-        self.resize(1320, 860); self.setStatusBar(QStatusBar(self))
+        self.resize(1340, 880); self.setStatusBar(QStatusBar(self))
         tb = QToolBar("Main"); self.addToolBar(tb)
 
         act_change_root = QAction("Change Folder…", self); act_change_root.triggered.connect(self._change_root_clicked); tb.addAction(act_change_root)
@@ -825,17 +849,23 @@ class AudioBrowser(QMainWindow):
 
         splitter = QSplitter(self); self.setCentralWidget(splitter)
 
-        # Tree (left) - filtered to folders + WAV/MP3 only
-        self.model = QFileSystemModel(self)
-        self.model.setResolveSymlinks(True); self.model.setReadOnly(True)
-        self.model.setFilter(QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives | QDir.Filter.Files)
-        self.model.setNameFilters(["*.wav", "*.wave", "*.mp3"])
-        self.model.setNameFilterDisables(False)  # hide non-matching files
-        self.model.setRootPath(str(self.root_path))
+        # Tree (left): QFileSystemModel -> FileInfoProxyModel
+        self.fs_model = QFileSystemModel(self)
+        self.fs_model.setResolveSymlinks(True); self.fs_model.setReadOnly(True)
+        self.fs_model.setFilter(QDir.Filter.AllDirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives | QDir.Filter.Files)
+        self.fs_model.setNameFilters(["*.wav", "*.wave", "*.mp3"])
+        self.fs_model.setNameFilterDisables(False)  # hide non-matching files
+        self.fs_model.setRootPath(str(self.root_path))
 
-        self.tree = QTreeView(); self.tree.setModel(self.model)
-        self.tree.setRootIndex(self.model.index(str(self.root_path)))
-        self.tree.setColumnWidth(0, 360); self.tree.setAlternatingRowColors(True)
+        self.file_proxy = FileInfoProxyModel(self.fs_model, self.played_durations, self)
+
+        self.tree = QTreeView()
+        self.tree.setModel(self.file_proxy)
+        self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+        # Show only Name (0), Size/Time (1), Date Modified (3)
+        self.tree.setColumnHidden(2, True)
+        self.tree.setColumnWidth(0, 360)
+        self.tree.setAlternatingRowColors(True)
         self.tree.setSortingEnabled(True); self.tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.doubleClicked.connect(self._on_tree_double_clicked)
@@ -861,6 +891,15 @@ class AudioBrowser(QMainWindow):
         player_bar.addWidget(self.position_slider, 1)
 
         self.time_label = QLabel("0:00 / 0:00"); player_bar.addWidget(self.time_label)
+
+        # Volume slider (0-100)
+        player_bar.addWidget(QLabel("Vol"))
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setFixedWidth(140)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(int(self.audio_output.volume() * 100))
+        self.volume_slider.valueChanged.connect(self._on_volume_changed)
+        player_bar.addWidget(self.volume_slider)
 
         # Auto-progress checkbox
         self.auto_progress_cb = QCheckBox("Auto-progress")
@@ -916,19 +955,23 @@ class AudioBrowser(QMainWindow):
         # Annotations tab
         self.ann_tab = QWidget(); ann_layout = QVBoxLayout(self.ann_tab)
 
-        # Waveform (async + cached + live progress + draggable marker)
+        # Waveform (async + cached + draggable marker)
         self.waveform = WaveformView()
         self.waveform.bind_player(self.player)
         ann_layout.addWidget(self.waveform)
 
-        # New note input
+        # New note input + captured time label
         top_controls = QHBoxLayout()
+        self.captured_time_label = QLabel("")  # shows "At: mm:ss" when set
+        self.captured_time_label.setMinimumWidth(90)
         self.note_input = QLineEdit()
-        self.note_input.setPlaceholderText("Type to create a note at captured time; press Enter to add")
+        self.note_input.setPlaceholderText("Type to create a note; press Enter to add")
         self.note_input.textEdited.connect(self._on_note_text_edited)
         self.note_input.textChanged.connect(self._on_note_text_changed_clear_capture)
         self.note_input.returnPressed.connect(self._on_note_return_pressed)
-        top_controls.addWidget(QLabel("New note:"))
+        top_controls.addWidget(QLabel("New note time:"))
+        top_controls.addWidget(self.captured_time_label)
+        top_controls.addWidget(QLabel("Text:"))
         top_controls.addWidget(self.note_input, 1)
         ann_layout.addLayout(top_controls)
 
@@ -940,17 +983,16 @@ class AudioBrowser(QMainWindow):
         ann_layout.addWidget(self.general_label)
         ann_layout.addWidget(self.general_edit, 1)
 
-        # Annotation table (Time, Note, Important)
+        # Annotation table (Important, Time, Note)
         self.annotation_table = QTableWidget(0, 3)
-        self.annotation_table.setHorizontalHeaderLabels(["Time", "Note", "Important"])
+        self.annotation_table.setHorizontalHeaderLabels(["!", "Time", "Note"])
         ah = self.annotation_table.horizontalHeader()
         ah.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        ah.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        ah.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        ah.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        ah.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.annotation_table.verticalHeader().setVisible(False)
-        # Single-click edits; double-click jumps
         self.annotation_table.setEditTriggers(QAbstractItemView.EditTrigger.SelectedClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
-        self.annotation_table.itemDoubleClicked.connect(self._on_annotation_double_clicked)
+        self.annotation_table.itemDoubleClicked.connect(self._on_annotation_double_clicked)  # jump & play
         self.annotation_table.itemChanged.connect(self._on_annotation_item_changed)
         self.annotation_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.annotation_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -990,11 +1032,9 @@ class AudioBrowser(QMainWindow):
 
     def _restore_tab_order(self):
         saved = self.settings.value(SETTINGS_KEY_TABS_ORDER, "", type=str) or ""
-        if not saved:
-            return
+        if not saved: return
         desired = [s for s in saved.split("|") if s in {"Folder Notes", "Library", "Annotations"}]
-        if not desired:
-            return
+        if not desired: return
         for target, name in enumerate(desired):
             idx = self._tab_index_by_name(name)
             if idx == -1: continue
@@ -1017,23 +1057,26 @@ class AudioBrowser(QMainWindow):
         else:
             self.auto_switch_cb.setChecked(True)  # default enabled
 
-        # save on change
         self.auto_progress_cb.stateChanged.connect(lambda _:
             self.settings.setValue(SETTINGS_KEY_AUTOPROGRESS, int(self.auto_progress_cb.isChecked())))
         self.auto_switch_cb.stateChanged.connect(lambda _:
             self.settings.setValue(SETTINGS_KEY_AUTOSWITCH, int(self.auto_switch_cb.isChecked())))
 
+    # ----- Volume -----
+    def _on_volume_changed(self, val: int):
+        self.audio_output.setVolume(max(0.0, min(1.0, val / 100.0)))
+        self.settings.setValue(SETTINGS_KEY_VOLUME, int(val))
+
+    # ---------- Tree helpers ----------
+    def _fi(self, proxy_idx: QModelIndex):
+        src = self.file_proxy.mapToSource(proxy_idx)
+        return self.fs_model.fileInfo(src)  # QFileInfo
+
     # ---------- Tree interactions ----------
     def _on_tree_double_clicked(self, idx: QModelIndex):
-        """Double-click:
-           - Folder: open it as root.
-           - Audio file: if parent != root, switch to parent and select it (no forced restart),
-             then show Annotations tab.
-        """
-        fi = self.model.fileInfo(idx)
+        fi = self._fi(idx)
         if fi.isDir():
             self._save_root(Path(fi.absoluteFilePath())); return
-
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath()); parent = path.parent
             try: parent_res = parent.resolve()
@@ -1043,20 +1086,19 @@ class AudioBrowser(QMainWindow):
 
             if parent_res != root_res:
                 self._save_root(parent)
-                idx_new = self.model.index(str(path))
-                if idx_new.isValid():
+                src_idx = self.fs_model.index(str(path))
+                if src_idx.isValid():
                     self._programmatic_selection = True
                     try:
-                        self.tree.setCurrentIndex(idx_new)
+                        self.tree.setCurrentIndex(self.file_proxy.mapFromSource(src_idx))
                     finally:
                         QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
                 if not (self.current_audio_file and self.current_audio_file.resolve() == path.resolve()):
                     self._play_file(path)
-            # Switch to annotations tab (double-click implies user wants it)
             self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
 
     def _on_tree_activated(self, idx: QModelIndex):
-        fi = self.model.fileInfo(idx)
+        fi = self._fi(idx)
         if fi.isDir(): self._save_root(Path(fi.absoluteFilePath()))
 
     def _go_up(self):
@@ -1074,16 +1116,14 @@ class AudioBrowser(QMainWindow):
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
             self._load_annotations_for_current(); return
-        fi = self.model.fileInfo(idx)
+        fi = self._fi(idx)
         if fi.isDir():
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
             self._load_annotations_for_current(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
-            # Auto-switch to Annotations on user click (not when we programmatically change selection)
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
-            # Only play if different from current
             if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
                 return
             self._play_file(path)
@@ -1095,23 +1135,24 @@ class AudioBrowser(QMainWindow):
         if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
             return
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(path)))
-        self.audio_output.setVolume(0.9); self.player.play()
+        self.player.play()  # start immediately so duration is discovered
         self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
         self.now_playing.setText(f"Playing: {path.name}")
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         self.current_audio_file = path; self.pending_note_start_ms = None
+        self._update_captured_time_label()
         self._load_annotations_for_current()
         try:
-            self.waveform.set_audio_file(path)  # async & cached
+            self.waveform.set_audio_file(path)
         except Exception:
             self.waveform.clear()
-        # Reflect selection in tree (useful for autoprogress) but mark as programmatic
+        # reflect selection in tree
         try:
-            idx = self.model.index(str(path))
-            if idx.isValid():
+            src_idx = self.fs_model.index(str(path))
+            if src_idx.isValid():
                 self._programmatic_selection = True
                 try:
-                    self.tree.setCurrentIndex(idx)
+                    self.tree.setCurrentIndex(self.file_proxy.mapFromSource(src_idx))
                 finally:
                     QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
         except Exception:
@@ -1122,6 +1163,7 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.play_pause_btn.setEnabled(False); self.position_slider.setEnabled(False); self.slider_sync.stop()
         self.position_slider.setValue(0); self.time_label.setText("0:00 / 0:00"); self.pending_note_start_ms = None
+        self._update_captured_time_label()
         self.waveform.set_marker_ms(None)
 
     def _toggle_play_pause(self):
@@ -1132,7 +1174,6 @@ class AudioBrowser(QMainWindow):
             self.player.play(); self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _play_next_file(self):
-        """Play next audio file in the current folder (by name ascending)."""
         if not self.current_audio_file: return
         files = [p for p in self._list_audio_in_root()]
         if not files: return
@@ -1149,19 +1190,45 @@ class AudioBrowser(QMainWindow):
 
     # ---------- Slider / time ----------
     _user_is_scrubbing = False
-    def _on_duration_changed(self, dur: int): self.position_slider.setRange(0, max(0, dur)); self._sync_slider()
+    def _on_duration_changed(self, dur: int):
+        self.position_slider.setRange(0, max(0, dur)); self._sync_slider()
+        # Record duration for Size/Time column after the file has been PLAYED
+        if self.current_audio_file and dur > 0:
+            fname = self.current_audio_file.name
+            if fname not in self.played_durations or int(self.played_durations[fname]) <= 0:
+                self.played_durations[fname] = int(dur)
+                self._save_duration_cache()
+                # Trigger tree column update for this row (Size/Time column)
+                src_idx = self.fs_model.index(str(self.current_audio_file))
+                if src_idx.isValid():
+                    pi = self.file_proxy.mapFromSource(src_idx)
+                    col = 1
+                    top = self.file_proxy.index(pi.row(), col, pi.parent())
+                    self.file_proxy.dataChanged.emit(top, top)
+
     def _sync_slider(self):
         if self._user_is_scrubbing: return
         pos = self.player.position(); dur = max(1, self.player.duration())
         self.position_slider.blockSignals(True); self.position_slider.setValue(pos); self.position_slider.blockSignals(False)
         self.time_label.setText(f"{human_time_ms(pos)} / {human_time_ms(dur)}")
+
     def _user_scrubbing(self, on: bool): self._user_is_scrubbing = on
-    def _on_slider_moved(self, value: int): self.player.setPosition(value)
+
+    def _on_slider_moved(self, value: int):
+        self.player.setPosition(value)
+        # If the user is typing a note, update the captured time to this new position
+        if self.note_input.text().strip():
+            self.pending_note_start_ms = int(value)
+            self._update_captured_time_label()
+
     def _on_slider_clicked_value(self, value: int):
         if not self.position_slider.isEnabled(): return
         was = self._user_is_scrubbing; self._user_is_scrubbing = True
         try:
             self.player.setPosition(value); self.position_slider.setValue(value); self._sync_slider()
+            if self.note_input.text().strip():
+                self.pending_note_start_ms = int(value)
+                self._update_captured_time_label()
         finally:
             self._user_is_scrubbing = was
 
@@ -1193,10 +1260,10 @@ class AudioBrowser(QMainWindow):
         indexes = self.tree.selectionModel().selectedIndexes()
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx: self._stop_playback(); return
-        fi = self.model.fileInfo(idx)
+        fi = self._fi(idx)
         if fi.isDir() or f".{fi.suffix().lower()}" not in AUDIO_EXTS: self._stop_playback()
 
-    # ---------- Annotations (file) ----------
+    # ---------- Annotations ----------
     def _load_annotations_for_current(self):
         self.general_edit.blockSignals(True); self.general_edit.clear()
         self.annotation_table.blockSignals(True); self.annotation_table.setRowCount(0)
@@ -1211,7 +1278,6 @@ class AudioBrowser(QMainWindow):
         fname = self.current_audio_file.name
         self.general_edit.setPlainText(self.file_general.get(fname, ""))
 
-        # rows sorted by ms
         rows = sorted(self.notes_by_file.get(fname, []), key=lambda r: int(r.get("ms", 0)))
         for entry in rows:
             self._append_annotation_row(entry)
@@ -1228,21 +1294,23 @@ class AudioBrowser(QMainWindow):
 
         r = self.annotation_table.rowCount(); self.annotation_table.insertRow(r)
 
-        t = QTableWidgetItem(human_time_ms(ms))
-        # Time IS editable now (so you can adjust)
-        t.setData(Qt.ItemDataRole.UserRole, int(ms))
-        t.setData(Qt.ItemDataRole.UserRole + 1, int(uid))  # store uid
-        self.annotation_table.setItem(r, 0, t)
-
-        n = QTableWidgetItem(text)
-        n.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
-        self.annotation_table.setItem(r, 1, n)
-
+        # Important checkbox first column
         imp = QTableWidgetItem()
         imp.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsUserCheckable)
         imp.setCheckState(Qt.CheckState.Checked if important else Qt.CheckState.Unchecked)
         imp.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
-        self.annotation_table.setItem(r, 2, imp)
+        self.annotation_table.setItem(r, 0, imp)
+
+        # Time (editable text)
+        t = QTableWidgetItem(human_time_ms(ms))
+        t.setData(Qt.ItemDataRole.UserRole, int(ms))            # store ms
+        t.setData(Qt.ItemDataRole.UserRole + 1, int(uid))       # store uid
+        self.annotation_table.setItem(r, 1, t)
+
+        # Note text
+        n = QTableWidgetItem(text)
+        n.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
+        self.annotation_table.setItem(r, 2, n)
 
     def _current_file_list(self) -> List[Dict]:
         if not self.current_audio_file: return []
@@ -1257,92 +1325,89 @@ class AudioBrowser(QMainWindow):
     def _resort_and_rebuild_table_preserving_selection(self, keep_uid: Optional[int] = None):
         if not self.current_audio_file: return
         fname = self.current_audio_file.name
-        # sort in-place
         lst = self.notes_by_file.setdefault(fname, [])
         lst.sort(key=lambda e: int(e.get("ms", 0)))
-        # rebuild
         self._load_annotations_for_current()
         if keep_uid is not None:
-            # reselect row with same uid
             for row in range(self.annotation_table.rowCount()):
-                uid_row = int(self.annotation_table.item(row, 0).data(Qt.ItemDataRole.UserRole + 1))
+                uid_row = int(self.annotation_table.item(row, 1).data(Qt.ItemDataRole.UserRole + 1))
                 if uid_row == keep_uid:
                     self.annotation_table.selectRow(row)
-                    # ensure visible
-                    self.annotation_table.scrollToItem(self.annotation_table.item(row, 0))
+                    self.annotation_table.scrollToItem(self.annotation_table.item(row, 1))
                     break
 
     def _on_note_text_edited(self, _txt: str):
-        # Capture the time at FIRST character typed
         if self.pending_note_start_ms is None:
             self.pending_note_start_ms = int(self.player.position())
+            self._update_captured_time_label()
 
     def _on_note_text_changed_clear_capture(self, txt: str):
         if not txt:
-            # cleared -> forget captured time until typing resumes
             self.pending_note_start_ms = None
+            self._update_captured_time_label()
+
+    def _update_captured_time_label(self):
+        if self.pending_note_start_ms is None:
+            self.captured_time_label.setText("")
+        else:
+            self.captured_time_label.setText(human_time_ms(int(self.pending_note_start_ms)))
 
     def _on_note_return_pressed(self):
         txt = self.note_input.text().strip()
         if not txt or not self.current_audio_file:
-            self.pending_note_start_ms = None; self.note_input.clear(); return
+            self.pending_note_start_ms = None; self.note_input.clear(); self._update_captured_time_label(); return
+        # Use the captured time (which updates if user seeks while typing)
         ms = self.pending_note_start_ms if self.pending_note_start_ms is not None else int(self.player.position())
         self.pending_note_start_ms = None
+        self._update_captured_time_label()
         fname = self.current_audio_file.name
-        # add new entry with uid
         uid = self._uid_counter; self._uid_counter += 1
         entry = {"uid": uid, "ms": int(ms), "text": txt, "important": False}
         self.notes_by_file.setdefault(fname, []).append(entry)
-        # rebuild sorted
         self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
-        # clear input
         self.note_input.clear()
         self._schedule_save_notes()
 
     def _on_annotation_double_clicked(self, item: QTableWidgetItem):
-        # Double-click anywhere on row jumps to that time
+        # Double-click anywhere on row jumps to that time and starts playing
         row = item.row()
-        titem = self.annotation_table.item(row, 0)
+        titem = self.annotation_table.item(row, 1)  # time column
         if not titem: return
         ms = parse_time_to_ms(titem.text())
         if ms is None:
             ms = int(titem.data(Qt.ItemDataRole.UserRole) or 0)
         self.player.setPosition(int(ms))
-        # ensure marker shows
         self.waveform.set_marker_ms(int(ms))
+        self.player.play()
+        self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _on_annotation_item_changed(self, item: QTableWidgetItem):
-        # Handle edits: time text (col 0), note text (col 1), important checkbox (col 2)
         if not self.current_audio_file: return
         uid = int(item.data(Qt.ItemDataRole.UserRole + 1) or -1)
         entry = self._find_entry_by_uid(uid)
         if not entry: return
 
-        if item.column() == 0:
-            # time edited -> parse
+        if item.column() == 1:  # time edited
             new_ms = parse_time_to_ms(item.text())
             if new_ms is None:
-                # revert display
                 item.setText(human_time_ms(int(entry.get("ms", 0))))
                 return
             entry["ms"] = int(new_ms)
             item.setData(Qt.ItemDataRole.UserRole, int(new_ms))
-            # if currently selected, move marker too
             if self._selected_uid() == uid:
                 self.waveform.set_marker_ms(int(new_ms))
-            # keep sorted order
             self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
             self._schedule_save_notes()
             self._refresh_important_table()
             return
 
-        if item.column() == 1:
+        if item.column() == 2:  # note text
             entry["text"] = item.text()
             self._schedule_save_notes()
             self._refresh_important_table()
             return
 
-        if item.column() == 2:
+        if item.column() == 0:  # important checkbox
             entry["important"] = (item.checkState() == Qt.CheckState.Checked)
             self._schedule_save_notes()
             self._refresh_important_table()
@@ -1356,24 +1421,21 @@ class AudioBrowser(QMainWindow):
         if not sel_rows: return
         sel_uids = []
         for r in sel_rows:
-            titem = self.annotation_table.item(r, 0)
+            titem = self.annotation_table.item(r, 1)  # time column holds uid
             if not titem: continue
             uid = int(titem.data(Qt.ItemDataRole.UserRole + 1) or -1)
             if uid >= 0: sel_uids.append(uid)
-        # remove by uid
         rows_model[:] = [e for e in rows_model if int(e.get("uid", -1)) not in set(sel_uids)]
-        # rebuild
         self._load_annotations_for_current()
         self._schedule_save_notes()
         self._refresh_important_table()
         self.waveform.set_marker_ms(None)
 
-    # Selection -> marker
     def _selected_uid(self) -> Optional[int]:
         sel = self.annotation_table.selectionModel().selectedRows()
         if not sel: return None
         row = sel[0].row()
-        titem = self.annotation_table.item(row, 0)
+        titem = self.annotation_table.item(row, 1)  # time column
         return int(titem.data(Qt.ItemDataRole.UserRole + 1)) if titem else None
 
     def _on_annotation_selection_changed(self, *_):
@@ -1384,6 +1446,12 @@ class AudioBrowser(QMainWindow):
         if not entry:
             self.waveform.set_marker_ms(None); return
         self.waveform.set_marker_ms(int(entry.get("ms", 0)))
+
+    # If user seeks on waveform while typing, move captured time to new position
+    def _on_waveform_seek_requested(self, ms: int):
+        if self.note_input.text().strip():
+            self.pending_note_start_ms = int(ms)
+            self._update_captured_time_label()
 
     # Autosave handlers (debounced)
     def _on_general_changed(self):
@@ -1408,14 +1476,13 @@ class AudioBrowser(QMainWindow):
 
     # ---------- Important annotations summary (Folder tab) ----------
     def _refresh_important_table(self):
-        # Build rows from current folder's files only
         rows = []
         parent_name = self.root_path.name
         for fname, notes in self.notes_by_file.items():
             for n in notes:
                 if bool(n.get("important", False)):
                     rows.append((fname, int(n.get("ms", 0)), str(n.get("text", "")), int(n.get("uid", 0))))
-        rows.sort(key=lambda r: (r[0].lower(), r[1]))  # by file then time
+        rows.sort(key=lambda r: (r[0].lower(), r[1]))
 
         self.imp_table.setRowCount(0)
         for fname, ms, text, uid in rows:
@@ -1437,32 +1504,29 @@ class AudioBrowser(QMainWindow):
         if not f_item or not t_item: return
         fname = str(f_item.data(Qt.ItemDataRole.UserRole))
         ms = int(t_item.data(Qt.ItemDataRole.UserRole) or 0)
-        # Jump: select file in tree and play (without restarting if same)
         target = self.root_path / fname
         if target.exists():
             self._play_file(target)
-            # Switch to Annotations
             self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
-            # Select the note with closest ms (exact uid if available)
             uid = int(f_item.data(Qt.ItemDataRole.UserRole + 1) or -1)
             self._select_annotation_by_uid_or_time(uid, ms)
             self.player.setPosition(int(ms))
             self.waveform.set_marker_ms(int(ms))
+            self.player.play()
+            self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _select_annotation_by_uid_or_time(self, uid: int, ms: int):
-        # Try UID first
         for r in range(self.annotation_table.rowCount()):
-            titem = self.annotation_table.item(r, 0)
+            titem = self.annotation_table.item(r, 1)
             if not titem: continue
             row_uid = int(titem.data(Qt.ItemDataRole.UserRole + 1) or -1)
             if uid >= 0 and row_uid == uid:
                 self.annotation_table.selectRow(r)
                 self.annotation_table.scrollToItem(titem)
                 return
-        # Fallback by ms (closest)
         closest_row, closest_diff = -1, 999999999
         for r in range(self.annotation_table.rowCount()):
-            titem = self.annotation_table.item(r, 0)
+            titem = self.annotation_table.item(r, 1)
             if not titem: continue
             rms = int(titem.data(Qt.ItemDataRole.UserRole) or 0)
             d = abs(rms - ms)
@@ -1470,26 +1534,20 @@ class AudioBrowser(QMainWindow):
                 closest_diff = d; closest_row = r
         if closest_row >= 0:
             self.annotation_table.selectRow(closest_row)
-            self.annotation_table.scrollToItem(self.annotation_table.item(closest_row, 0))
+            self.annotation_table.scrollToItem(self.annotation_table.item(closest_row, 1))
 
     # ---------- Waveform marker drag integration ----------
     def _on_marker_moved(self, new_ms: int):
-        # Update selected annotation time LIVE (UI only), no resort yet
         uid = self._selected_uid()
         if uid is None: return
-        entry = self._find_entry_by_uid(uid)
-        if not entry: return
-        # Update the visible cell
         row = self._row_for_uid(uid)
         if row is None: return
-        titem = self.annotation_table.item(row, 0)
+        titem = self.annotation_table.item(row, 1)
         if titem:
             titem.setText(human_time_ms(new_ms))
-            # Store temp ms in the item (so double-click jumps to this)
             titem.setData(Qt.ItemDataRole.UserRole, int(new_ms))
 
     def _on_marker_released(self, new_ms: int):
-        # Commit move -> update model, sort, rebuild, reselect note
         uid = self._selected_uid()
         if uid is None: return
         entry = self._find_entry_by_uid(uid)
@@ -1501,11 +1559,10 @@ class AudioBrowser(QMainWindow):
 
     def _row_for_uid(self, uid: int) -> Optional[int]:
         for r in range(self.annotation_table.rowCount()):
-            titem = self.annotation_table.item(r, 0)
+            titem = self.annotation_table.item(r, 1)
             if not titem: continue
             row_uid = int(titem.data(Qt.ItemDataRole.UserRole + 1) or -1)
-            if row_uid == uid:
-                return r
+            if row_uid == uid: return r
         return None
 
     # ---------- Export annotations ----------
@@ -1515,25 +1572,20 @@ class AudioBrowser(QMainWindow):
         if not save_path: return
         lines: List[str] = []
 
-        # Folder notes (if any)
         if (self.folder_notes or "").strip():
             lines.append(f"[Folder] {self.root_path}")
             for ln in (self.folder_notes.replace("\r\n", "\n").split("\n")):
                 lines.append(ln.rstrip())
             lines.append("")
 
-        # Files grouped; title then overview, then time-stamped notes
         parent_name = self.root_path.name
         for fname in sorted(set(list(self.notes_by_file.keys()) + list(self.file_general.keys()))):
             notes = sorted(self.notes_by_file.get(fname, []), key=lambda n: int(n.get("ms", 0)))
             overview = (self.file_general.get(fname, "") or "").strip()
             if not notes and not overview:
                 continue
-
-            # Title only "<ParentFolder>\<FileName>"
             title = f"{parent_name}\\{fname}"
             lines.append(title)
-
             if overview:
                 for ln in overview.replace("\r\n", "\n").split("\n"):
                     lines.append(f"Overview: {ln.rstrip()}")
@@ -1544,12 +1596,9 @@ class AudioBrowser(QMainWindow):
             lines.append("")
 
         try:
-            # Force DOS CRLF endings
             out = "\r\n".join(lines).rstrip("\r\n") + "\r\n"
             with open(save_path, "w", encoding="utf-8", newline="") as f:
                 f.write(out)
-
-            # Ask to open the exported file
             reply = QMessageBox.question(
                 self,
                 "Export Complete",
@@ -1559,11 +1608,10 @@ class AudioBrowser(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 _open_path_default(Path(save_path))
-
         except Exception as e:
             QMessageBox.warning(self, "Export Failed", f"Couldn't write file:\n{e}")
 
-    # ---------- Batch rename (also remap notes & general) ----------
+    # ---------- Batch rename (also remap notes & general & durations) ----------
     def _batch_rename(self):
         files = self._list_audio_in_root()
         if not files:
@@ -1579,11 +1627,11 @@ class AudioBrowser(QMainWindow):
         for i, p in enumerate(files, start=1):
             base = sanitize(self.provided_names.get(p.name, "") or p.stem)
             new_base = f"{str(i).zfill(width)}_{base}"
-            target = p.withname(f"{new_base}{p.suffix.lower()}")
+            target = p.with_name(f"{new_base}{p.suffix.lower()}")
             n = 1
-            while Path(target).exists() and Path(target).resolve() != p.resolve():
-                target = p.withname(f"{new_base} ({n}){p.suffix.lower()}"); n += 1
-            plan.append((p, Path(target)))
+            while target.exists() and target.resolve() != p.resolve():
+                target = p.with_name(f"{new_base} ({n}){p.suffix.lower()}"); n += 1
+            plan.append((p, target))
 
         preview = "\n".join(f"{src.name}  →  {dst.name}" for src, dst in plan[:25])
         more = "" if len(plan) <= 25 else f"\n… and {len(plan) - 25} more"
@@ -1594,36 +1642,39 @@ class AudioBrowser(QMainWindow):
         did = 0
         remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
         remapped_general: Dict[str, str] = dict(self.file_general)
+        remapped_durations: Dict[str, int] = dict(self.played_durations)
         for src, dst in plan:
             try:
                 src.rename(dst)
                 if src.name in self.provided_names: self.provided_names[dst.name] = self.provided_names.pop(src.name)
                 if src.name in remapped_notes: remapped_notes[dst.name] = remapped_notes.pop(src.name)
                 if src.name in remapped_general: remapped_general[dst.name] = remapped_general.pop(src.name)
+                if src.name in remapped_durations: remapped_durations[dst.name] = remapped_durations.pop(src.name)
                 did += 1
             except Exception as e:
                 errors.append(f"{src.name}: {e}")
 
         self.notes_by_file = remapped_notes
         self.file_general = remapped_general
-        self._save_names(); self._save_notes()
+        self.played_durations = remapped_durations
+        self.file_proxy.duration_cache = self.played_durations
+        self._save_names(); self._save_notes(); self._save_duration_cache()
         self._refresh_right_table()
-        self.model.setRootPath(""); self.model.setRootPath(str(self.root_path))
-        self.tree.setRootIndex(self.model.index(str(self.root_path)))
+        # reset model roots to refresh display
+        self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
+        self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
         if self.current_audio_file:
             cur = self.current_audio_file.name
             for s, d in plan:
                 if s.name == cur: self.current_audio_file = d; break
         self._load_annotations_for_current()
 
-        # Outcome dialog
         if errors:
             QMessageBox.warning(self, "Finished with Errors", f"Renamed {did}/{len(plan)} files. Some failed:\n\n" +
                                 "\n".join(errors[:20]) + ("…" if len(errors) > 20 else ""))
         else:
             QMessageBox.information(self, "Batch Rename Complete", f"Renamed {did} file(s).")
 
-        # Ask whether to open the folder in file explorer
         reply = QMessageBox.question(
             self,
             "Open Folder",
@@ -1645,7 +1696,7 @@ class AudioBrowser(QMainWindow):
                 self._play_next_file()
 
     def closeEvent(self, ev):
-        self._save_names(); self._save_notes(); super().closeEvent(ev)
+        self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
 
 def main():
     app = QApplication(sys.argv)
