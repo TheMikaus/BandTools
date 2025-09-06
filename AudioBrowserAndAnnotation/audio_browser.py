@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# audio_browser.py
+# audio_browser.py — multi-annotation sets + external auto-detect + waveform caching + conversion progress
 from __future__ import annotations
 
 # ========= Bootstrap: auto-install missing packages =========
@@ -10,13 +10,14 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     except ImportError:
         if getattr(sys, "frozen", False): return False
         pkg = pip_name or mod_name
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
-        except subprocess.CalledProcessError:
+        for args in ([sys.executable, "-m", "pip", "install", pkg],
+                     [sys.executable, "-m", "pip", "install", "--user", pkg]):
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", pkg])
+                subprocess.check_call(args); break
             except subprocess.CalledProcessError:
-                return False
+                continue
+        else:
+            return False
         importlib.invalidate_caches()
         try:
             importlib.import_module(mod_name); return True
@@ -29,9 +30,9 @@ HAVE_NUMPY = _ensure_import("numpy", "numpy")
 HAVE_PYDUB = _ensure_import("pydub", "pydub")
 
 # ========= Imports =========
-import json, re
+import json, re, uuid, hashlib
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
 from PyQt6.QtCore import (
@@ -41,11 +42,11 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor
 )
-# QFileSystemModel location differs across PyQt6 builds
+# QFileSystemModel shims: some PyQt6 wheels expose it in QtWidgets; others in QtGui
 try:
-    from PyQt6.QtGui import QFileSystemModel
-except Exception:
     from PyQt6.QtWidgets import QFileSystemModel
+except Exception:
+    from PyQt6.QtGui import QFileSystemModel
 
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
@@ -53,7 +54,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
-    QProgressDialog
+    QProgressDialog, QColorDialog, QInputDialog, QComboBox
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -78,17 +79,19 @@ SETTINGS_KEY_AUTOPROGRESS = "auto_progress"
 SETTINGS_KEY_AUTOSWITCH = "auto_switch_ann"
 SETTINGS_KEY_VOLUME = "volume_0_100"
 SETTINGS_KEY_UNDO_CAP = "undo_capacity"
+SETTINGS_KEY_CUR_SET = "current_set_id"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
 
 # Visual widths
-MARKER_WIDTH = 2                # thin green
-MARKER_SELECTED_WIDTH = 6       # thick orange (selected)
+MARKER_WIDTH = 2                # thin
+MARKER_SELECTED_WIDTH = 6       # thick (selected)
 PLAYHEAD_WIDTH = 4              # red playhead
 WAVEFORM_STROKE_WIDTH = 1       # waveform bars
 MARKER_HIT_TOLERANCE_PX = 8     # easier to grab
@@ -119,7 +122,7 @@ def parse_time_to_ms(text: str) -> Optional[int]:
 
 def sanitize(name: str) -> str:
     name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
-    return re.sub(r"\s+", " ", name).strip() or "Track"
+    return re.sub(r"\\s+", " ", name).strip() or "Track"
 
 def resource_path(name: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -172,7 +175,17 @@ def _open_path_default(path: Path):
     except Exception as e:
         QMessageBox.warning(None, "Open Failed", f"Couldn't open:\\n{e}")
 
+def color_to_hex(c: QColor) -> str:
+    return c.name(QColor.NameFormat.HexRgb)
+
+def hex_to_color(s: str) -> QColor:
+    try:
+        return QColor(s) if s else QColor("#00cc66")
+    except Exception:
+        return QColor("#00cc66")
+
 # ========= Seek slider (click-to-seek) =========
+from PyQt6.QtWidgets import QSlider
 class SeekSlider(QSlider):
     clickedValue = pyqtSignal(int)
     def mousePressEvent(self, event):
@@ -349,10 +362,8 @@ class ConvertWorker(QObject):
                 n = 1
                 while target.exists():
                     target = src.with_name(f"{base} ({n}).mp3"); n += 1
-                # Convert
                 audio = AudioSegment.from_file(str(src))
                 audio.export(str(target), format="mp3", bitrate=self._bitrate)
-                # Delete original
                 deleted_ok = True
                 try:
                     src.unlink()
@@ -367,12 +378,12 @@ class ConvertWorker(QObject):
             self.progress.emit(done, total, src.name)
         self.finished.emit(False)
 
-# ========= Waveform view (draws peaks + all annotations) =========
+# ========= Waveform view (multi-set markers) =========
 class WaveformView(QWidget):
-    markerMoved = pyqtSignal(int, int)     # uid, ms
-    markerReleased = pyqtSignal(int, int)  # uid, ms
-    annotationClicked = pyqtSignal(int)    # uid
-    seekRequested = pyqtSignal(int)        # ms
+    markerMoved = pyqtSignal(str, int, int)     # set_id, uid, ms
+    markerReleased = pyqtSignal(str, int, int)  # set_id, uid, ms
+    annotationClicked = pyqtSignal(str, int)    # set_id, uid
+    seekRequested = pyqtSignal(int)             # ms
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -386,8 +397,7 @@ class WaveformView(QWidget):
         self._bg = QColor("#101114"); self._axis = QColor("#2a2c31")
         self._wave = QColor("#58a6ff"); self._playhead = QColor("#ff5555")
         self._msg_color = QColor("#8a8f98")
-        self._marker_green = QColor("#00cc66")
-        self._marker_selected = QColor("#ffa500")
+        self._selected_color = QColor("#ffa500")
 
         self._state: str = "empty"   # empty|loading|ready|error
         self._msg: str = ""
@@ -395,9 +405,10 @@ class WaveformView(QWidget):
         self._total_cols: int = 0
         self._done_cols: int = 0
 
-        self._ann_map: Dict[int, int] = {}    # uid -> ms
-        self._selected_uid: Optional[int] = None
-        self._hover_uid: Optional[int] = None
+        # Multi annotations: { set_id: {"color": QColor, "visible": bool, "pairs":[(uid,ms)]} }
+        self._multi: Dict[str, Dict[str, Any]] = {}
+        self._selected: Optional[Tuple[str,int]] = None   # (set_id, uid)
+        self._hover: Optional[Tuple[str,int]] = None
 
         self._dragging_marker: bool = False
         self._drag_tolerance_px: int = MARKER_HIT_TOLERANCE_PX
@@ -413,19 +424,29 @@ class WaveformView(QWidget):
         self._player = player
         player.positionChanged.connect(lambda _: self.update())
 
-    def set_annotations(self, pairs: List[Tuple[int, int]]):
-        self._ann_map = {int(uid): int(ms) for uid, ms in pairs}
+    def set_annotations_multi(self, payload: Dict[str, Dict[str, Any]]):
+        # payload: set_id -> {"color":"#hex" or QColor, "visible":bool, "pairs":[(uid,ms)]}
+        self._multi = {}
+        for sid, v in payload.items():
+            color = v.get("color")
+            qc = color if isinstance(color, QColor) else QColor(str(color))
+            self._multi[str(sid)] = {
+                "color": qc if qc.isValid() else QColor("#00cc66"),
+                "visible": bool(v.get("visible", True)),
+                "pairs": [(int(uid), int(ms)) for (uid, ms) in (v.get("pairs") or [])],
+            }
         self.update()
 
-    def set_selected_uid(self, uid: Optional[int]):
-        self._selected_uid = None if uid is None else int(uid)
+    def set_selected_uid(self, set_id: Optional[str], uid: Optional[int]):
+        if set_id is None or uid is None: self._selected = None
+        else: self._selected = (str(set_id), int(uid))
         self.update()
 
     def clear(self):
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
         self._pixmap = None; self._state = "empty"; self._msg = ""
         self._path = None; self._total_cols = 0; self._done_cols = 0
-        self._ann_map = {}; self._selected_uid = None; self._hover_uid = None
+        self._multi = {}; self._selected = None; self._hover = None
         self._dragging_marker = False
         self.update()
 
@@ -467,8 +488,7 @@ class WaveformView(QWidget):
             self.update(); return
 
         self._duration_ms = 0
-        we = "Analyzing waveform…"
-        self._state = "loading"; self._msg = we
+        self._state = "loading"; self._msg = "Analyzing waveform…"
         self.update()
 
         self._active_gen_id = self._gen_id_counter = (self._gen_id_counter + 1) % (1 << 31)
@@ -577,15 +597,17 @@ class WaveformView(QWidget):
         painter = QPainter(self)
         if self._pixmap: painter.drawPixmap(0, 0, self._pixmap)
 
-        # All annotation markers
-        if self._ann_map:
-            for uid, ms in self._ann_map.items():
+        # All markers for visible sets
+        for sid, info in self._multi.items():
+            if not info.get("visible", True): continue
+            color: QColor = info.get("color", QColor("#00cc66"))
+            pairs = info.get("pairs", [])
+            for uid, ms in pairs:
                 x = self._ms_to_x(int(ms))
                 if x < 0 or x > self.width(): continue
-                if self._selected_uid is not None and uid == self._selected_uid:
-                    pen = QPen(self._marker_selected); pen.setWidth(MARKER_SELECTED_WIDTH)
-                else:
-                    pen = QPen(self._marker_green); pen.setWidth(MARKER_WIDTH)
+                sel = (self._selected is not None and self._selected == (sid, uid))
+                pen = QPen(self._selected_color if sel else color)
+                pen.setWidth(MARKER_SELECTED_WIDTH if sel else MARKER_WIDTH)
                 painter.setPen(pen); painter.drawLine(x, 0, x, self.height())
 
         # Playhead
@@ -593,46 +615,57 @@ class WaveformView(QWidget):
         if self._player and dur > 0:
             pos = self._player.position()
             x = int((pos / dur) * max(1, self.width()))
-            pen = QPen(self._playhead); pen.setWidth(PLAYHEAD_WIDTH)
+            pen = QPen(self._selected_color.darker(135)); pen.setWidth(PLAYHEAD_WIDTH)
             painter.setPen(pen); painter.drawLine(x, 0, x, self.height())
 
         painter.end()
 
-    def _uid_near_x(self, x: int) -> Optional[int]:
-        if not self._ann_map: return None
-        for uid, ms in self._ann_map.items():
-            mx = self._ms_to_x(int(ms))
-            if abs(x - mx) <= self._drag_tolerance_px:
-                return uid
-        return None
+    def _nearest_marker(self, x: int) -> Optional[Tuple[str,int,int]]:
+        # returns (set_id, uid, ms)
+        best = None; bestd = 10**9
+        for sid, info in self._multi.items():
+            if not info.get("visible", True): continue
+            for uid, ms in info.get("pairs", []):
+                mx = self._ms_to_x(int(ms))
+                d = abs(x - mx)
+                if d <= self._drag_tolerance_px and d < bestd:
+                    bestd = d; best = (sid, int(uid), int(ms))
+        return best
 
     def mouseMoveEvent(self, event):
         x = int(event.position().x())
-        if self._dragging_marker and self._selected_uid is not None:
+        if self._dragging_marker and self._selected is not None:
+            sid, uid = self._selected
             new_ms = self._x_to_ms(x)
-            self._ann_map[self._selected_uid] = int(new_ms)
-            self.markerMoved.emit(self._selected_uid, int(new_ms))
+            # update internal
+            info = self._multi.get(sid)
+            if info:
+                pairs = info.get("pairs", [])
+                for i, (u, _ms) in enumerate(pairs):
+                    if int(u) == int(uid):
+                        pairs[i] = (u, int(new_ms)); break
+            self.markerMoved.emit(sid, uid, int(new_ms))
             self.update(); event.accept(); return
-        hover_uid = self._uid_near_x(x)
-        if hover_uid != self._hover_uid:
-            self._hover_uid = hover_uid
-            if hover_uid is None:
-                self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
-            else:
-                if self._selected_uid is not None and hover_uid == self._selected_uid:
-                    self.setCursor(QCursor(Qt.CursorShape.SizeHorCursor))
-                else:
-                    self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        hit = self._nearest_marker(x)
+        if hit is None:
+            self._hover = None
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+        else:
+            sid, uid, _ = hit
+            self._hover = (sid, uid)
+            self.setCursor(QCursor(Qt.CursorShape.SizeHorCursor if self._selected == (sid, uid) else Qt.CursorShape.PointingHandCursor))
         event.accept()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             x = int(event.position().x())
-            uid = self._uid_near_x(x)
-            if uid is not None:
-                self.annotationClicked.emit(int(uid))
-                if self._selected_uid is not None and uid == self._selected_uid:
-                    self._dragging_marker = True
+            hit = self._nearest_marker(x)
+            if hit is not None:
+                sid, uid, _ = hit
+                self._selected = (sid, uid)
+                self.annotationClicked.emit(sid, uid)
+                # Begin drag if clicking selected one
+                self._dragging_marker = True
                 event.accept(); return
             ms = self._x_to_ms(x)
             self.seekRequested.emit(ms)
@@ -641,10 +674,14 @@ class WaveformView(QWidget):
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self._dragging_marker and self._selected_uid is not None:
+        if self._dragging_marker and self._selected is not None:
+            sid, uid = self._selected
+            info = self._multi.get(sid); ms = 0
+            if info:
+                for u, m in info.get("pairs", []):
+                    if int(u) == int(uid): ms = int(m); break
             self._dragging_marker = False
-            ms = int(self._ann_map.get(self._selected_uid, 0))
-            self.markerReleased.emit(self._selected_uid, ms)
+            self.markerReleased.emit(sid, uid, int(ms))
             event.accept(); return
         super().mouseReleaseEvent(event)
 
@@ -677,6 +714,66 @@ class FileInfoProxyModel(QIdentityProxyModel):
 
 # ========= Main window =========
 class AudioBrowser(QMainWindow):
+
+    # ----- External annotation sets detection -----
+    def _scan_external_annotation_sets(self) -> List[dict]:
+        ext_sets = []
+        try:
+            for jp in sorted(self.root_path.glob("*.json")):
+                if jp.name in RESERVED_JSON:
+                    continue
+                data = load_json(jp, None)
+                if not isinstance(data, dict):
+                    continue
+                # Accept single-set style only: must have "files" and not "sets"
+                if "files" in data and "sets" not in data and isinstance(data["files"], dict):
+                    name = str(data.get("name") or jp.stem)
+                    color = str(data.get("color", "#00cc66") or "#00cc66")
+                    visible = bool(data.get("visible", True))
+                    files = {}
+                    for fname, meta in (data.get("files") or {}).items():
+                        if not isinstance(meta, dict): 
+                            continue
+                        files[str(fname)] = {
+                            "general": str(meta.get("general", "") or ""),
+                            "notes": [{
+                                "uid": int(n.get("uid", 0) or 0),
+                                "ms": int(n.get("ms", 0)),
+                                "text": str(n.get("text", "")),
+                                "important": bool(n.get("important", False)),
+                            } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
+                        }
+                    sid = str(data.get("id") or ("ext_" + hashlib.md5(str(jp).encode()).hexdigest()[:8]))
+                    ext_sets.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
+        except Exception:
+            pass
+        return ext_sets
+
+    def _append_external_sets(self):
+        externals = self._scan_external_annotation_sets()
+        if not externals:
+            return
+        existing_sources = {s.get("source_path") for s in self.annotation_sets if s.get("source_path")}
+        existing_ids = {s.get("id") for s in self.annotation_sets}
+        for s in externals:
+            if s.get("source_path") in existing_sources:
+                continue
+            sid = s.get("id")
+            if sid in existing_ids:
+                s["id"] = s["id"] + "_" + uuid.uuid4().hex[:4]
+            self.annotation_sets.append(s)
+
+    def _strip_set_for_payload(self, s: dict) -> dict:
+        # Remove runtime-only fields when persisting to JSON
+        out = {
+            "id": s.get("id"),
+            "name": s.get("name", "Set"),
+            "color": s.get("color", "#00cc66"),
+            "visible": bool(s.get("visible", True)),
+            "files": s.get("files", {}),
+        }
+        return out
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
@@ -707,22 +804,29 @@ class AudioBrowser(QMainWindow):
         vol = int(self.settings.value(SETTINGS_KEY_VOLUME, 90))
         self.audio_output.setVolume(max(0.0, min(1.0, vol / 100.0)))
 
-        # Stores
+        # Provided names & duration cache
         self.provided_names: Dict[str, str] = {}
+        self.played_durations: Dict[str, int] = self._load_duration_cache()
+
+        # Annotation sets
+        self.annotation_sets: List[Dict[str, Any]] = []   # list to preserve order
+        self.current_set_id: Optional[str] = None
+
+        # For CURRENT set only (legacy fields re-used by many methods)
         self.notes_by_file: Dict[str, List[Dict]] = {}
         self.file_general: Dict[str, str] = {}
-        self.folder_notes: str = ""
-        self.played_durations: Dict[str, int] = self._load_duration_cache()
+        self.folder_notes: str = ""  # folder-level (shared across sets)
 
         # UI
         self._init_ui()
 
-        # Load metadata
+        # Load metadata (creates default set if needed)
         self._load_names()
         self._load_notes()
         self._ensure_uids()
 
         # Populate
+        self._refresh_set_combo()
         self._refresh_right_table()
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
@@ -735,10 +839,10 @@ class AudioBrowser(QMainWindow):
         self.player.positionChanged.connect(lambda _: self._sync_slider())
 
         # Waveform hooks
-        self.waveform.markerMoved.connect(self._on_marker_moved)
-        self.waveform.markerReleased.connect(self._on_marker_released)
+        self.waveform.markerMoved.connect(self._on_marker_moved_multi)
+        self.waveform.markerReleased.connect(self._on_marker_released_multi)
         self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
-        self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked)
+        self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
 
         # Toggles
         self._restore_toggles()
@@ -783,9 +887,11 @@ class AudioBrowser(QMainWindow):
             self.tree.setRootIndex(self.file_proxy.mapFromSource(src))
         finally:
             QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+        # Reload metadata for new folder
         self.played_durations = self._load_duration_cache()
         self.file_proxy.duration_cache = self.played_durations
         self._load_names(); self._load_notes(); self._ensure_uids()
+        self._refresh_set_combo()
         self._refresh_right_table(); self.current_audio_file = None
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
@@ -802,64 +908,155 @@ class AudioBrowser(QMainWindow):
     def _save_names(self):
         save_json(self._names_json_path(), self.provided_names)
 
+    # ----- Annotation sets load/save -----
+    def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None):
+        sid = uuid.uuid4().hex[:8]
+        aset = {
+            "id": sid,
+            "name": "Default",
+            "color": "#00cc66",
+            "visible": True,
+            "files": {}
+        }
+        if carry_notes or carry_general:
+            all_files = set((carry_notes or {}).keys()) | set((carry_general or {}).keys())
+            for fname in all_files:
+                aset["files"][fname] = {
+                    "general": (carry_general or {}).get(fname, ""),
+                    "notes": list((carry_notes or {}).get(fname, []))
+                }
+        self.annotation_sets = [aset]
+        self.current_set_id = sid
+        self.settings.setValue(SETTINGS_KEY_CUR_SET, sid)
+        self._load_current_set_into_fields()
+
     def _load_notes(self):
+        self.annotation_sets = []
         self.notes_by_file = {}; self.file_general = {}; self.folder_notes = ""
         data = load_json(self._notes_json_path(), {})
         try:
-            if isinstance(data, dict) and "files" in data:
+            if isinstance(data, dict) and "sets" in data:
                 self.folder_notes = str(data.get("folder_notes", "") or "")
-                for fname, meta in (data.get("files", {}) or {}).items():
-                    if not isinstance(meta, dict): continue
-                    self.file_general[fname] = str(meta.get("general", "") or "")
-                    nlist = meta.get("notes", []) or []
-                    clean = []
-                    for n in nlist:
-                        if not isinstance(n, dict): continue
-                        clean.append({
-                            "uid": int(n.get("uid", 0) or 0),
-                            "ms": int(n.get("ms", 0)),
-                            "text": str(n.get("text", "")),
-                            "important": bool(n.get("important", False))
-                        })
-                    self.notes_by_file[fname] = clean
-            elif isinstance(data, dict) and "notes" in data:
-                for fname, nlist in (data.get("notes", {}) or {}).items():
-                    clean = []
-                    for n in (nlist or []):
-                        if not isinstance(n, dict): continue
-                        clean.append({"uid": 0, "ms": int(n.get("ms", 0)), "text": str(n.get("text", "")), "important": False})
-                    self.notes_by_file[fname] = clean
+                sets = data.get("sets") or []
+                cleaned = []
+                for s in sets:
+                    if not isinstance(s, dict): continue
+                    sid = str(s.get("id") or uuid.uuid4().hex[:8])
+                    name = str(s.get("name", "") or "Set")
+                    color = str(s.get("color", "#00cc66") or "#00cc66")
+                    visible = bool(s.get("visible", True))
+                    files = {}
+                    for fname, meta in (s.get("files", {}) or {}).items():
+                        if not isinstance(meta, dict): continue
+                        files[str(fname)] = {
+                            "general": str(meta.get("general", "") or ""),
+                            "notes": [{
+                                "uid": int(n.get("uid", 0) or 0),
+                                "ms": int(n.get("ms", 0)),
+                                "text": str(n.get("text", "")),
+                                "important": bool(n.get("important", False))
+                            } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
+                        }
+                    cleaned.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files})
+                if not cleaned:
+                    self._create_default_set(); 
+                else:
+                    self.annotation_sets = cleaned
+                    # current set
+                    cur = self.settings.value(SETTINGS_KEY_CUR_SET, "", type=str) or ""
+                    if not any(s["id"] == cur for s in self.annotation_sets):
+                        cur = self.annotation_sets[0]["id"]
+                    self.current_set_id = cur
+                    self._load_current_set_into_fields()
+            else:
+                # Legacy single set
+                self.folder_notes = str(data.get("folder_notes", "") or "")
+                fgen = {}
+                fnote = {}
+                if isinstance(data, dict) and "files" in data:
+                    for fname, meta in (data.get("files", {}) or {}).items():
+                        if not isinstance(meta, dict): continue
+                        fgen[str(fname)] = str(meta.get("general", "") or "")
+                        nlist = meta.get("notes", []) or []
+                        clean = []
+                        for n in nlist:
+                            if not isinstance(n, dict): continue
+                            clean.append({
+                                "uid": int(n.get("uid", 0) or 0),
+                                "ms": int(n.get("ms", 0)),
+                                "text": str(n.get("text", "")),
+                                "important": bool(n.get("important", False))
+                            })
+                        fnote[str(fname)] = clean
+                self._create_default_set(carry_notes=fnote, carry_general=fgen)
         except Exception:
-            self.notes_by_file = {}; self.file_general = {}; self.folder_notes = ""
+            self._create_default_set()
+
+        # Discover external single-set annotation files in this folder
+        self._append_external_sets()
+
+    def _save_notes(self):
+        # Sync current fields back into its set
+        self._sync_fields_into_current_set()
+        try:
+            internal_sets = [self._strip_set_for_payload(s) for s in self.annotation_sets if not s.get("source_path")]
+            payload = {
+                "version": 3,
+                "updated": datetime.now().isoformat(timespec="seconds"),
+                "folder_notes": self.folder_notes,
+                "sets": internal_sets,
+            }
+            save_json(self._notes_json_path(), payload)
+            # Save external sets back to their own files
+            for s in self.annotation_sets:
+                sp = s.get("source_path")
+                if not sp:
+                    continue
+                try:
+                    save_json(Path(sp), self._strip_set_for_payload(s))
+                except Exception:
+                    pass
+        except Exception as e:
+            QMessageBox.warning(self, "Save Notes Failed", f"Couldn't save annotation notes:\\n{e}")
+
+    def _load_current_set_into_fields(self):
+        aset = self._get_current_set()
+        self.notes_by_file = {}
+        self.file_general = {}
+        if aset:
+            for fname, meta in aset.get("files", {}).items():
+                self.file_general[fname] = str(meta.get("general", "") or "")
+                self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
+        else:
+            self.notes_by_file = {}; self.file_general = {}
+
+    def _sync_fields_into_current_set(self):
+        aset = self._get_current_set()
+        if not aset: return
+        files = {}
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys())
+        for fname in all_files:
+            files[fname] = {
+                "general": self.file_general.get(fname, ""),
+                "notes": self.notes_by_file.get(fname, []),
+            }
+        aset["files"] = files
+
+    def _get_current_set(self) -> Optional[Dict[str, Any]]:
+        for s in self.annotation_sets:
+            if s.get("id") == self.current_set_id: return s
+        return self.annotation_sets[0] if self.annotation_sets else None
 
     def _ensure_uids(self):
         mx = self._uid_counter
-        for lst in self.notes_by_file.values():
-            for n in lst:
-                if int(n.get("uid", 0)) <= 0:
-                    n["uid"] = mx; mx += 1
-                else:
-                    if n["uid"] >= mx: mx = n["uid"] + 1
+        for aset in self.annotation_sets:
+            for lst in (f.get("notes", []) for f in aset.get("files", {}).values()):
+                for n in lst:
+                    if int(n.get("uid", 0)) <= 0:
+                        n["uid"] = mx; mx += 1
+                    else:
+                        if n["uid"] >= mx: mx = n["uid"] + 1
         self._uid_counter = mx
-
-    def _save_notes(self):
-        try:
-            all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys())
-            files_payload = {}
-            for fname in sorted(all_files):
-                files_payload[fname] = {
-                    "general": self.file_general.get(fname, ""),
-                    "notes": self.notes_by_file.get(fname, []),
-                }
-            payload = {
-                "version": 2,
-                "updated": datetime.now().isoformat(timespec="seconds"),
-                "folder_notes": self.folder_notes,
-                "files": files_payload,
-            }
-            save_json(self._notes_json_path(), payload)
-        except Exception as e:
-            QMessageBox.warning(self, "Save Notes Failed", f"Couldn't save annotation notes:\\n{e}")
 
     def _load_duration_cache(self) -> Dict[str,int]:
         d = load_json(self._dur_json_path(), {}) or {}
@@ -874,7 +1071,7 @@ class AudioBrowser(QMainWindow):
 
     # ----- UI -----
     def _init_ui(self):
-        self.resize(1340, 880); self.setStatusBar(QStatusBar(self))
+        self.resize(1360, 900); self.setStatusBar(QStatusBar(self))
         tb = QToolBar("Main"); self.addToolBar(tb)
 
         # Undo/Redo actions
@@ -884,13 +1081,10 @@ class AudioBrowser(QMainWindow):
         tb.addAction(self.act_undo); tb.addAction(self.act_redo)
 
         tb.addSeparator()
-
-        # History length control
         tb.addWidget(QLabel("Undo limit:"))
-        self.undo_spin = QSpinBox(); self.undo_spin.setRange(10, 1000); self.undo_spin.setValue(self._undo_capacity)
+        self.undo_spin = QSpinBox(); self.undo_spin.setRange(10, 1000); self.undo_spin.setValue(int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100)))
         self.undo_spin.valueChanged.connect(self._on_undo_capacity_changed)
         tb.addWidget(self.undo_spin)
-
         tb.addSeparator()
 
         act_change_root = QAction("Change Folder…", self); act_change_root.triggered.connect(self._change_root_clicked); tb.addAction(act_change_root)
@@ -898,10 +1092,7 @@ class AudioBrowser(QMainWindow):
         tb.addSeparator()
         self.rename_action = QAction("Batch Rename (##_ProvidedName)", self); self.rename_action.triggered.connect(self._batch_rename); tb.addAction(self.rename_action)
         self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
-        # New: Convert WAV->MP3
-        self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self)
-        self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded)
-        tb.addAction(self.convert_action)
+        self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self); self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded); tb.addAction(self.convert_action)
         tb.addSeparator()
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
@@ -979,10 +1170,13 @@ class AudioBrowser(QMainWindow):
 
         self.imp_label = QLabel("Important annotations in this folder:")
         folder_layout.addWidget(self.imp_label)
-        self.imp_table = QTableWidget(0, 3)
-        self.imp_table.setHorizontalHeaderLabels(["File", "Time", "Note"])
-        ih = self.imp_table.horizontalHeader(); ih.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        ih.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents); ih.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.imp_table = QTableWidget(0, 4)
+        self.imp_table.setHorizontalHeaderLabels(["Set", "File", "Time", "Note"])
+        ih = self.imp_table.horizontalHeader()
+        ih.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        ih.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        ih.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        ih.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.imp_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.imp_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.imp_table.itemDoubleClicked.connect(self._on_important_double_clicked)
@@ -1003,6 +1197,29 @@ class AudioBrowser(QMainWindow):
         # Annotations tab
         self.ann_tab = QWidget(); ann_layout = QVBoxLayout(self.ann_tab)
 
+        # --- Set controls row ---
+        set_row = QHBoxLayout()
+        set_row.addWidget(QLabel("Annotation set:"))
+        self.set_combo = QComboBox()
+        self.set_combo.currentIndexChanged.connect(self._on_set_combo_changed)
+        set_row.addWidget(self.set_combo, 1)
+        self.set_visible_cb = QCheckBox("Visible")
+        self.set_visible_cb.stateChanged.connect(self._on_set_visible_toggled)
+        set_row.addWidget(self.set_visible_cb)
+        self.set_color_btn = QPushButton("Color…")
+        self.set_color_btn.clicked.connect(self._on_set_pick_color)
+        set_row.addWidget(self.set_color_btn)
+        self.add_set_btn = QPushButton("Add Set")
+        self.add_set_btn.clicked.connect(self._on_add_set)
+        set_row.addWidget(self.add_set_btn)
+        self.rename_set_btn = QPushButton("Rename")
+        self.rename_set_btn.clicked.connect(self._on_rename_set)
+        set_row.addWidget(self.rename_set_btn)
+        self.del_set_btn = QPushButton("Delete")
+        self.del_set_btn.clicked.connect(self._on_delete_set)
+        set_row.addWidget(self.del_set_btn)
+        ann_layout.addLayout(set_row)
+
         self.waveform = WaveformView(); self.waveform.bind_player(self.player)
         ann_layout.addWidget(self.waveform)
 
@@ -1016,8 +1233,8 @@ class AudioBrowser(QMainWindow):
         top_controls.addWidget(QLabel("Text:")); top_controls.addWidget(self.note_input, 1)
         ann_layout.addLayout(top_controls)
 
-        self.general_label = QLabel("Song overview:")
-        self.general_edit = QPlainTextEdit(); self.general_edit.setPlaceholderText("Write a general description/notes for this song.")
+        self.general_label = QLabel("Song overview (current set):")
+        self.general_edit = QPlainTextEdit(); self.general_edit.setPlaceholderText("Write a general description/notes for this song (current set).")
         self.general_edit.textChanged.connect(self._on_general_changed)
         ann_layout.addWidget(self.general_label); ann_layout.addWidget(self.general_edit, 1)
 
@@ -1051,6 +1268,117 @@ class AudioBrowser(QMainWindow):
 
         self._general_save_timer = QTimer(self); self._general_save_timer.setSingleShot(True); self._general_save_timer.timeout.connect(self._save_notes)
         self._folder_save_timer = QTimer(self); self._folder_save_timer.setSingleShot(True); self._folder_save_timer.timeout.connect(self._save_notes)
+
+    # ----- Set controls helpers -----
+    def _refresh_set_combo(self):
+        self.set_combo.blockSignals(True)
+        self.set_combo.clear()
+        for aset in self.annotation_sets:
+            name = aset.get("name","Set")
+            color = hex_to_color(aset.get("color","#00cc66"))
+            pm = QPixmap(16,16); pm.fill(color)
+            icon = QIcon(pm)
+            self.set_combo.addItem(icon, name, userData=aset.get("id"))
+        self.set_combo.blockSignals(False)
+        # select current
+        cur = self.current_set_id or (self.annotation_sets[0]["id"] if self.annotation_sets else None)
+        if cur:
+            for i in range(self.set_combo.count()):
+                if str(self.set_combo.itemData(i)) == str(cur):
+                    self.set_combo.setCurrentIndex(i); break
+        # sync controls
+        aset = self._get_current_set()
+        if aset:
+            self.set_visible_cb.setChecked(bool(aset.get("visible", True)))
+        self._update_waveform_annotations()
+
+    def _on_set_combo_changed(self, idx: int):
+        if idx < 0: return
+        new_id = str(self.set_combo.itemData(idx))
+        if not new_id: return
+        # sync current fields first
+        self._sync_fields_into_current_set()
+        self.current_set_id = new_id
+        self.settings.setValue(SETTINGS_KEY_CUR_SET, new_id)
+        # load data for new set
+        self._load_current_set_into_fields()
+        # refresh UI for current file
+        self._load_annotations_for_current()
+        aset = self._get_current_set()
+        if aset:
+            self.set_visible_cb.setChecked(bool(aset.get("visible", True)))
+        self._update_waveform_annotations()
+        self._refresh_important_table()
+
+    def _on_set_visible_toggled(self, _state):
+        aset = self._get_current_set()
+        if not aset: return
+        aset["visible"] = bool(self.set_visible_cb.isChecked())
+        self._save_notes()
+        self._update_waveform_annotations()
+        self._refresh_important_table()
+
+    def _on_set_pick_color(self):
+        aset = self._get_current_set()
+        if not aset: return
+        c0 = hex_to_color(aset.get("color","#00cc66"))
+        c = QColorDialog.getColor(c0, self, "Pick marker color for this set")
+        if c.isValid():
+            aset["color"] = color_to_hex(c)
+            self._save_notes()
+            self._refresh_set_combo()
+            self._update_waveform_annotations()
+
+    def _on_add_set(self):
+        name, ok = QInputDialog.getText(self, "Add Annotation Set", "Name:", text=f"Set {len(self.annotation_sets)+1}")
+        if not ok or not name.strip(): return
+        c = QColorDialog.getColor(hex_to_color("#00cc66"), self, "Pick marker color")
+        color = color_to_hex(c) if c.isValid() else "#00cc66"
+        sid = uuid.uuid4().hex[:8]
+        self.annotation_sets.append({"id": sid, "name": name.strip(), "color": color, "visible": True, "files": {}})
+        self.current_set_id = sid
+        self.settings.setValue(SETTINGS_KEY_CUR_SET, sid)
+        self._load_current_set_into_fields()
+        self._refresh_set_combo()
+        self._load_annotations_for_current()
+        self._save_notes()
+
+    def _on_rename_set(self):
+        aset = self._get_current_set()
+        if not aset: return
+        name, ok = QInputDialog.getText(self, "Rename Annotation Set", "New name:", text=str(aset.get("name","Set")))
+        if not ok or not name.strip(): return
+        aset["name"] = name.strip()
+        self._refresh_set_combo(); self._save_notes(); self._refresh_important_table()
+
+    def _on_delete_set(self):
+        if len(self.annotation_sets) <= 1:
+            QMessageBox.information(self, "Can't delete", "At least one annotation set is required."); return
+        aset = self._get_current_set()
+        if not aset: return
+        if QMessageBox.question(self, "Delete Annotation Set",
+                                f"Delete set '{aset.get('name','Set')}'? This removes its notes permanently.",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        # remove
+        sid = aset.get("id")
+        src_path = aset.get("source_path")
+        self.annotation_sets = [s for s in self.annotation_sets if s.get("id") != sid]
+        # ask about deleting source file if external
+        if src_path and Path(src_path).exists():
+            if QMessageBox.question(self, "Delete Set File?", f"Also delete the external set file?\\n{src_path}", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                try:
+                    Path(src_path).unlink()
+                except Exception:
+                    pass
+        # switch to first
+        self.current_set_id = self.annotation_sets[0]["id"]
+        self.settings.setValue(SETTINGS_KEY_CUR_SET, self.current_set_id)
+        self._load_current_set_into_fields()
+        self._refresh_set_combo()
+        self._load_annotations_for_current()
+        self._save_notes()
+        self._refresh_important_table()
 
     # ----- Tab order -----
     def _tab_index_by_name(self, name: str) -> int:
@@ -1122,11 +1450,11 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._load_annotations_for_current(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); return
         fi = self._fi(idx)
         if fi.isDir():
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._load_annotations_for_current(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
@@ -1136,7 +1464,7 @@ class AudioBrowser(QMainWindow):
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._load_annotations_for_current()
+            self._update_waveform_annotations(); self._load_annotations_for_current()
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -1157,9 +1485,11 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         self.current_audio_file = path; self.pending_note_start_ms = None
         self._update_captured_time_label()
+        # load UI for file
         self._load_annotations_for_current()
         try: self.waveform.set_audio_file(path)
         except Exception: self.waveform.clear()
+        self._update_waveform_annotations()
         try:
             src_idx = self.fs_model.index(str(path))
             if src_idx.isValid():
@@ -1174,8 +1504,8 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setEnabled(False); self.position_slider.setEnabled(False); self.slider_sync.stop()
         self.position_slider.setValue(0); self.time_label.setText("0:00 / 0:00"); self.pending_note_start_ms = None
         self._update_captured_time_label()
-        self.waveform.set_selected_uid(None)
-        self.waveform.set_annotations([])
+        self.waveform.set_selected_uid(None, None)
+        self._update_waveform_annotations()
 
     def _toggle_play_pause(self):
         st = self.player.playbackState()
@@ -1267,12 +1597,10 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx: self._stop_playback()
 
-    # ----- Annotations -----
+    # ----- Annotations (current set) -----
     def _load_annotations_for_current(self):
         self.general_edit.blockSignals(True); self.general_edit.clear()
         self.annotation_table.blockSignals(True); self.annotation_table.setRowCount(0)
-        self.waveform.set_selected_uid(None)
-        self.waveform.set_annotations([])
 
         if not self.current_audio_file:
             self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
@@ -1282,13 +1610,12 @@ class AudioBrowser(QMainWindow):
         self.general_edit.setPlainText(self.file_general.get(fname, ""))
 
         rows = sorted(self.notes_by_file.get(fname, []), key=lambda r: int(r.get("ms", 0)))
-        pairs = []
         for entry in rows:
-            self._append_annotation_row(entry); pairs.append((int(entry.get("uid", 0)), int(entry.get("ms", 0))))
-        self.waveform.set_annotations(pairs)
+            self._append_annotation_row(entry)
 
         self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
         self._refresh_important_table()
+        self._update_waveform_annotations()
 
     def _append_annotation_row(self, entry: Dict):
         ms = int(entry.get("ms", 0))
@@ -1343,10 +1670,9 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         if keep_uid is not None:
             self._select_row_by_uid(keep_uid)
-        pairs = [(int(e.get("uid", 0)), int(e.get("ms", 0))) for e in lst]
-        self.waveform.set_annotations(pairs)
+        self._update_waveform_annotations()
         if keep_uid is not None:
-            self.waveform.set_selected_uid(keep_uid)
+            self.waveform.set_selected_uid(self.current_set_id, keep_uid)
 
     def _on_note_text_edited(self, _txt: str):
         if self.pending_note_start_ms is None:
@@ -1369,7 +1695,7 @@ class AudioBrowser(QMainWindow):
         uid = self._uid_counter; self._uid_counter += 1
         entry = {"uid": uid, "ms": int(ms), "text": txt, "important": False}
         self.notes_by_file.setdefault(fname, []).append(entry)
-        self._push_undo({"type":"add","file":fname,"entry":entry})
+        self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
         self.note_input.clear()
         self._schedule_save_notes()
@@ -1381,7 +1707,7 @@ class AudioBrowser(QMainWindow):
         if ms is None: ms = int(titem.data(Qt.ItemDataRole.UserRole) or 0)
         uid = int(titem.data(Qt.ItemDataRole.UserRole + 1) or -1)
         self.player.setPosition(int(ms))
-        self.waveform.set_selected_uid(uid)
+        self.waveform.set_selected_uid(self.current_set_id, uid)
         self.player.play()
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
@@ -1392,6 +1718,7 @@ class AudioBrowser(QMainWindow):
         entry = self._find_entry_by_uid(uid)
         if not entry: return
         fname = self.current_audio_file.name
+        set_id = self.current_set_id
         if item.column() == 1:
             new_ms = parse_time_to_ms(item.text())
             if new_ms is None:
@@ -1403,7 +1730,7 @@ class AudioBrowser(QMainWindow):
                 return
             old_ms = int(entry.get("ms", 0))
             if int(new_ms) != old_ms:
-                self._push_undo({"type":"edit","file":fname,"uid":uid,"field":"ms","before":old_ms,"after":int(new_ms)})
+                self._push_undo({"type":"edit","set":set_id,"file":fname,"uid":uid,"field":"ms","before":old_ms,"after":int(new_ms)})
             entry["ms"] = int(new_ms)
             item.setData(Qt.ItemDataRole.UserRole, int(new_ms))
             self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
@@ -1413,14 +1740,14 @@ class AudioBrowser(QMainWindow):
             old_text = entry.get("text","")
             new_text = item.text()
             if new_text != old_text:
-                self._push_undo({"type":"edit","file":fname,"uid":uid,"field":"text","before":old_text,"after":new_text})
+                self._push_undo({"type":"edit","set":set_id,"file":fname,"uid":uid,"field":"text","before":old_text,"after":new_text})
             entry["text"] = new_text
             self._schedule_save_notes(); self._refresh_important_table(); return
         if item.column() == 0:
             old_imp = bool(entry.get("important", False))
             new_imp = (item.checkState() == Qt.CheckState.Checked)
             if new_imp != old_imp:
-                self._push_undo({"type":"edit","file":fname,"uid":uid,"field":"important","before":old_imp,"after":new_imp})
+                self._push_undo({"type":"edit","set":set_id,"file":fname,"uid":uid,"field":"important","before":old_imp,"after":new_imp})
             entry["important"] = new_imp
             self._schedule_save_notes(); self._refresh_important_table(); return
 
@@ -1441,11 +1768,11 @@ class AudioBrowser(QMainWindow):
                 if e: removed_entries.append(dict(e))
                 sel_uids.add(uid)
         if not sel_uids: return
-        self._push_undo({"type":"delete","file":fname,"entries":removed_entries})
+        self._push_undo({"type":"delete","set":self.current_set_id,"file":fname,"entries":removed_entries})
         rows_model[:] = [e for e in rows_model if int(e.get("uid", -1)) not in sel_uids]
         self._load_annotations_for_current()
         self._schedule_save_notes(); self._refresh_important_table()
-        self.waveform.set_selected_uid(None)
+        self.waveform.set_selected_uid(None, None)
 
     def _selected_uid(self) -> Optional[int]:
         sel = self.annotation_table.selectionModel().selectedRows()
@@ -1455,39 +1782,75 @@ class AudioBrowser(QMainWindow):
 
     def _on_annotation_selection_changed(self, *_):
         uid = self._selected_uid()
-        self.waveform.set_selected_uid(uid)
+        self.waveform.set_selected_uid(self.current_set_id, uid)
 
     # Waveform interactions
     def _on_waveform_seek_requested(self, ms: int):
         if self.note_input.text().strip():
             self.pending_note_start_ms = int(ms); self._update_captured_time_label()
 
-    def _on_waveform_annotation_clicked(self, uid: int):
+    def _on_waveform_annotation_clicked_multi(self, set_id: str, uid: int):
+        # Switch to the set that the marker belongs to
+        for i in range(self.set_combo.count()):
+            if str(self.set_combo.itemData(i)) == str(set_id):
+                if self.set_combo.currentIndex() != i:
+                    self.set_combo.setCurrentIndex(i)
+                break
         self._select_row_by_uid(uid)
-        self.waveform.set_selected_uid(uid)
+        self.waveform.set_selected_uid(set_id, uid)
 
-    def _on_marker_moved(self, uid: int, new_ms: int):
-        row = self._row_for_uid(uid)
-        if row is None: return
-        titem = self.annotation_table.item(row, 1)
-        if not titem: return
-        self._suspend_ann_change = True
-        try:
-            titem.setText(human_time_ms(new_ms))
-            titem.setData(Qt.ItemDataRole.UserRole, int(new_ms))
-        finally:
-            self._suspend_ann_change = False
+    def _on_marker_moved_multi(self, set_id: str, uid: int, new_ms: int):
+        if set_id == self.current_set_id:
+            row = self._row_for_uid(uid)
+            if row is None: return
+            titem = self.annotation_table.item(row, 1)
+            if not titem: return
+            self._suspend_ann_change = True
+            try:
+                titem.setText(human_time_ms(new_ms))
+                titem.setData(Qt.ItemDataRole.UserRole, int(new_ms))
+            finally:
+                self._suspend_ann_change = False
+        else:
+            # Edit underlying set data
+            for s in self.annotation_sets:
+                if s.get("id") == set_id:
+                    fname = self.current_audio_file.name if self.current_audio_file else ""
+                    if not fname: break
+                    meta = s.setdefault("files", {}).setdefault(fname, {"general":"","notes":[]})
+                    for e in meta["notes"]:
+                        if int(e.get("uid",-1)) == int(uid):
+                            e["ms"] = int(new_ms); break
+                    break
 
-    def _on_marker_released(self, uid: int, new_ms: int):
-        entry = self._find_entry_by_uid(uid)
-        if not entry: return
-        fname = self.current_audio_file.name if self.current_audio_file else ""
-        old_ms = int(entry.get("ms", 0))
-        if int(new_ms) != old_ms:
-            self._push_undo({"type":"edit","file":fname,"uid":uid,"field":"ms","before":old_ms,"after":int(new_ms)})
-        entry["ms"] = int(new_ms)
-        self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
-        self._schedule_save_notes(); self._refresh_important_table()
+    def _on_marker_released_multi(self, set_id: str, uid: int, new_ms: int):
+        if set_id == self.current_set_id:
+            entry = self._find_entry_by_uid(uid)
+            if not entry: return
+            fname = self.current_audio_file.name if self.current_audio_file else ""
+            old_ms = int(entry.get("ms", 0))
+            if int(new_ms) != old_ms:
+                self._push_undo({"type":"edit","set":set_id,"file":fname,"uid":uid,"field":"ms","before":old_ms,"after":int(new_ms)})
+            entry["ms"] = int(new_ms)
+            self._resort_and_rebuild_table_preserving_selection(keep_uid=uid)
+            self._schedule_save_notes(); self._refresh_important_table()
+        else:
+            # Update other set & persist
+            for s in self.annotation_sets:
+                if s.get("id") == set_id:
+                    fname = self.current_audio_file.name if self.current_audio_file else ""
+                    if not fname: break
+                    meta = s.setdefault("files", {}).setdefault(fname, {"general":"","notes":[]})
+                    old_ms = None
+                    for e in meta["notes"]:
+                        if int(e.get("uid",-1)) == int(uid):
+                            old_ms = int(e.get("ms",0))
+                            e["ms"] = int(new_ms); break
+                    if old_ms is not None and old_ms != int(new_ms):
+                        self._push_undo({"type":"edit","set":set_id,"file":fname,"uid":uid,"field":"ms","before":old_ms,"after":int(new_ms)})
+                    break
+            self._save_notes()
+        self._update_waveform_annotations()
 
     # Autosave handlers
     def _on_general_changed(self):
@@ -1508,67 +1871,82 @@ class AudioBrowser(QMainWindow):
         self.folder_notes_edit.setPlainText(self.folder_notes or "")
         self.folder_notes_edit.blockSignals(False)
 
+    # ----- Waveform annotations from all visible sets -----
+    def _update_waveform_annotations(self):
+        payload = {}
+        if not self.current_audio_file:
+            self.waveform.set_annotations_multi(payload); return
+        fname = self.current_audio_file.name
+        for s in self.annotation_sets:
+            pairs = []
+            meta = s.get("files", {}).get(fname)
+            if meta:
+                pairs = [(int(n.get("uid",0)), int(n.get("ms",0))) for n in (meta.get("notes") or [])]
+            payload[s["id"]] = {"color": s.get("color","#00cc66"), "visible": bool(s.get("visible",True)), "pairs": pairs}
+        self.waveform.set_annotations_multi(payload)
+
     # ----- Important annotations summary (Folder tab) -----
     def _refresh_important_table(self):
         rows = []
         parent_name = self.root_path.name
-        for fname, notes in self.notes_by_file.items():
-            for n in notes:
-                if bool(n.get("important", False)):
-                    rows.append((fname, int(n.get("ms", 0)), str(n.get("text", "")), int(n.get("uid", 0))))
-        rows.sort(key=lambda r: (r[0].lower(), r[1]))
+        for s in self.annotation_sets:
+            if not bool(s.get("visible", True)): continue
+            set_name = s.get("name","Set")
+            sid = s.get("id")
+            for fname, meta in (s.get("files", {}) or {}).items():
+                for n in (meta.get("notes") or []):
+                    if bool(n.get("important", False)):
+                        rows.append((sid, set_name, fname, int(n.get("ms", 0)), str(n.get("text", "")), int(n.get("uid", 0))))
+        rows.sort(key=lambda r: (r[1].lower(), r[2].lower(), r[3]))
         self.imp_table.setRowCount(0)
-        for fname, ms, text, uid in rows:
+        for sid, set_name, fname, ms, text, uid in rows:
             r = self.imp_table.rowCount(); self.imp_table.insertRow(r)
+            s_item = QTableWidgetItem(set_name)
+            s_item.setData(Qt.ItemDataRole.UserRole, sid)
             f_item = QTableWidgetItem(f"{parent_name}\\{fname}")
             f_item.setData(Qt.ItemDataRole.UserRole, fname)
-            f_item.setData(Qt.ItemDataRole.UserRole + 1, uid)
             t_item = QTableWidgetItem(human_time_ms(ms))
             t_item.setData(Qt.ItemDataRole.UserRole, int(ms))
             n_item = QTableWidgetItem(text)
-            self.imp_table.setItem(r, 0, f_item)
-            self.imp_table.setItem(r, 1, t_item)
-            self.imp_table.setItem(r, 2, n_item)
+            self.imp_table.setItem(r, 0, s_item)
+            self.imp_table.setItem(r, 1, f_item)
+            self.imp_table.setItem(r, 2, t_item)
+            self.imp_table.setItem(r, 3, n_item)
 
     def _on_important_double_clicked(self, item: QTableWidgetItem):
         row = item.row()
-        f_item = self.imp_table.item(row, 0)
-        t_item = self.imp_table.item(row, 1)
-        if not f_item or not t_item: return
+        s_item = self.imp_table.item(row, 0)
+        f_item = self.imp_table.item(row, 1)
+        t_item = self.imp_table.item(row, 2)
+        if not s_item or not f_item or not t_item: return
+        sid = str(s_item.data(Qt.ItemDataRole.UserRole) or "")
         fname = str(f_item.data(Qt.ItemDataRole.UserRole) or "")
         ms = int(t_item.data(Qt.ItemDataRole.UserRole) or 0)
-        uid = int(f_item.data(Qt.ItemDataRole.UserRole + 1) or -1)
         if not fname: return
         target = self.root_path / fname
         if not target.exists(): return
+        # switch to set
+        for i in range(self.set_combo.count()):
+            if str(self.set_combo.itemData(i)) == sid:
+                if self.set_combo.currentIndex() != i:
+                    self.set_combo.setCurrentIndex(i)
+                break
         self._play_file(target)
         self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
-        self._select_annotation_by_uid_or_time(uid, ms)
-        self.player.setPosition(int(ms))
-        self.waveform.set_selected_uid(uid if uid >= 0 else None)
-        self.player.play()
+        # pick closest uid in that set
+        aset = self._get_current_set()
+        uid = -1
+        if aset:
+            notes = (aset.get("files", {}).get(fname, {}) or {}).get("notes", []) or []
+            if notes:
+                uid = min(notes, key=lambda e: abs(int(e.get("ms",0))-ms)).get("uid", -1)
+        if uid >= 0:
+            self._select_row_by_uid(int(uid))
+            self.waveform.set_selected_uid(sid, int(uid))
+        self.player.setPosition(int(ms)); self.player.play()
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
-    def _select_annotation_by_uid_or_time(self, uid: int, ms: int):
-        if uid >= 0:
-            r = self._row_for_uid(uid)
-            if r is not None:
-                self.annotation_table.selectRow(r)
-                self.annotation_table.scrollToItem(self.annotation_table.item(r, 1))
-                return
-        closest_row, closest_diff = -1, 10**12
-        for r in range(self.annotation_table.rowCount()):
-            titem = self.annotation_table.item(r, 1)
-            if not titem: continue
-            rms = int(titem.data(Qt.ItemDataRole.UserRole) or 0)
-            d = abs(rms - ms)
-            if d < closest_diff:
-                closest_diff = d; closest_row = r
-        if closest_row >= 0:
-            self.annotation_table.selectRow(closest_row)
-            self.annotation_table.scrollToItem(self.annotation_table.item(closest_row, 1))
-
-    # ----- Export annotations (CRLF, ParentFolder\\FileName headings) -----
+    # ----- Export annotations (CRLF, grouped by file, per-set subsections for visible sets) -----
     def _export_annotations(self):
         default_path = str((self.root_path / "annotations_export.txt").resolve())
         save_path, _ = QFileDialog.getSaveFileName(self, "Export Annotations", default_path, "Text Files (*.txt);;All Files (*)")
@@ -1580,19 +1958,32 @@ class AudioBrowser(QMainWindow):
                 lines.append(ln.rstrip())
             lines.append("")
         parent_name = self.root_path.name
-        for fname in sorted(set(list(self.notes_by_file.keys()) + list(self.file_general.keys()))):
-            notes = sorted(self.notes_by_file.get(fname, []), key=lambda n: int(n.get("ms", 0)))
-            overview = (self.file_general.get(fname, "") or "").strip()
-            if not notes and not overview: continue
+        # Collect per file across visible sets
+        all_files = set()
+        for s in self.annotation_sets:
+            if not bool(s.get("visible", True)): continue
+            all_files.update((s.get("files", {}) or {}).keys())
+        for fname in sorted(all_files, key=str.lower):
+            collected = []
+            for s in self.annotation_sets:
+                if not bool(s.get("visible", True)): continue
+                meta = (s.get("files", {}) or {}).get(fname)
+                if not meta: continue
+                overview = (meta.get("general","") or "").strip()
+                notes = sorted(meta.get("notes", []) or [], key=lambda n: int(n.get("ms",0)))
+                collected.append((s.get("name","Set"), overview, notes))
+            if not collected: continue
             title = f"{parent_name}\\{fname}"
             lines.append(title)
-            if overview:
-                for ln in overview.replace("\\r\\n", "\\n").split("\\n"):
-                    lines.append(f"Overview: {ln.rstrip()}")
-            for n in notes:
-                ts = human_time_ms(int(n.get("ms", 0)))
-                txt = str(n.get("text", "")).replace("\\n", " ").strip()
-                lines.append(f"{ts} {txt}")
+            for set_name, overview, notes in collected:
+                lines.append(f"== Set: {set_name} ==")
+                if overview:
+                    for ln in overview.replace("\\r\\n","\\n").split("\\n"):
+                        lines.append(f"Overview: {ln.rstrip()}")
+                for n in notes:
+                    ts = human_time_ms(int(n.get("ms", 0)))
+                    txt = str(n.get("text", "")).replace("\\n", " ").strip()
+                    lines.append(f"{ts} {txt}")
             lines.append("")
         try:
             out = "\\r\\n".join(lines).rstrip("\\r\\n") + "\\r\\n"
@@ -1617,7 +2008,7 @@ class AudioBrowser(QMainWindow):
         def ctime(p: Path) -> float:
             try: return os.path.getctime(p)
             except Exception: return p.stat().st_mtime
-        files.sort(ctime)
+        files.sort(key=ctime)
         width = max(2, len(str(len(files))))
         plan, errors = [], []
         for i, p in enumerate(files, start=1):
@@ -1633,22 +2024,23 @@ class AudioBrowser(QMainWindow):
         if QMessageBox.question(self, "Confirm Batch Rename", f"Rename {len(plan)} file(s) as follows?\\n\\n{preview}{more}",
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
-        did = 0
-        remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
-        remapped_general: Dict[str, str] = dict(self.file_general)
-        remapped_durations: Dict[str, int] = dict(self.played_durations)
+        did = 0; errors = []
+        # Remap names across ALL sets
         for src, dst in plan:
             try:
                 src.rename(dst)
+                # Provided names and durations
                 if src.name in self.provided_names: self.provided_names[dst.name] = self.provided_names.pop(src.name)
-                if src.name in remapped_notes: remapped_notes[dst.name] = remapped_notes.pop(src.name)
-                if src.name in remapped_general: remapped_general[dst.name] = remapped_general.pop(src.name)
-                if src.name in remapped_durations: remapped_durations[dst.name] = remapped_durations.pop(src.name)
+                if src.name in self.played_durations: self.played_durations[dst.name] = self.played_durations.pop(src.name)
+                # Annotation sets
+                for s in self.annotation_sets:
+                    files_map = s.setdefault("files", {})
+                    if src.name in files_map and dst.name not in files_map:
+                        files_map[dst.name] = files_map.pop(src.name)
                 did += 1
             except Exception as e:
                 errors.append(f"{src.name}: {e}")
-        self.notes_by_file = remapped_notes; self.file_general = remapped_general
-        self.played_durations = remapped_durations; self.file_proxy.duration_cache = self.played_durations
+        self._load_current_set_into_fields()
         self._save_names(); self._save_notes(); self._save_duration_cache()
         self._refresh_right_table()
         self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
@@ -1684,8 +2076,8 @@ class AudioBrowser(QMainWindow):
         wavs = self._list_wav_in_root()
         if not wavs:
             QMessageBox.information(self, "Nothing to Convert", "No WAV files in this folder."); return
-        msg = ("Convert {n} WAV file(s) to MP3 in-place?\n\n"
-               "• MP3s will be created next to the originals\n"
+        msg = ("Convert {n} WAV file(s) to MP3 in-place?\\n\\n"
+               "• MP3s will be created next to the originals\\n"
                "• Original WAV/WAVE files will be deleted AFTER each successful conversion").format(n=len(wavs))
         if QMessageBox.question(self, "Convert WAV→MP3", msg,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
@@ -1707,8 +2099,8 @@ class AudioBrowser(QMainWindow):
         self._conv_worker = ConvertWorker([str(p) for p in wavs], DEFAULT_MP3_BITRATE)
         self._conv_worker.moveToThread(self._conv_thread)
 
-        remap_notes: Dict[str,str] = {}   # old_name -> new_name
-        fails: List[Tuple[str,str]] = []  # (name, error)
+        remap_notes: Dict[str,str] = {}
+        fails: List[Tuple[str,str]] = []
         successes = 0
 
         def on_progress(done:int, total:int, name:str):
@@ -1725,28 +2117,26 @@ class AudioBrowser(QMainWindow):
 
         def on_finished(canceled: bool):
             dlg.close()
-            # Apply remaps to metadata
+            # Apply remaps across all sets and stores
             if remap_notes:
-                remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
-                remapped_general: Dict[str, str] = dict(self.file_general)
-                remapped_durations: Dict[str, int] = dict(self.played_durations)
-                remapped_names: Dict[str, str] = dict(self.provided_names)
+                for s in self.annotation_sets:
+                    files_map = s.setdefault("files", {})
+                    for old, new in remap_notes.items():
+                        if old in files_map and new not in files_map:
+                            files_map[new] = files_map.pop(old)
+                # Provided names & durations
+                remapped_names = {}
                 for old, new in remap_notes.items():
-                    if old in remapped_notes and new not in remapped_notes:
-                        remapped_notes[new] = remapped_notes.pop(old)
-                    if old in remapped_general and new not in remapped_general:
-                        remapped_general[new] = remapped_general.pop(old)
-                    if old in remapped_durations and new not in remapped_durations:
-                        remapped_durations[new] = remapped_durations.pop(old)
-                    if old in remapped_names and new not in remapped_names:
-                        remapped_names[new] = remapped_names.pop(old)
-                self.notes_by_file = remapped_notes
-                self.file_general = remapped_general
-                self.played_durations = remapped_durations; self.file_proxy.duration_cache = self.played_durations
-                self.provided_names = remapped_names
+                    if old in self.provided_names and new not in self.provided_names:
+                        remapped_names[new] = self.provided_names.pop(old)
+                self.provided_names.update(remapped_names)
+                for old, new in remap_notes.items():
+                    if old in self.played_durations and new not in self.played_durations:
+                        self.played_durations[new] = self.played_durations.pop(old)
                 self._save_names(); self._save_notes(); self._save_duration_cache()
 
             # Refresh UI
+            self._load_current_set_into_fields()
             self._refresh_right_table()
             self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
             self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
@@ -1762,9 +2152,8 @@ class AudioBrowser(QMainWindow):
                 body = f"Converted and deleted {successes} WAV file(s)."
 
             if fails:
-                text = "\\n".join([f\"{n}: {err}\" for n, err in fails[:20]])
-                more = "" if len(fails) <= 20 else f"\\n… and {len(fails)-20} more"
-                QMessageBox.warning(self, status_title, f\"{body}\\n\\nSome issues:\\n\\n{text}{more}\")
+                text = "\n".join([f"{n}: {err}" for n, err in fails[:20]])
+                QMessageBox.warning(self, status_title, f"{body}\n\nSome issues:\n\n{text}{more}")
             else:
                 QMessageBox.information(self, status_title, body)
 
@@ -1836,13 +2225,25 @@ class AudioBrowser(QMainWindow):
 
     def _apply_action(self, action: dict, undo: bool):
         typ = action.get("type")
+        set_id = str(action.get("set",""))
         fname = str(action.get("file",""))
         if not fname: return
-        lst = self.notes_by_file.setdefault(fname, [])
+        # Target list: if matches current set, use current fields; else update the set data directly
+        if set_id == self.current_set_id:
+            lst = self.notes_by_file.setdefault(fname, [])
+        else:
+            aset = None
+            for s in self.annotation_sets:
+                if s.get("id") == set_id: aset = s; break
+            if not aset: return
+            meta = aset.setdefault("files", {}).setdefault(fname, {"general":"","notes":[]})
+            lst = meta["notes"]
 
         def _reload_if_current():
-            if self.current_audio_file and self.current_audio_file.name == fname:
+            if self.current_audio_file and self.current_audio_file.name == fname and set_id == self.current_set_id:
                 self._load_annotations_for_current()
+                self._update_waveform_annotations()
+            self._save_notes(); self._refresh_important_table()
 
         if typ == "add":
             entry = dict(action.get("entry", {}))
@@ -1852,7 +2253,7 @@ class AudioBrowser(QMainWindow):
             else:
                 lst.append(entry)
                 lst.sort(key=lambda e: int(e.get("ms", 0)))
-            _reload_if_current(); self._save_notes(); self._refresh_important_table(); return
+            _reload_if_current(); return
 
         if typ == "delete":
             entries = [dict(e) for e in (action.get("entries") or [])]
@@ -1862,7 +2263,7 @@ class AudioBrowser(QMainWindow):
             else:
                 uids = {int(e.get("uid",-1)) for e in entries}
                 lst[:] = [e for e in lst if int(e.get("uid",-1)) not in uids]
-            _reload_if_current(); self._save_notes(); self._refresh_important_table(); return
+            _reload_if_current(); return
 
         if typ == "edit":
             uid = int(action.get("uid",-1))
@@ -1882,7 +2283,7 @@ class AudioBrowser(QMainWindow):
                 target["text"] = str(value)
             elif field == "important":
                 target["important"] = bool(value)
-            _reload_if_current(); self._save_notes(); self._refresh_important_table(); return
+            _reload_if_current(); return
 
     # ----- Media events / close -----
     def _on_media_error(self, _err, msg):
@@ -1904,5 +2305,5 @@ def main():
     w = AudioBrowser(); w.show(); sys.exit(app.exec())
 
 if __name__ == "__main__":
-    import os
+    import os, subprocess
     main()
