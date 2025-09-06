@@ -64,6 +64,7 @@ if HAVE_NUMPY:
 if HAVE_PYDUB:
     try:
         from pydub import AudioSegment
+        from pydub.utils import which as pydub_which
     except Exception:
         HAVE_PYDUB = False
 
@@ -84,12 +85,15 @@ AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
 
-# Visual widths (doubled)
+# Visual widths
 MARKER_WIDTH = 2                # thin green
 MARKER_SELECTED_WIDTH = 6       # thick orange (selected)
 PLAYHEAD_WIDTH = 4              # red playhead
 WAVEFORM_STROKE_WIDTH = 1       # waveform bars
 MARKER_HIT_TOLERANCE_PX = 8     # easier to grab
+
+# Conversion
+DEFAULT_MP3_BITRATE = "192k"
 
 # ========= Helpers =========
 def human_time_ms(ms: int) -> str:
@@ -844,6 +848,10 @@ class AudioBrowser(QMainWindow):
         tb.addSeparator()
         self.rename_action = QAction("Batch Rename (##_ProvidedName)", self); self.rename_action.triggered.connect(self._batch_rename); tb.addAction(self.rename_action)
         self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
+        # New: Convert WAV->MP3
+        self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self)
+        self.convert_action.triggered.connect(self._convert_wav_to_mp3)
+        tb.addAction(self.convert_action)
         tb.addSeparator()
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
@@ -1180,6 +1188,10 @@ class AudioBrowser(QMainWindow):
     def _list_audio_in_root(self) -> List[Path]:
         if not self.root_path.exists(): return []
         return [p for p in sorted(self.root_path.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+
+    def _list_wav_in_root(self) -> List[Path]:
+        if not self.root_path.exists(): return []
+        return [p for p in sorted(self.root_path.iterdir()) if p.is_file() and p.suffix.lower() in {".wav",".wave"}]
 
     def _refresh_right_table(self):
         files = self._list_audio_in_root()
@@ -1609,35 +1621,118 @@ class AudioBrowser(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             _open_path_default(self.root_path)
 
+    # ----- Convert WAV to MP3 (delete WAVs) -----
+    def _convert_wav_to_mp3(self):
+        if not HAVE_PYDUB:
+            QMessageBox.warning(self, "Missing dependency",
+                                "This feature requires the 'pydub' package and FFmpeg installed on your system.")
+            return
+        # Check ffmpeg availability
+        if not pydub_which("ffmpeg"):
+            QMessageBox.warning(self, "FFmpeg not found",
+                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+            return
+        wavs = self._list_wav_in_root()
+        if not wavs:
+            QMessageBox.information(self, "Nothing to Convert", "No WAV files in this folder."); return
+        msg = ("Convert {n} WAV file(s) to MP3 in-place?\n\n"
+               "• MP3s will be created next to the originals\n"
+               "• Original WAV/WAVE files will be deleted AFTER each successful conversion").format(n=len(wavs))
+        if QMessageBox.question(self, "Convert WAV→MP3", msg,
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        # Stop playback to release file locks
+        self._stop_playback()
+
+        successes, fails = 0, []
+        remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
+        remapped_general: Dict[str, str] = dict(self.file_general)
+        remapped_durations: Dict[str, int] = dict(self.played_durations)
+        remapped_names: Dict[str, str] = dict(self.provided_names)
+
+        for src in wavs:
+            try:
+                # Determine target path, avoid overwrite
+                base = src.stem
+                target = src.with_suffix(".mp3")
+                n = 1
+                while target.exists():
+                    target = src.with_name(f"{base} ({n}).mp3"); n += 1
+
+                # Convert
+                audio = AudioSegment.from_file(str(src))
+                audio.export(str(target), format="mp3", bitrate=DEFAULT_MP3_BITRATE)
+
+                # Migrate metadata keyed by file name
+                if src.name in remapped_notes and target.name not in remapped_notes:
+                    remapped_notes[target.name] = remapped_notes.pop(src.name)
+                if src.name in remapped_general and target.name not in remapped_general:
+                    remapped_general[target.name] = remapped_general.pop(src.name)
+                if src.name in remapped_durations and target.name not in remapped_durations:
+                    remapped_durations[target.name] = remapped_durations.pop(src.name)
+                if src.name in remapped_names and target.name not in remapped_names:
+                    remapped_names[target.name] = remapped_names.pop(src.name)
+
+                # Delete original
+                try:
+                    src.unlink()
+                except Exception as de:
+                    # If delete fails, record but continue
+                    fails.append((src.name, f"Converted but couldn't delete: {de}"))
+                else:
+                    successes += 1
+            except Exception as e:
+                fails.append((src.name, str(e)))
+
+        # Apply remaps
+        self.notes_by_file = remapped_notes
+        self.file_general = remapped_general
+        self.played_durations = remapped_durations; self.file_proxy.duration_cache = self.played_durations
+        self.provided_names = remapped_names
+
+        # Persist + refresh UI
+        self._save_names(); self._save_notes(); self._save_duration_cache()
+        self._refresh_right_table()
+        self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
+        self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+        self._load_annotations_for_current()
+        self._refresh_important_table()
+
+        if fails:
+            text = "\n".join([f"{n}: {err}" for n, err in fails[:20]])
+            more = "" if len(fails) <= 20 else f"\n… and {len(fails)-20} more"
+            QMessageBox.warning(self, "Conversion Finished (with issues)",
+                                f"Converted {successes} file(s). Some issues:\n\n{text}{more}")
+        else:
+            QMessageBox.information(self, "Conversion Complete", f"Converted and deleted {successes} WAV file(s).")
+
+        # Optional: ask to open folder
+        reply = QMessageBox.question(
+            self, "Open Folder", "Open this folder in your file explorer now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            _open_path_default(self.root_path)
+
     # ----- Undo/Redo internals -----
     def _on_undo_capacity_changed(self, v: int):
         self._undo_capacity = int(v)
         self.settings.setValue(SETTINGS_KEY_UNDO_CAP, int(v))
-        # Trim oldest if needed
         overflow = len(self._undo_stack) - self._undo_capacity
         if overflow > 0:
-            # drop from the beginning; adjust index
             del self._undo_stack[0:overflow]
             self._undo_index = max(0, self._undo_index - overflow)
         self._update_undo_actions_enabled()
 
     def _push_undo(self, action: dict):
-        # When pushing new action, drop any redo tail
         if self._undo_index < len(self._undo_stack):
             del self._undo_stack[self._undo_index:]
         self._undo_stack.append(action)
-        # Enforce capacity
         if len(self._undo_stack) > self._undo_capacity:
             drop = len(self._undo_stack) - self._undo_capacity
             del self._undo_stack[0:drop]
-        else:
-            drop = 0
-        # Move index to end
         self._undo_index = len(self._undo_stack)
-        if drop > 0 and self._undo_index < drop:
-            self._undo_index = 0
-        else:
-            self._undo_index -= 0  # unchanged
         self._update_undo_actions_enabled()
 
     def _undo(self):
@@ -1662,7 +1757,6 @@ class AudioBrowser(QMainWindow):
         typ = action.get("type")
         fname = str(action.get("file",""))
         if not fname: return
-        # Ensure model list exists
         lst = self.notes_by_file.setdefault(fname, [])
 
         def _reload_if_current():
@@ -1673,10 +1767,8 @@ class AudioBrowser(QMainWindow):
             entry = dict(action.get("entry", {}))
             uid = int(entry.get("uid", -1))
             if undo:
-                # remove
                 lst[:] = [e for e in lst if int(e.get("uid",-1)) != uid]
             else:
-                # re-add
                 lst.append(entry)
                 lst.sort(key=lambda e: int(e.get("ms", 0)))
             _reload_if_current(); self._save_notes(); self._refresh_important_table(); return
@@ -1684,11 +1776,9 @@ class AudioBrowser(QMainWindow):
         if typ == "delete":
             entries = [dict(e) for e in (action.get("entries") or [])]
             if undo:
-                # re-add
                 lst.extend(entries)
                 lst.sort(key=lambda e: int(e.get("ms",0)))
             else:
-                # remove again
                 uids = {int(e.get("uid",-1)) for e in entries}
                 lst[:] = [e for e in lst if int(e.get("uid",-1)) not in uids]
             _reload_if_current(); self._save_notes(); self._refresh_important_table(); return

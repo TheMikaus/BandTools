@@ -1,0 +1,43 @@
+{
+  "bpm": 80.0,
+  "beats_per_measure": 4,
+  "accent_factor": 3.0,
+  "flash_enabled": true,
+  "left": [
+    {
+      "uid": "7084845e8b194961b70c06e14f560b97",
+      "subdiv": 4,
+      "freq": 0.0,
+      "vol": 1.0,
+      "mute": false,
+      "mode": "drum",
+      "wav_path": "",
+      "drum": "kick",
+      "color": "#ff0000"
+    },
+    {
+      "uid": "00a4f69ab0934b639eacce29e267b205",
+      "subdiv": 8,
+      "freq": 0.0,
+      "vol": 1.0,
+      "mute": false,
+      "mode": "drum",
+      "wav_path": "",
+      "drum": "hihat",
+      "color": "#9CA3AF"
+    }
+  ],
+  "right": [
+    {
+      "uid": "75c051eb7d3545edaff5f8e2de74f47e",
+      "subdiv": 3,
+      "freq": 0.0,
+      "vol": 1.0,
+      "mute": false,
+      "mode": "drum",
+      "wav_path": "",
+      "drum": "tom",
+      "color": "#4557fc"
+    }
+  ]
+}
