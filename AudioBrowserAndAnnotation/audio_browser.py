@@ -52,7 +52,8 @@ from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QHeaderView, QMainWindow, QMessageBox,
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
-    QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox
+    QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
+    QProgressDialog
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -318,6 +319,54 @@ class WaveformWorker(QObject):
         except Exception as e:
             self.error.emit(self._gen_id, self._path_str, str(e))
 
+# ========= Conversion worker (WAV → MP3) =========
+class ConvertWorker(QObject):
+    progress = pyqtSignal(int, int, str)  # done, total, filename
+    file_done = pyqtSignal(str, str, bool, str)  # src_name, dst_name, deleted_ok, error_msg("")
+    finished = pyqtSignal(bool)  # canceled?
+
+    def __init__(self, wav_paths: List[str], bitrate: str):
+        super().__init__()
+        self._paths = [str(p) for p in wav_paths]
+        self._bitrate = str(bitrate)
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def run(self):
+        total = len(self._paths)
+        done = 0
+        for srcs in self._paths:
+            if self._cancel:
+                self.finished.emit(True)
+                return
+            src = Path(srcs)
+            self.progress.emit(done, total, src.name)
+            try:
+                base = src.stem
+                target = src.with_suffix(".mp3")
+                n = 1
+                while target.exists():
+                    target = src.with_name(f"{base} ({n}).mp3"); n += 1
+                # Convert
+                audio = AudioSegment.from_file(str(src))
+                audio.export(str(target), format="mp3", bitrate=self._bitrate)
+                # Delete original
+                deleted_ok = True
+                try:
+                    src.unlink()
+                except Exception as de:
+                    deleted_ok = False
+                    self.file_done.emit(src.name, target.name, False, f"Converted but couldn't delete: {de}")
+                else:
+                    self.file_done.emit(src.name, target.name, True, "")
+            except Exception as e:
+                self.file_done.emit(src.name, "", False, str(e))
+            done += 1
+            self.progress.emit(done, total, src.name)
+        self.finished.emit(False)
+
 # ========= Waveform view (draws peaks + all annotations) =========
 class WaveformView(QWidget):
     markerMoved = pyqtSignal(int, int)     # uid, ms
@@ -418,7 +467,8 @@ class WaveformView(QWidget):
             self.update(); return
 
         self._duration_ms = 0
-        self._state = "loading"; self._msg = "Analyzing waveform…"
+        we = "Analyzing waveform…"
+        self._state = "loading"; self._msg = we
         self.update()
 
         self._active_gen_id = self._gen_id_counter = (self._gen_id_counter + 1) % (1 << 31)
@@ -850,7 +900,7 @@ class AudioBrowser(QMainWindow):
         self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
         # New: Convert WAV->MP3
         self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self)
-        self.convert_action.triggered.connect(self._convert_wav_to_mp3)
+        self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded)
         tb.addAction(self.convert_action)
         tb.addSeparator()
 
@@ -1567,7 +1617,7 @@ class AudioBrowser(QMainWindow):
         def ctime(p: Path) -> float:
             try: return os.path.getctime(p)
             except Exception: return p.stat().st_mtime
-        files.sort(key=ctime)
+        files.sort(ctime)
         width = max(2, len(str(len(files))))
         plan, errors = [], []
         for i, p in enumerate(files, start=1):
@@ -1621,13 +1671,12 @@ class AudioBrowser(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             _open_path_default(self.root_path)
 
-    # ----- Convert WAV to MP3 (delete WAVs) -----
-    def _convert_wav_to_mp3(self):
+    # ----- Convert WAV to MP3 (delete WAVs) — threaded with progress -----
+    def _convert_wav_to_mp3_threaded(self):
         if not HAVE_PYDUB:
             QMessageBox.warning(self, "Missing dependency",
                                 "This feature requires the 'pydub' package and FFmpeg installed on your system.")
             return
-        # Check ffmpeg availability
         if not pydub_which("ffmpeg"):
             QMessageBox.warning(self, "FFmpeg not found",
                                 "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
@@ -1641,79 +1690,111 @@ class AudioBrowser(QMainWindow):
         if QMessageBox.question(self, "Convert WAV→MP3", msg,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
+
         # Stop playback to release file locks
         self._stop_playback()
 
-        successes, fails = 0, []
-        remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
-        remapped_general: Dict[str, str] = dict(self.file_general)
-        remapped_durations: Dict[str, int] = dict(self.played_durations)
-        remapped_names: Dict[str, str] = dict(self.provided_names)
+        # Prepare progress dialog
+        total = len(wavs)
+        dlg = QProgressDialog("Preparing conversion…", "Cancel", 0, total, self)
+        dlg.setWindowTitle("WAV → MP3 Conversion")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(False); dlg.setAutoReset(False)
+        dlg.setMinimumDuration(0); dlg.setValue(0)
 
-        for src in wavs:
-            try:
-                # Determine target path, avoid overwrite
-                base = src.stem
-                target = src.with_suffix(".mp3")
-                n = 1
-                while target.exists():
-                    target = src.with_name(f"{base} ({n}).mp3"); n += 1
+        # Worker & thread
+        self._conv_thread = QThread(self)
+        self._conv_worker = ConvertWorker([str(p) for p in wavs], DEFAULT_MP3_BITRATE)
+        self._conv_worker.moveToThread(self._conv_thread)
 
-                # Convert
-                audio = AudioSegment.from_file(str(src))
-                audio.export(str(target), format="mp3", bitrate=DEFAULT_MP3_BITRATE)
+        remap_notes: Dict[str,str] = {}   # old_name -> new_name
+        fails: List[Tuple[str,str]] = []  # (name, error)
+        successes = 0
 
-                # Migrate metadata keyed by file name
-                if src.name in remapped_notes and target.name not in remapped_notes:
-                    remapped_notes[target.name] = remapped_notes.pop(src.name)
-                if src.name in remapped_general and target.name not in remapped_general:
-                    remapped_general[target.name] = remapped_general.pop(src.name)
-                if src.name in remapped_durations and target.name not in remapped_durations:
-                    remapped_durations[target.name] = remapped_durations.pop(src.name)
-                if src.name in remapped_names and target.name not in remapped_names:
-                    remapped_names[target.name] = remapped_names.pop(src.name)
+        def on_progress(done:int, total:int, name:str):
+            dlg.setLabelText(f"Converting {name}  ({min(done,total)}/{total})")
+            dlg.setRange(0, total); dlg.setValue(done)
 
-                # Delete original
-                try:
-                    src.unlink()
-                except Exception as de:
-                    # If delete fails, record but continue
-                    fails.append((src.name, f"Converted but couldn't delete: {de}"))
-                else:
-                    successes += 1
-            except Exception as e:
-                fails.append((src.name, str(e)))
+        def on_file_done(src_name:str, dst_name:str, deleted_ok:bool, err:str):
+            nonlocal successes
+            if dst_name:
+                remap_notes[src_name] = dst_name
+                if deleted_ok: successes += 1
+            if err:
+                fails.append((src_name, err))
 
-        # Apply remaps
-        self.notes_by_file = remapped_notes
-        self.file_general = remapped_general
-        self.played_durations = remapped_durations; self.file_proxy.duration_cache = self.played_durations
-        self.provided_names = remapped_names
+        def on_finished(canceled: bool):
+            dlg.close()
+            # Apply remaps to metadata
+            if remap_notes:
+                remapped_notes: Dict[str, List[Dict]] = dict(self.notes_by_file)
+                remapped_general: Dict[str, str] = dict(self.file_general)
+                remapped_durations: Dict[str, int] = dict(self.played_durations)
+                remapped_names: Dict[str, str] = dict(self.provided_names)
+                for old, new in remap_notes.items():
+                    if old in remapped_notes and new not in remapped_notes:
+                        remapped_notes[new] = remapped_notes.pop(old)
+                    if old in remapped_general and new not in remapped_general:
+                        remapped_general[new] = remapped_general.pop(old)
+                    if old in remapped_durations and new not in remapped_durations:
+                        remapped_durations[new] = remapped_durations.pop(old)
+                    if old in remapped_names and new not in remapped_names:
+                        remapped_names[new] = remapped_names.pop(old)
+                self.notes_by_file = remapped_notes
+                self.file_general = remapped_general
+                self.played_durations = remapped_durations; self.file_proxy.duration_cache = self.played_durations
+                self.provided_names = remapped_names
+                self._save_names(); self._save_notes(); self._save_duration_cache()
 
-        # Persist + refresh UI
-        self._save_names(); self._save_notes(); self._save_duration_cache()
-        self._refresh_right_table()
-        self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
-        self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
-        self._load_annotations_for_current()
-        self._refresh_important_table()
+            # Refresh UI
+            self._refresh_right_table()
+            self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            self._load_annotations_for_current()
+            self._refresh_important_table()
 
-        if fails:
-            text = "\n".join([f"{n}: {err}" for n, err in fails[:20]])
-            more = "" if len(fails) <= 20 else f"\n… and {len(fails)-20} more"
-            QMessageBox.warning(self, "Conversion Finished (with issues)",
-                                f"Converted {successes} file(s). Some issues:\n\n{text}{more}")
-        else:
-            QMessageBox.information(self, "Conversion Complete", f"Converted and deleted {successes} WAV file(s).")
+            # Summary
+            if canceled:
+                status_title = "Conversion Canceled"
+                body = f"Finished {successes} file(s) before cancel."
+            else:
+                status_title = "Conversion Complete" if not fails else "Conversion Finished (with issues)"
+                body = f"Converted and deleted {successes} WAV file(s)."
 
-        # Optional: ask to open folder
-        reply = QMessageBox.question(
-            self, "Open Folder", "Open this folder in your file explorer now?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            _open_path_default(self.root_path)
+            if fails:
+                text = "\\n".join([f\"{n}: {err}\" for n, err in fails[:20]])
+                more = "" if len(fails) <= 20 else f"\\n… and {len(fails)-20} more"
+                QMessageBox.warning(self, status_title, f\"{body}\\n\\nSome issues:\\n\\n{text}{more}\")
+            else:
+                QMessageBox.information(self, status_title, body)
+
+            # Ask to open folder
+            reply = QMessageBox.question(
+                self, "Open Folder", "Open this folder in your file explorer now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                _open_path_default(self.root_path)
+
+            # clean thread
+            self._conv_worker.deleteLater()
+            self._conv_thread.quit()
+            self._conv_thread.wait()
+            self._conv_thread.deleteLater()
+            self._conv_worker = None
+            self._conv_thread = None
+
+        # Wire up
+        self._conv_thread.started.connect(self._conv_worker.run)
+        self._conv_worker.progress.connect(on_progress)
+        self._conv_worker.file_done.connect(on_file_done)
+        self._conv_worker.finished.connect(on_finished)
+        dlg.canceled.connect(self._conv_worker.cancel)
+
+        # Go
+        self._conv_thread.start()
+        dlg.exec()
 
     # ----- Undo/Redo internals -----
     def _on_undo_capacity_changed(self, v: int):
