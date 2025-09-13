@@ -9,7 +9,7 @@
 # - Markers on waveform for all visible sets; drag to adjust
 # - Export annotations (CRLF), batch rename (##_<ProvidedName>), WAV→MP3 with progress
 # - Merged view toggle that shows annotations from all visible sets in a single table
-#   and **allows editing across sets** (time/text/important and delete).
+#   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
 import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop
@@ -59,7 +59,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor
 )
-# QFileSystemModel is sometimes in QtWidgets for PyQt6, sometimes in QtGui (wheel variance)
+# QFileSystemModel may import from QtWidgets or QtGui depending on build
 try:
     from PyQt6.QtWidgets import QFileSystemModel
 except Exception:
@@ -97,7 +97,7 @@ APP_ICON_NAME = "app_icon.png"
 # Visual widths
 MARKER_WIDTH = 2                # thin marker width
 MARKER_SELECTED_WIDTH = 6       # selected marker width
-PLAYHEAD_WIDTH = 4              # red-ish playhead width
+PLAYHEAD_WIDTH = 4              # playhead width
 WAVEFORM_STROKE_WIDTH = 1
 MARKER_HIT_TOLERANCE_PX = 8
 
@@ -126,7 +126,7 @@ def parse_time_to_ms(text: str) -> Optional[int]:
 
 def sanitize(name: str) -> str:
     name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
-    return re.sub(r"\s+", " ", name).strip() or "Track"
+    return re.sub(r"\s+", " ", name).strip()
 
 def resource_path(name: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -1204,6 +1204,17 @@ class AudioBrowser(QMainWindow):
 
         ann_layout.addLayout(set_row)
 
+        # Provided name editor
+        pn_row = QHBoxLayout()
+        pn_row.addWidget(QLabel("Provided Name:"))
+        self.provided_name_edit = QLineEdit()
+        self.provided_name_edit.setPlaceholderText("Optional display name used by batch rename")
+        self.provided_name_edit.setEnabled(False)
+        self.provided_name_edit.returnPressed.connect(self._on_provided_name_edited)
+        self.provided_name_edit.editingFinished.connect(self._on_provided_name_edited)
+        pn_row.addWidget(self.provided_name_edit, 1)
+        ann_layout.addLayout(pn_row)
+
         self.waveform = WaveformView(); self.waveform.bind_player(self.player)
         ann_layout.addWidget(self.waveform)
 
@@ -1419,11 +1430,11 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); return
         fi = self._fi(idx)
         if fi.isDir():
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
@@ -1433,7 +1444,7 @@ class AudioBrowser(QMainWindow):
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field()
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -1455,6 +1466,7 @@ class AudioBrowser(QMainWindow):
         self.current_audio_file = path; self.pending_note_start_ms = None
         self._update_captured_time_label()
         self._load_annotations_for_current()
+        self._refresh_provided_name_field()
         try: self.waveform.set_audio_file(path)
         except Exception: self.waveform.clear()
         self._update_waveform_annotations()
@@ -1474,6 +1486,7 @@ class AudioBrowser(QMainWindow):
         self._update_captured_time_label()
         self.waveform.set_selected_uid(None, None)
         self._update_waveform_annotations()
+        self._refresh_provided_name_field()
 
     def _toggle_play_pause(self):
         st = self.player.playbackState()
@@ -1652,6 +1665,7 @@ class AudioBrowser(QMainWindow):
         self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
         self._refresh_important_table()
         self._update_waveform_annotations()
+        self._refresh_provided_name_field()
 
     def _append_annotation_row(self, entry: Dict, *, set_id: Optional[str]=None, set_name: Optional[str]=None, editable: bool=True):
         ms = int(entry.get("ms", 0))
@@ -1669,7 +1683,7 @@ class AudioBrowser(QMainWindow):
 
         imp = QTableWidgetItem()
         flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsUserCheckable
-        if not editable: flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable  # safety
+        if not editable: flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         imp.setFlags(flags)
         imp.setCheckState(Qt.CheckState.Checked if important else Qt.CheckState.Unchecked)
         imp.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
@@ -1812,7 +1826,6 @@ class AudioBrowser(QMainWindow):
             self._schedule_save_notes(); self._refresh_important_table(); return
 
         if item.column() == self._c_imp:
-            # Map checkbox to bool; when row is not user-checkable, itemChanged may not fire, but we guard anyway.
             new_imp = (item.checkState() == Qt.CheckState.Checked)
             old_imp = bool(entry.get("important", False))
             if new_imp != old_imp:
@@ -1834,7 +1847,6 @@ class AudioBrowser(QMainWindow):
             if uid >= 0 and set_id: to_delete.append((set_id, uid))
         if not to_delete: return
 
-        # Collect entries for undo and then delete per-set
         for set_id, uid in to_delete:
             aset, lst = self._get_set_and_list(set_id, fname)
             if not lst: continue
@@ -1884,7 +1896,6 @@ class AudioBrowser(QMainWindow):
         entry = self._find_entry_in_list(lst, uid)
         if not entry: return
         entry["ms"] = int(new_ms)
-        # Update table cell live if visible
         row = self._row_for_uid(uid, set_id=set_id)
         if row is not None:
             titem = self.annotation_table.item(row, self._c_time)
@@ -1911,6 +1922,42 @@ class AudioBrowser(QMainWindow):
         self._select_row_by_uid(uid, set_id=set_id)
         self._schedule_save_notes(); self._refresh_important_table()
         self._update_waveform_annotations()
+
+    # Provided name on Annotations tab
+    def _on_provided_name_edited(self):
+        if not self.current_audio_file:
+            return
+        new_name = sanitize(self.provided_name_edit.text())
+        fname = self.current_audio_file.name
+        if self.provided_names.get(fname, "") != new_name:
+            self.provided_names[fname] = new_name
+            self._save_names()
+            self._update_library_provided_name_cell(fname, new_name)
+
+    def _update_library_provided_name_cell(self, file_name: str, new_value: str):
+        try:
+            self.table.blockSignals(True)
+            for row in range(self.table.rowCount()):
+                it = self.table.item(row, 0)
+                if it and it.text() == file_name:
+                    tgt = self.table.item(row, 2)
+                    if tgt is None:
+                        tgt = QTableWidgetItem(new_value)
+                        self.table.setItem(row, 2, tgt)
+                    else:
+                        tgt.setText(new_value)
+                    break
+        finally:
+            self.table.blockSignals(False)
+
+    def _refresh_provided_name_field(self):
+        if not self.current_audio_file:
+            self.provided_name_edit.setText("")
+            self.provided_name_edit.setEnabled(False)
+            return
+        fname = self.current_audio_file.name
+        self.provided_name_edit.setEnabled(True)
+        self.provided_name_edit.setText(self.provided_names.get(fname, ""))
 
     # Autosave handlers
     def _on_general_changed(self):
