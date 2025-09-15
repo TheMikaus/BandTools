@@ -1174,7 +1174,8 @@ class AudioBrowser(QMainWindow):
         lib_layout.addWidget(self.table, 1)
         self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
 
-        # Annotations tab
+        self.table.cellClicked.connect(self._on_library_cell_clicked)
+# Annotations tab
         self.ann_tab = QWidget(); ann_layout = QVBoxLayout(self.ann_tab)
 
         set_row = QHBoxLayout()
@@ -1579,6 +1580,34 @@ class AudioBrowser(QMainWindow):
         if not idx: self._stop_playback()
 
     # ----- Annotation table config (dynamic) -----
+    def _on_library_cell_clicked(self, row: int, column: int):
+        # Play the clicked filename from the Library tab without switching tabs.
+        try:
+            # Only the File column (0)
+            if column != 0:
+                return
+            item = self.table.item(row, 0)
+            if not item:
+                return
+            fname = item.text().strip()
+            if not fname:
+                return
+            from pathlib import Path as _P
+            path = (self.root_path / fname) if hasattr(self, 'root_path') else _P(fname)
+            if not path.exists():
+                try:
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.warning(self, "File Missing", f"Couldn't find: {path}")
+                except Exception:
+                    pass
+                return
+            # Start playback; do not switch tabs
+            if hasattr(self, '_play_file'):
+                self._play_file(path)
+        except Exception as _e:
+            # Be defensive; do not break UI if something is slightly different locally
+            print("Issue#1 handler error:", _e)
+
     def _configure_annotation_table(self):
         self.annotation_table.clear()
         if self.show_all_sets:
