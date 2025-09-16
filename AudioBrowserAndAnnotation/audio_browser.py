@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -714,6 +714,55 @@ class FileInfoProxyModel(QIdentityProxyModel):
 
 # ========== Main window ==========
 class AudioBrowser(QMainWindow):
+
+    # ---- Issue #2 helpers: release media lock for file renames ----
+    def _current_media_local_path(self):
+        try:
+            url = self.player.source()
+            if hasattr(url, "isValid") and url.isValid():
+                lf = url.toLocalFile()
+                if lf:
+                    from pathlib import Path as _P
+                    return _P(lf)
+        except Exception:
+            pass
+        return None
+
+    def _release_media_for_path(self, path: Path) -> None:
+        # If the player is using 'path', stop and clear the source, then wait briefly
+        # for the OS to release the handle (Windows).
+        try:
+            cur = self._current_media_local_path()
+            same = False
+            try:
+                if cur and os.path.exists(cur) and os.path.exists(path):
+                    # os.path.samefile may raise on Windows if either path doesn't exist
+                    same = os.path.samefile(str(cur), str(path))
+                elif cur and str(cur) == str(path):
+                    same = True
+            except Exception:
+                same = (str(cur) == str(path))
+
+            if same:
+                try:
+                    # Stop and clear the source so Windows releases the handle
+                    self.player.stop()
+                    from PyQt6.QtCore import QUrl
+                    self.player.setSource(QUrl())  # clear media source
+                except Exception:
+                    pass
+
+                # Give the OS a moment to release locks
+                for _ in range(20):  # up to ~1s
+                    try:
+                        # Try opening for append (write) as a probe
+                        with open(path, "ab"):
+                            pass
+                        break
+                    except Exception:
+                        time.sleep(0.05)
+        except Exception as _e:
+            print("Issue#2: release-media error:", _e)
     # ---- External single-set auto-detect ----
     def _scan_external_annotation_sets(self) -> List[dict]:
         ext_sets = []
