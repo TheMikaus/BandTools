@@ -763,6 +763,41 @@ class AudioBrowser(QMainWindow):
                         time.sleep(0.05)
         except Exception as _e:
             print("Issue#2: release-media error:", _e)
+    
+    # ---- Issue #3: default annotation-set name from current user ----
+    def _resolve_user_display_name(self) -> str:
+        try:
+            # local imports to avoid new global includes
+            import subprocess, os, getpass
+            # Prefer Git global user.name
+            try:
+                name = subprocess.check_output(
+                    ["git", "config", "--global", "user.name"],
+                    stderr=subprocess.DEVNULL, text=True
+                ).strip()
+                if name:
+                    return name
+            except Exception:
+                pass
+            # Common environment fallbacks
+            for k in ("FULLNAME", "GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+                v = os.environ.get(k)
+                if v:
+                    return v
+            # OS username as a last resort
+            try:
+                u = getpass.getuser()
+                if u:
+                    return u
+            except Exception:
+                pass
+            return os.environ.get("USERNAME") or os.environ.get("USER") or "User"
+        except Exception:
+            return "User"
+
+    def _default_annotation_set_name(self) -> str:
+        return self._resolve_user_display_name()
+
     # ---- External single-set auto-detect ----
     def _scan_external_annotation_sets(self) -> List[dict]:
         ext_sets = []
@@ -954,7 +989,7 @@ class AudioBrowser(QMainWindow):
     # ----- Annotation sets load/save -----
     def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None):
         sid = uuid.uuid4().hex[:8]
-        aset = {"id": sid, "name": "Default", "color": "#00cc66", "visible": True, "files": {}}
+        aset = {"id": sid, "name": self._default_annotation_set_name(), "color": "#00cc66", "visible": True, "files": {}}
         if carry_notes or carry_general:
             all_files = set((carry_notes or {}).keys()) | set((carry_general or {}).keys())
             for fname in all_files:
@@ -1359,8 +1394,10 @@ class AudioBrowser(QMainWindow):
             self._load_annotations_for_current()
 
     def _on_add_set(self):
-        name, ok = QInputDialog.getText(self, "Add Annotation Set", "Name:", text=f"Set {len(self.annotation_sets)+1}")
-        if not ok or not name.strip(): return
+        name, ok = QInputDialog.getText(self, "Add Annotation Set", "Name:", text=self._default_annotation_set_name())
+        if not ok:
+            return
+        name = name.strip() or self._default_annotation_set_name()
         c = QColorDialog.getColor(hex_to_color("#00cc66"), self, "Pick marker color")
         color = color_to_hex(c) if c.isValid() else "#00cc66"
         sid = uuid.uuid4().hex[:8]
@@ -1376,7 +1413,9 @@ class AudioBrowser(QMainWindow):
         aset = self._get_current_set()
         if not aset: return
         name, ok = QInputDialog.getText(self, "Rename Annotation Set", "New name:", text=str(aset.get("name","Set")))
-        if not ok or not name.strip(): return
+        if not ok:
+            return
+        name = name.strip() or self._default_annotation_set_name()
         aset["name"] = name.strip()
         self._refresh_set_combo(); self._save_notes(); self._refresh_important_table(); self._load_annotations_for_current()
 
