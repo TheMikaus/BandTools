@@ -857,6 +857,11 @@ class AudioBrowser(QMainWindow):
         self.root_path: Path = self._load_or_ask_root()
         self.current_audio_file: Optional[Path] = None
         self.pending_note_start_ms: Optional[int] = None
+        self.clip_sel_start_ms: Optional[int] = None
+        self.clip_sel_end_ms: Optional[int] = None
+        self._clip_play_end_ms: Optional[int] = None
+        self._clip_playing: bool = False
+        self.annotation_filter: str = 'all'
         self._programmatic_selection = False
         self._uid_counter: int = 1
         self._suspend_ann_change = False
@@ -1301,7 +1306,34 @@ class AudioBrowser(QMainWindow):
         ann_layout.addLayout(pn_row)
 
         self.waveform = WaveformView(); self.waveform.bind_player(self.player)
+        self.waveform.installEventFilter(self)
         ann_layout.addWidget(self.waveform)
+        # --- Clip selection controls (Issue #4) ---
+        clip_row = QHBoxLayout()
+        clip_row.addWidget(QLabel("Clip Start:"))
+        self.clip_start_edit = QLineEdit(); self.clip_start_edit.setPlaceholderText("mm:ss")
+        self.clip_start_edit.setMaximumWidth(100)
+        clip_row.addWidget(self.clip_start_edit)
+        clip_row.addWidget(QLabel("Clip End:"))
+        self.clip_end_edit = QLineEdit(); self.clip_end_edit.setPlaceholderText("mm:ss")
+        self.clip_end_edit.setMaximumWidth(100)
+        clip_row.addWidget(self.clip_end_edit)
+        self.clip_play_btn = QPushButton("Play Clip")
+        self.clip_save_btn = QPushButton("Save Clip")
+        self.clip_cancel_btn = QPushButton("Cancel")
+        clip_row.addWidget(self.clip_play_btn)
+        clip_row.addWidget(self.clip_save_btn)
+        clip_row.addWidget(self.clip_cancel_btn)
+        ann_layout.addLayout(clip_row)
+
+        # Filter combo for annotations
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Show:"))
+        self.ann_filter_combo = QComboBox()
+        self.ann_filter_combo.addItems(["All", "Points", "Clips"])
+        filter_row.addWidget(self.ann_filter_combo); filter_row.addStretch(1)
+        ann_layout.addLayout(filter_row)
+
 
         top_controls = QHBoxLayout()
         self.captured_time_label = QLabel(""); self.captured_time_label.setMinimumWidth(90)
@@ -1321,11 +1353,25 @@ class AudioBrowser(QMainWindow):
         self.annotation_table = QTableWidget(0, 3)
         ann_layout.addWidget(self.annotation_table, 2)
         self._configure_annotation_table()
+        # Issue #4 connections
+        self.clip_start_edit.editingFinished.connect(self._on_clip_time_edits_changed)
+        self.clip_end_edit.editingFinished.connect(self._on_clip_time_edits_changed)
+        self.clip_play_btn.clicked.connect(self._on_clip_play_clicked)
+        self.clip_save_btn.clicked.connect(self._on_clip_save_clicked)
+        self.clip_cancel_btn.clicked.connect(self._on_clip_cancel_clicked)
+        self.ann_filter_combo.currentIndexChanged.connect(self._on_ann_filter_changed)
+        # also stop clip at end
+        self.player.positionChanged.connect(self._on_player_pos_for_clip)
+
 
         bottom_controls = QHBoxLayout()
         self.delete_note_btn = QPushButton("Delete Selected"); self.delete_note_btn.clicked.connect(self._delete_selected_annotations)
         bottom_controls.addStretch(1); bottom_controls.addWidget(self.delete_note_btn)
         ann_layout.addLayout(bottom_controls)
+        self.export_clips_btn = QPushButton("Export Clips")
+        bottom_controls.insertWidget(0, self.export_clips_btn)
+        self.export_clips_btn.clicked.connect(self._on_export_clips_clicked)
+
 
         # Tabs default order
         self.tabs.addTab(self.folder_tab, "Folder Notes")
@@ -1777,6 +1823,9 @@ class AudioBrowser(QMainWindow):
         rows.sort(key=lambda r: int(r[2].get("ms", 0)))
         for set_id, set_name, entry in rows:
             editable = True if self.show_all_sets else (set_id == self.current_set_id)
+            # Issue #4 filter
+            if self.annotation_filter == 'points' and entry.get('end_ms') is not None: continue
+            if self.annotation_filter == 'clips' and entry.get('end_ms') is None: continue
             self._append_annotation_row(entry, set_id=set_id, set_name=set_name, editable=editable)
 
         self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
@@ -1819,6 +1868,19 @@ class AudioBrowser(QMainWindow):
         n.setData(Qt.ItemDataRole.UserRole + 2, str(set_id or self.current_set_id or ""))
         n.setFlags((n.flags() | Qt.ItemFlag.ItemIsEditable) if editable else (Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled))
         self.annotation_table.setItem(r, self._c_note, n)
+
+    
+        # Issue #4: display clip ranges as start - end and lock time cell editing for clips
+        try:
+            end_ms = entry.get("end_ms")
+            if end_ms is not None:
+                # time item is at self._c_time
+                titem = self.annotation_table.item(r, self._c_time)
+                if titem:
+                    titem.setText(f"{human_time_ms(int(ms))} - {human_time_ms(int(end_ms))}")
+                    titem.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        except Exception:
+            pass
 
     def _current_file_list(self) -> List[Dict]:
         if not self.current_audio_file: return []
@@ -1878,11 +1940,12 @@ class AudioBrowser(QMainWindow):
         self.pending_note_start_ms = None; self._update_captured_time_label()
         fname = self.current_audio_file.name
         uid = self._uid_counter; self._uid_counter += 1
-        entry = {"uid": uid, "ms": int(ms), "text": txt, "important": False}
+        entry = ({'uid': uid, 'ms': int(ms), 'text': txt, 'important': False} if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None else {'uid': uid, 'ms': int(self.clip_sel_start_ms), 'end_ms': int(self.clip_sel_end_ms), 'text': txt, 'important': False})
         self.notes_by_file.setdefault(fname, []).append(entry)
         self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
         self.note_input.clear()
+        self._on_clip_cancel_clicked()
         self._schedule_save_notes()
 
     def _on_annotation_double_clicked(self, item: QTableWidgetItem):
@@ -2108,6 +2171,168 @@ class AudioBrowser(QMainWindow):
                 pairs = [(int(n.get("uid",0)), int(n.get("ms",0))) for n in (meta.get("notes") or [])]
             payload[s["id"]] = {"color": s.get("color","#00cc66"), "visible": bool(s.get("visible",True)), "pairs": pairs}
         self.waveform.set_annotations_multi(payload)
+    # ----- Issue #4: event filter for waveform Shift+click selection -----
+    def eventFilter(self, obj, event):
+        try:
+            from PyQt6.QtCore import QEvent, Qt
+            if obj is self.waveform:
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    if getattr(event, "button", None) and event.button() == Qt.MouseButton.LeftButton:
+                        mods = getattr(event, "modifiers", lambda: Qt.KeyboardModifier.NoModifier)()
+                        if mods & Qt.KeyboardModifier.ShiftModifier:
+                            x = int(getattr(event, "position", lambda: None)().x()) if hasattr(event, "position") else int(event.pos().x())
+                            # map x to ms using player duration
+                            W = max(1, self.waveform.width())
+                            dur = int(self.player.duration())
+                            ms = max(0, min(dur, int((x / W) * dur)))
+                            if self.clip_sel_start_ms is None or (self.clip_sel_start_ms is not None and self.clip_sel_end_ms is not None):
+                                self.clip_sel_start_ms = ms; self.clip_sel_end_ms = None
+                            else:
+                                self.clip_sel_end_ms = ms
+                                if self.clip_sel_end_ms < self.clip_sel_start_ms:
+                                    self.clip_sel_start_ms, self.clip_sel_end_ms = self.clip_sel_end_ms, self.clip_sel_start_ms
+                            self._update_clip_edits_from_selection()
+                            return True
+            return super().eventFilter(obj, event)
+        except Exception:
+            return super().eventFilter(obj, event)
+
+    def _update_clip_edits_from_selection(self):
+        s = self.clip_sel_start_ms; e = self.clip_sel_end_ms
+        self.clip_start_edit.blockSignals(True); self.clip_end_edit.blockSignals(True)
+        self.clip_start_edit.setText(human_time_ms(int(s)) if s is not None else "")
+        self.clip_end_edit.setText(human_time_ms(int(e)) if e is not None else "")
+        self.clip_start_edit.blockSignals(False); self.clip_end_edit.blockSignals(False)
+
+    def _on_clip_time_edits_changed(self):
+        s = parse_time_to_ms(self.clip_start_edit.text() or "")
+        e = parse_time_to_ms(self.clip_end_edit.text() or "")
+        self.clip_sel_start_ms = s
+        self.clip_sel_end_ms = e
+        # Normalize order
+        if (s is not None) and (e is not None) and e < s:
+            self.clip_sel_start_ms, self.clip_sel_end_ms = e, s
+
+    def _on_clip_play_clicked(self):
+        if not self.current_audio_file: return
+        if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None: return
+        if int(self.clip_sel_start_ms) >= int(self.clip_sel_end_ms): return
+        self._clip_play_end_ms = int(self.clip_sel_end_ms)
+        self._clip_playing = True
+        self.player.setPosition(int(self.clip_sel_start_ms)); self.player.play()
+        self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+
+    def _on_player_pos_for_clip(self, pos_ms: int):
+        if self._clip_playing and self._clip_play_end_ms is not None:
+            if int(pos_ms) >= int(self._clip_play_end_ms):
+                self.player.pause()
+                self._clip_playing = False
+                self._clip_play_end_ms = None
+                self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+
+    def _on_clip_cancel_clicked(self):
+        self.clip_sel_start_ms = None; self.clip_sel_end_ms = None
+        self._clip_play_end_ms = None; self._clip_playing = False
+        self._update_clip_edits_from_selection()
+
+    def _on_clip_save_clicked(self):
+        if not self.current_audio_file: return
+        if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None: return
+        if int(self.clip_sel_start_ms) >= int(self.clip_sel_end_ms): return
+        txt = self.note_input.text().strip()
+        if not txt:
+            QMessageBox.information(self, "Add Text", "Type an annotation in the Text box before saving the clip.")
+            return
+        fname = self.current_audio_file.name
+        uid = self._uid_counter; self._uid_counter += 1
+        entry = {"uid": int(uid), "ms": int(self.clip_sel_start_ms), "end_ms": int(self.clip_sel_end_ms), "text": txt, "important": False}
+        self.notes_by_file.setdefault(fname, []).append(entry)
+        self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
+        self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
+        self.note_input.clear()
+        self._on_clip_cancel_clicked()
+        self._schedule_save_notes()
+
+    def _on_ann_filter_changed(self, idx: int):
+        txt = (self.ann_filter_combo.currentText() or "All").lower()
+        if "point" in txt: self.annotation_filter = "points"
+        elif "clip" in txt: self.annotation_filter = "clips"
+        else: self.annotation_filter = "all"
+        self._load_annotations_for_current()
+    def _on_export_clips_clicked(self):
+        # Collect all clips across current annotation set and folder
+        aset = self._get_current_set()
+        if not aset:
+            QMessageBox.information(self, "No Set", "No current annotation set selected."); return
+        clips: list[tuple[Path, dict]] = []
+        base = self.root_path
+        files = aset.get("files", {})
+        for fname, meta in files.items():
+            for e in (meta.get("notes") or []):
+                if e.get("end_ms") is not None:
+                    p = base / fname
+                    if p.exists(): clips.append((p, e))
+        if not clips:
+            QMessageBox.information(self, "No Clips", "No region-based annotations found to export."); return
+
+        # Prepare destination folder
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir = self.root_path / f"Clips_{ts}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check pydub/ffmpeg
+        if not HAVE_PYDUB:
+            QMessageBox.warning(self, "Missing dependency",
+                "Export requires the 'pydub' package and FFmpeg installed on your system."); return
+        try:
+            from pydub import AudioSegment
+            from pydub.utils import which as pydub_which
+            if not pydub_which("ffmpeg"):
+                QMessageBox.warning(self, "FFmpeg not found",
+                    "FFmpeg isn't available on your PATH. Please install FFmpeg and try again."); return
+        except Exception as e:
+            QMessageBox.warning(self, "pydub error", f"pydub not available: {e}"); return
+
+        # Export
+        report_lines = []
+        by_file = {}
+        for p, e in clips:
+            by_file.setdefault(p.name, []).append(e)
+        for fname, entries in by_file.items():
+            # group header
+            report_lines.append(fname)
+            # load once
+            ext = p.suffix.lower()
+            try:
+                seg = AudioSegment.from_file(str((self.root_path / fname)))
+            except Exception as ex:
+                report_lines.append(f"Error loading {fname}: {ex}"); report_lines.append("\r\n"); continue
+            # export entries
+            entries.sort(key=lambda d: int(d.get('ms',0)))
+            for i, e in enumerate(entries, 1):
+                s = int(e.get('ms',0)); en = int(e.get('end_ms',0))
+                if en <= s: continue
+                clip = seg[s:en]
+                base_name = Path(fname).stem
+                out_name = f"{base_name}_clip{i:02d}_{human_time_ms(s).replace(':','-')}_to_{human_time_ms(en).replace(':','-')}{ext}"
+                out_path = out_dir / out_name
+                try:
+                    clip.export(str(out_path), format=ext.lstrip('.'))
+                except Exception as ex:
+                    report_lines.append(f"{i:02d}: {human_time_ms(s)} - {human_time_ms(en)} :: {e.get('text','')} :: ERROR {ex}")
+                    continue
+                # log line
+                report_lines.append(f"{human_time_ms(s)} - {human_time_ms(en)} :: {e.get('text','')}")
+            report_lines.append("\r\n")  # blank line between files
+
+        # Write report
+        try:
+            (out_dir / "clips_annotations.txt").write_text("\r\n".join(report_lines), encoding="utf-8")
+        except Exception:
+            pass
+        QMessageBox.information(self, "Export Complete", f"Exported clips to: {out_dir}")
+
+
 
     # ----- Important annotations (Folder tab) -----
     def _refresh_important_table(self):
