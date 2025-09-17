@@ -798,6 +798,27 @@ class AudioBrowser(QMainWindow):
     def _default_annotation_set_name(self) -> str:
         return self._resolve_user_display_name()
 
+    def _convert_default_to_user_set(self, annotation_sets: List[dict]) -> List[dict]:
+        """Convert 'Default' annotation set to user-based name if no user set exists."""
+        if not annotation_sets:
+            return annotation_sets
+        
+        user_name = self._default_annotation_set_name()
+        
+        # Check if there's already a set with the user's name
+        has_user_set = any(s.get("name") == user_name for s in annotation_sets)
+        if has_user_set:
+            return annotation_sets
+        
+        # Look for a set named "Default" (case-insensitive) to convert
+        for annotation_set in annotation_sets:
+            set_name = annotation_set.get("name", "")
+            if set_name.lower() == "default":
+                annotation_set["name"] = user_name
+                break
+        
+        return annotation_sets
+
     # ---- External single-set auto-detect ----
     def _scan_external_annotation_sets(self) -> List[dict]:
         ext_sets = []
@@ -1060,6 +1081,8 @@ class AudioBrowser(QMainWindow):
                 if not cleaned:
                     self._create_default_set()
                 else:
+                    # Convert "Default" set to user-based name if needed
+                    cleaned = self._convert_default_to_user_set(cleaned)
                     self.annotation_sets = cleaned
                     cur = self.settings.value(SETTINGS_KEY_CUR_SET, "", type=str) or ""
                     if not any(s["id"] == cur for s in self.annotation_sets): cur = self.annotation_sets[0]["id"]
