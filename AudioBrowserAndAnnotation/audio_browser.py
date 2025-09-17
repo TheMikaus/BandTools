@@ -982,8 +982,22 @@ class AudioBrowser(QMainWindow):
         self.waveform.clear()
 
     def _names_json_path(self) -> Path: return self.root_path / NAMES_JSON
-    def _notes_json_path(self) -> Path: return self.root_path / NOTES_JSON
+    def _notes_json_path(self) -> Path: 
+        # When an audio file is selected, use its directory for annotations
+        if self.current_audio_file:
+            return self.current_audio_file.parent / NOTES_JSON
+        return self.root_path / NOTES_JSON
     def _dur_json_path(self) -> Path: return self.root_path / DURATIONS_JSON
+    
+    def _get_audio_file_dir(self) -> Path:
+        """Return the directory containing the current audio file, or root_path if no file selected."""
+        if self.current_audio_file:
+            return self.current_audio_file.parent
+        return self.root_path
+    
+    def _get_notes_json_path_for_audio_file(self) -> Path:
+        """Return the notes JSON path for the current audio file's directory."""
+        return self._get_audio_file_dir() / NOTES_JSON
 
     def _load_names(self):
         self.provided_names = load_json(self._names_json_path(), {}) or {}
@@ -1593,6 +1607,12 @@ class AudioBrowser(QMainWindow):
     def _play_file(self, path: Path):
         if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
             return
+        
+        # Check if we need to reload annotations from a different directory
+        prev_audio_dir = self.current_audio_file.parent if self.current_audio_file else None
+        new_audio_dir = path.parent
+        need_reload_annotations = (prev_audio_dir != new_audio_dir)
+        
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(path)))
         self.player.play()
         self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
@@ -1600,6 +1620,13 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         self.current_audio_file = path; self.pending_note_start_ms = None
         self._update_captured_time_label()
+        
+        # Reload annotations from the audio file's directory if needed
+        if need_reload_annotations:
+            self._load_notes()
+            self._ensure_uids()
+            self._refresh_set_combo()
+        
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
         try: self.waveform.set_audio_file(path)
