@@ -854,7 +854,7 @@ class AudioBrowser(QMainWindow):
         ext_sets = []
         try:
             for jp in sorted(self.root_path.glob("*.json")):
-                # Skip non-annotation reserved files
+                # Skip non-annotation reserved files (but allow user annotation files)
                 if jp.name in RESERVED_JSON and not self._is_user_annotation_file(jp):
                     continue
                 
