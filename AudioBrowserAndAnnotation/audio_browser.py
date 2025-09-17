@@ -813,7 +813,8 @@ class AudioBrowser(QMainWindow):
         # Look for a set named "Default" (case-insensitive) to convert
         for annotation_set in annotation_sets:
             set_name = annotation_set.get("name", "")
-            if set_name.lower() == "default":
+            # Handle None or non-string names safely
+            if isinstance(set_name, str) and set_name.lower() == "default":
                 annotation_set["name"] = user_name
                 break
         
