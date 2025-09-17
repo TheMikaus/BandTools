@@ -423,6 +423,10 @@ class WaveformView(QWidget):
         self._active_gen_id = -1
         self._threads: List[QThread] = []
         self._workers: Dict[int, WaveformWorker] = {}
+        
+        # Clip selection region
+        self._clip_start_ms: Optional[int] = None
+        self._clip_end_ms: Optional[int] = None
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -445,12 +449,19 @@ class WaveformView(QWidget):
         else: self._selected = (str(set_id), int(uid))
         self.update()
 
+    def set_clip_selection(self, start_ms: Optional[int], end_ms: Optional[int]):
+        """Set the clip selection region to be highlighted on the waveform."""
+        self._clip_start_ms = start_ms
+        self._clip_end_ms = end_ms
+        self.update()
+
     def clear(self):
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
         self._pixmap = None; self._state = "empty"; self._msg = ""
         self._path = None; self._total_cols = 0; self._done_cols = 0
         self._multi = {}; self._selected = None; self._hover = None
         self._dragging_marker = False
+        self._clip_start_ms = None; self._clip_end_ms = None
         self.update()
 
     def _effective_duration(self) -> int:
@@ -612,6 +623,31 @@ class WaveformView(QWidget):
                 pen = QPen(self._selected_color if sel else color)
                 pen.setWidth(MARKER_SELECTED_WIDTH if sel else MARKER_WIDTH)
                 painter.setPen(pen); painter.drawLine(x, 0, x, self.height())
+
+        # Clip selection region highlight
+        if self._clip_start_ms is not None and self._clip_end_ms is not None:
+            start_x = self._ms_to_x(self._clip_start_ms)
+            end_x = self._ms_to_x(self._clip_end_ms)
+            if start_x < self.width() and end_x > 0:  # Only draw if visible
+                # Ensure proper order
+                left_x = min(start_x, end_x)
+                right_x = max(start_x, end_x)
+                # Clamp to widget bounds
+                left_x = max(0, left_x)
+                right_x = min(self.width(), right_x)
+                
+                if right_x > left_x:  # Only draw if there's a visible region
+                    # Draw semi-transparent highlight
+                    highlight_color = QColor("#ffff00")  # Yellow
+                    highlight_color.setAlpha(60)  # Semi-transparent
+                    painter.fillRect(int(left_x), 0, int(right_x - left_x), self.height(), highlight_color)
+                    
+                    # Draw border lines for the selection
+                    border_pen = QPen(QColor("#ffff00"))
+                    border_pen.setWidth(2)
+                    painter.setPen(border_pen)
+                    painter.drawLine(int(left_x), 0, int(left_x), self.height())
+                    painter.drawLine(int(right_x), 0, int(right_x), self.height())
 
         # Playhead
         dur = self._effective_duration()
@@ -2347,6 +2383,8 @@ class AudioBrowser(QMainWindow):
         self.clip_start_edit.setText(human_time_ms(int(s)) if s is not None else "")
         self.clip_end_edit.setText(human_time_ms(int(e)) if e is not None else "")
         self.clip_start_edit.blockSignals(False); self.clip_end_edit.blockSignals(False)
+        # Update waveform visual selection
+        self.waveform.set_clip_selection(s, e)
 
     def _on_clip_time_edits_changed(self):
         s = parse_time_to_ms(self.clip_start_edit.text() or "")
@@ -2356,6 +2394,8 @@ class AudioBrowser(QMainWindow):
         # Normalize order
         if (s is not None) and (e is not None) and e < s:
             self.clip_sel_start_ms, self.clip_sel_end_ms = e, s
+        # Update waveform visual selection
+        self.waveform.set_clip_selection(self.clip_sel_start_ms, self.clip_sel_end_ms)
 
     def _on_clip_play_clicked(self):
         if not self.current_audio_file: return
