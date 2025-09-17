@@ -971,23 +971,32 @@ class AudioBrowser(QMainWindow):
         finally:
             QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
         # Reload per-folder state
+        self.current_audio_file = None  # Clear current audio file before loading metadata
         self.played_durations = self._load_duration_cache()
         self.file_proxy.duration_cache = self.played_durations
         self._load_names(); self._load_notes(); self._ensure_uids()
         self._refresh_set_combo()
-        self._refresh_right_table(); self.current_audio_file = None
+        self._refresh_right_table()
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
         self._refresh_important_table()
         self.waveform.clear()
 
-    def _names_json_path(self) -> Path: return self.root_path / NAMES_JSON
+    def _names_json_path(self) -> Path: 
+        # When an audio file is selected, use its directory for provided names
+        if self.current_audio_file:
+            return self.current_audio_file.parent / NAMES_JSON
+        return self.root_path / NAMES_JSON
     def _notes_json_path(self) -> Path: 
         # When an audio file is selected, use its directory for annotations
         if self.current_audio_file:
             return self.current_audio_file.parent / NOTES_JSON
         return self.root_path / NOTES_JSON
-    def _dur_json_path(self) -> Path: return self.root_path / DURATIONS_JSON
+    def _dur_json_path(self) -> Path: 
+        # When an audio file is selected, use its directory for duration cache
+        if self.current_audio_file:
+            return self.current_audio_file.parent / DURATIONS_JSON
+        return self.root_path / DURATIONS_JSON
     
     def _get_audio_file_dir(self) -> Path:
         """Return the directory containing the current audio file, or root_path if no file selected."""
@@ -1623,6 +1632,9 @@ class AudioBrowser(QMainWindow):
         
         # Reload annotations from the audio file's directory if needed
         if need_reload_annotations:
+            self._load_names()  # Reload provided names from the new directory
+            self.played_durations = self._load_duration_cache()  # Reload duration cache from the new directory
+            self.file_proxy.duration_cache = self.played_durations
             self._load_notes()
             self._ensure_uids()
             self._refresh_set_combo()
