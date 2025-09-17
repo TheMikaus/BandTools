@@ -797,6 +797,13 @@ class AudioBrowser(QMainWindow):
 
     def _default_annotation_set_name(self) -> str:
         return self._resolve_user_display_name()
+    
+    def _user_notes_filename(self) -> str:
+        """Return user-specific notes filename based on current user."""
+        user_name = self._resolve_user_display_name()
+        # Clean username for filename (remove problematic characters)
+        clean_user = re.sub(r'[<>:"/\\|?*]', '_', user_name)
+        return f".audio_notes_{clean_user}.json"
 
     def _convert_default_to_user_set(self, annotation_sets: List[dict]) -> List[dict]:
         """Convert 'Default' annotation set to user-based name if no user set exists."""
@@ -821,14 +828,46 @@ class AudioBrowser(QMainWindow):
         return annotation_sets
 
     # ---- External single-set auto-detect ----
+    def _is_user_annotation_file(self, filepath: Path) -> bool:
+        """Check if a file is a user-specific annotation file (including legacy)."""
+        filename = filepath.name
+        # Check for legacy .audio_notes.json
+        if filename == NOTES_JSON:
+            return True
+        # Check for user-specific pattern: .audio_notes_<username>.json
+        if filename.startswith(".audio_notes_") and filename.endswith(".json"):
+            return True
+        return False
+
+    def _extract_user_from_filename(self, filepath: Path) -> str:
+        """Extract username from annotation filename, or return 'Legacy' for old format."""
+        filename = filepath.name
+        if filename == NOTES_JSON:
+            return "Legacy"
+        if filename.startswith(".audio_notes_") and filename.endswith(".json"):
+            # Extract username between .audio_notes_ and .json
+            user_part = filename[13:-5]  # Remove ".audio_notes_" and ".json"
+            return user_part or "Unknown"
+        return "Unknown"
+
     def _scan_external_annotation_sets(self) -> List[dict]:
         ext_sets = []
         try:
             for jp in sorted(self.root_path.glob("*.json")):
-                if jp.name in RESERVED_JSON: continue
+                # Skip non-annotation reserved files
+                if jp.name in RESERVED_JSON and not self._is_user_annotation_file(jp):
+                    continue
+                
+                # Check for user-specific annotation files
+                is_user_annotation = self._is_user_annotation_file(jp)
+                current_user_file = jp.name == self._user_notes_filename()
+                
                 data = load_json(jp, None)
                 if not isinstance(data, dict): continue
+                
+                # Handle both single-set files and multi-set user annotation files
                 if "files" in data and "sets" not in data and isinstance(data["files"], dict):
+                    # Single-set external file
                     name = str(data.get("name") or jp.stem)
                     color = str(data.get("color", "#00cc66") or "#00cc66")
                     visible = bool(data.get("visible", True))
@@ -846,6 +885,32 @@ class AudioBrowser(QMainWindow):
                         }
                     sid = str(data.get("id") or ("ext_" + hashlib.md5(str(jp).encode()).hexdigest()[:8]))
                     ext_sets.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
+                elif is_user_annotation and not current_user_file and "sets" in data:
+                    # Multi-set user annotation file from another user
+                    user_name = self._extract_user_from_filename(jp)
+                    sets = data.get("sets") or []
+                    for s in sets:
+                        if not isinstance(s, dict): continue
+                        sid = str(s.get("id") or uuid.uuid4().hex[:8])
+                        # Prefix the name with the user to distinguish
+                        name = f"[{user_name}] {str(s.get('name', '') or 'Set')}"
+                        color = str(s.get("color", "#00cc66") or "#00cc66")
+                        visible = bool(s.get("visible", True))
+                        files = {}
+                        for fname, meta in (s.get("files", {}) or {}).items():
+                            if not isinstance(meta, dict): continue
+                            files[str(fname)] = {
+                                "general": str(meta.get("general", "") or ""),
+                                "notes": [{
+                                    "uid": int(n.get("uid", 0) or 0),
+                                    "ms": int(n.get("ms", 0)),
+                                    "text": str(n.get("text", "")),
+                                    "important": bool(n.get("important", False)),
+                                } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
+                            }
+                        # Make ID unique by prefixing with file hash to avoid conflicts
+                        unique_sid = f"user_{hashlib.md5(str(jp).encode()).hexdigest()[:8]}_{sid}"
+                        ext_sets.append({"id": unique_sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
         except Exception:
             pass
         return ext_sets
@@ -1011,9 +1076,10 @@ class AudioBrowser(QMainWindow):
         return self.root_path / NAMES_JSON
     def _notes_json_path(self) -> Path: 
         # When an audio file is selected, use its directory for annotations
+        user_notes_filename = self._user_notes_filename()
         if self.current_audio_file:
-            return self.current_audio_file.parent / NOTES_JSON
-        return self.root_path / NOTES_JSON
+            return self.current_audio_file.parent / user_notes_filename
+        return self.root_path / user_notes_filename
     def _dur_json_path(self) -> Path: 
         # When an audio file is selected, use its directory for duration cache
         if self.current_audio_file:
@@ -1054,7 +1120,22 @@ class AudioBrowser(QMainWindow):
     def _load_notes(self):
         self.annotation_sets = []
         self.notes_by_file = {}; self.file_general = {}; self.folder_notes = ""
-        data = load_json(self._notes_json_path(), {})
+        
+        # Check for migration from legacy file
+        user_notes_path = self._notes_json_path()
+        legacy_notes_path = (self.current_audio_file.parent if self.current_audio_file else self.root_path) / NOTES_JSON
+        
+        # If user-specific file doesn't exist but legacy file does, migrate it
+        if not user_notes_path.exists() and legacy_notes_path.exists():
+            try:
+                legacy_data = load_json(legacy_notes_path, {})
+                if legacy_data:  # Only migrate if there's actual data
+                    save_json(user_notes_path, legacy_data)
+                    print(f"Migrated annotations from {legacy_notes_path.name} to {user_notes_path.name}")
+            except Exception as e:
+                print(f"Warning: Could not migrate legacy annotations: {e}")
+        
+        data = load_json(user_notes_path, {})
         try:
             if isinstance(data, dict) and "sets" in data:
                 self.folder_notes = str(data.get("folder_notes", "") or "")
