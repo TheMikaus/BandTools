@@ -85,11 +85,14 @@ SETTINGS_KEY_VOLUME = "volume_0_100"
 SETTINGS_KEY_UNDO_CAP = "undo_capacity"
 SETTINGS_KEY_CUR_SET = "current_set_id"
 SETTINGS_KEY_SHOW_ALL = "show_all_sets"
+SETTINGS_KEY_FINGERPRINT_DIR = "fingerprint_reference_dir"
+SETTINGS_KEY_FINGERPRINT_THRESHOLD = "fingerprint_match_threshold"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON}
+FINGERPRINTS_JSON = ".audio_fingerprints.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -312,6 +315,141 @@ def resample_peaks(peaks: List[Tuple[float, float]], width: int) -> List[Tuple[f
             if pmx > mx: mx = pmx
         out.append((mn, mx))
     return out
+
+# ========== Audio fingerprinting ==========
+def compute_audio_fingerprint(samples: List[float], sr: int) -> List[float]:
+    """
+    Compute a simple audio fingerprint using spectral features.
+    Returns a list of float values representing the audio's spectral signature.
+    """
+    if HAVE_NUMPY:
+        arr = np.asarray(samples, dtype=np.float32)
+        
+        # Use shorter segments for better temporal resolution
+        segment_length = min(sr // 2, len(arr) // 8)  # 0.5 second or 1/8 of file
+        if segment_length < 1024:
+            segment_length = min(1024, len(arr))
+        
+        fingerprint = []
+        
+        # Process overlapping segments
+        hop_length = segment_length // 4
+        for i in range(0, len(arr) - segment_length + 1, hop_length):
+            segment = arr[i:i + segment_length]
+            
+            # Apply window to reduce spectral leakage
+            window = np.hanning(len(segment))
+            windowed = segment * window
+            
+            # Compute FFT
+            fft = np.fft.rfft(windowed)
+            magnitude = np.abs(fft)
+            
+            # Divide into frequency bands (like simplified MFCCs)
+            n_bands = 12
+            band_size = len(magnitude) // n_bands
+            band_energies = []
+            
+            for b in range(n_bands):
+                start = b * band_size
+                end = (b + 1) * band_size if b < n_bands - 1 else len(magnitude)
+                if end > start:
+                    energy = float(np.mean(magnitude[start:end]))
+                else:
+                    energy = 0.0
+                band_energies.append(energy)
+            
+            # Normalize by total energy to make it volume-independent
+            total_energy = sum(band_energies)
+            if total_energy > 0:
+                band_energies = [e / total_energy for e in band_energies]
+            
+            fingerprint.extend(band_energies)
+        
+        # Limit fingerprint length to avoid huge files
+        max_len = 144  # 12 bands * 12 segments max
+        if len(fingerprint) > max_len:
+            # Downsample by averaging consecutive groups
+            group_size = len(fingerprint) // max_len
+            downsampled = []
+            for i in range(0, len(fingerprint), group_size):
+                group = fingerprint[i:i + group_size]
+                downsampled.append(sum(group) / len(group) if group else 0.0)
+            fingerprint = downsampled[:max_len]
+        
+        return fingerprint
+    else:
+        # Fallback without numpy - very basic
+        n_bands = 12
+        segment_length = min(sr, len(samples) // 4)
+        if segment_length < 512:
+            segment_length = min(512, len(samples))
+        
+        fingerprint = []
+        for i in range(0, len(samples) - segment_length + 1, segment_length // 2):
+            segment = samples[i:i + segment_length]
+            
+            # Simple frequency analysis without FFT
+            band_energies = [0.0] * n_bands
+            for j, sample in enumerate(segment):
+                # Rough frequency mapping based on position
+                band = min(n_bands - 1, j * n_bands // len(segment))
+                band_energies[band] += abs(sample)
+            
+            # Normalize
+            total = sum(band_energies)
+            if total > 0:
+                band_energies = [e / total for e in band_energies]
+            
+            fingerprint.extend(band_energies)
+        
+        return fingerprint[:144]  # Limit length
+
+def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
+    """
+    Compare two fingerprints and return similarity score (0.0 to 1.0).
+    Higher values indicate more similarity.
+    """
+    if not fp1 or not fp2:
+        return 0.0
+    
+    # Align lengths by truncating to shorter
+    min_len = min(len(fp1), len(fp2))
+    fp1_trunc = fp1[:min_len]
+    fp2_trunc = fp2[:min_len]
+    
+    if HAVE_NUMPY:
+        arr1 = np.asarray(fp1_trunc)
+        arr2 = np.asarray(fp2_trunc)
+        
+        # Compute cosine similarity
+        dot_product = np.dot(arr1, arr2)
+        norm1 = np.linalg.norm(arr1)
+        norm2 = np.linalg.norm(arr2)
+        
+        if norm1 > 0 and norm2 > 0:
+            return float(dot_product / (norm1 * norm2))
+        else:
+            return 0.0
+    else:
+        # Manual cosine similarity
+        dot_product = sum(a * b for a, b in zip(fp1_trunc, fp2_trunc))
+        norm1 = sum(a * a for a in fp1_trunc) ** 0.5
+        norm2 = sum(b * b for b in fp2_trunc) ** 0.5
+        
+        if norm1 > 0 and norm2 > 0:
+            return dot_product / (norm1 * norm2)
+        else:
+            return 0.0
+
+def load_fingerprint_cache(dirpath: Path) -> Dict:
+    """Load fingerprint cache from directory."""
+    data = load_json(dirpath / FINGERPRINTS_JSON, None)
+    return data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
+
+def save_fingerprint_cache(dirpath: Path, cache: Dict) -> None:
+    """Save fingerprint cache to directory."""
+    save_json(dirpath / FINGERPRINTS_JSON, cache)
 
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
@@ -1023,6 +1161,15 @@ class AudioBrowser(QMainWindow):
         show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
         self.show_all_sets: bool = bool(int(show_all_raw)) if isinstance(show_all_raw, (int, str)) else False
 
+        # Fingerprinting
+        self.fingerprint_reference_dir: Optional[Path] = None
+        ref_dir_str = self.settings.value(SETTINGS_KEY_FINGERPRINT_DIR, "")
+        if ref_dir_str and Path(ref_dir_str).exists():
+            self.fingerprint_reference_dir = Path(ref_dir_str)
+        
+        self.fingerprint_threshold: float = float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
+        self.fingerprint_cache: Dict[str, Dict] = {}  # loaded per directory
+
         # UI
         self._init_ui()
 
@@ -1037,6 +1184,7 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
         self._refresh_important_table()
+        self._update_fingerprint_ui()
 
         # Tree selection & timers
         self.tree.selectionModel().selectionChanged.connect(self._on_tree_selection_changed)
@@ -1102,6 +1250,7 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
         self._refresh_important_table()
+        self._update_fingerprint_ui()
         self.waveform.clear()
 
     def _names_json_path(self) -> Path: 
@@ -1428,6 +1577,57 @@ class AudioBrowser(QMainWindow):
 
         # Library tab
         self.lib_tab = QWidget(); lib_layout = QVBoxLayout(self.lib_tab)
+        
+        # Fingerprinting section
+        fp_group = QWidget()
+        fp_layout = QVBoxLayout(fp_group)
+        fp_layout.setContentsMargins(10, 10, 10, 10)
+        fp_group.setStyleSheet("QWidget { background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 5px; }")
+        
+        fp_title = QLabel("Audio Fingerprinting")
+        fp_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
+        fp_layout.addWidget(fp_title)
+        
+        # Reference folder selection
+        ref_row = QHBoxLayout()
+        ref_row.addWidget(QLabel("Reference folder:"))
+        self.fingerprint_ref_label = QLabel("(None selected)")
+        self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+        ref_row.addWidget(self.fingerprint_ref_label, 1)
+        self.select_ref_btn = QPushButton("Choose...")
+        self.select_ref_btn.clicked.connect(self._select_fingerprint_reference_folder)
+        ref_row.addWidget(self.select_ref_btn)
+        fp_layout.addLayout(ref_row)
+        
+        # Threshold and actions
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Match threshold:"))
+        self.threshold_spin = QSpinBox()
+        self.threshold_spin.setRange(50, 95)
+        self.threshold_spin.setValue(int(self.fingerprint_threshold * 100))
+        self.threshold_spin.setSuffix("%")
+        self.threshold_spin.valueChanged.connect(self._on_fingerprint_threshold_changed)
+        threshold_row.addWidget(self.threshold_spin)
+        threshold_row.addStretch(1)
+        
+        self.generate_fingerprints_btn = QPushButton("Generate Fingerprints for Current Folder")
+        self.generate_fingerprints_btn.clicked.connect(self._generate_fingerprints_for_folder)
+        threshold_row.addWidget(self.generate_fingerprints_btn)
+        
+        self.auto_label_btn = QPushButton("Auto-Label Files")
+        self.auto_label_btn.clicked.connect(self._auto_label_with_fingerprints)
+        self.auto_label_btn.setEnabled(False)  # Enabled when reference folder is set
+        threshold_row.addWidget(self.auto_label_btn)
+        
+        fp_layout.addLayout(threshold_row)
+        
+        # Status label
+        self.fingerprint_status = QLabel("")
+        self.fingerprint_status.setStyleSheet("color: #666; font-size: 11px;")
+        fp_layout.addWidget(self.fingerprint_status)
+        
+        lib_layout.addWidget(fp_group)
+        
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["File", "Created", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -2901,6 +3101,257 @@ class AudioBrowser(QMainWindow):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
             if self.auto_progress_cb.isChecked(): self._play_next_file()
+
+    # ----- Fingerprinting methods -----
+    def _update_fingerprint_ui(self):
+        """Update fingerprint UI elements."""
+        if self.fingerprint_reference_dir:
+            self.fingerprint_ref_label.setText(str(self.fingerprint_reference_dir))
+            self.fingerprint_ref_label.setStyleSheet("color: #333;")
+            self.auto_label_btn.setEnabled(True)
+        else:
+            self.fingerprint_ref_label.setText("(None selected)")
+            self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+            self.auto_label_btn.setEnabled(False)
+        
+        # Update status
+        current_dir = self._get_audio_file_dir()
+        cache = load_fingerprint_cache(current_dir)
+        num_fingerprints = len(cache.get("files", {}))
+        self.fingerprint_status.setText(f"Current folder has {num_fingerprints} cached fingerprints")
+
+    def _select_fingerprint_reference_folder(self):
+        """Let user select a folder containing reference audio files with fingerprints."""
+        dlg = QFileDialog(self, "Select Reference Folder for Fingerprints")
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        
+        if dlg.exec():
+            ref_path = Path(dlg.selectedFiles()[0])
+            self.fingerprint_reference_dir = ref_path
+            self.settings.setValue(SETTINGS_KEY_FINGERPRINT_DIR, str(ref_path))
+            self._update_fingerprint_ui()
+
+    def _on_fingerprint_threshold_changed(self, value):
+        """Handle threshold change."""
+        self.fingerprint_threshold = value / 100.0
+        self.settings.setValue(SETTINGS_KEY_FINGERPRINT_THRESHOLD, self.fingerprint_threshold)
+
+    def _generate_fingerprints_for_folder(self):
+        """Generate fingerprints for all audio files in the current folder."""
+        current_dir = self._get_audio_file_dir()
+        audio_files = self._list_audio_in_root()
+        
+        if not audio_files:
+            QMessageBox.information(self, "No Audio Files", "No audio files found in current folder.")
+            return
+        
+        cache = load_fingerprint_cache(current_dir)
+        
+        progress = QProgressDialog("Generating fingerprints...", "Cancel", 0, len(audio_files), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        generated = 0
+        for i, audio_file in enumerate(audio_files):
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Processing {audio_file.name}...")
+            progress.setValue(i)
+            QApplication.processEvents()
+            
+            # Check if fingerprint already exists and is up to date
+            size, mtime = file_signature(audio_file)
+            existing = cache["files"].get(audio_file.name)
+            if existing and existing.get("size") == size and existing.get("mtime") == mtime:
+                continue  # Skip if already cached and file unchanged
+            
+            try:
+                # Generate fingerprint
+                samples, sr, dur_ms = decode_audio_samples(audio_file)
+                fingerprint = compute_audio_fingerprint(samples, sr)
+                
+                # Store in cache
+                cache["files"][audio_file.name] = {
+                    "fingerprint": fingerprint,
+                    "size": size,
+                    "mtime": mtime,
+                    "duration_ms": dur_ms
+                }
+                generated += 1
+                
+            except Exception as e:
+                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+        
+        progress.setValue(len(audio_files))
+        save_fingerprint_cache(current_dir, cache)
+        
+        QMessageBox.information(self, "Fingerprints Generated", 
+                                f"Generated {generated} new fingerprints.\n"
+                                f"Total fingerprints in folder: {len(cache['files'])}")
+        self._update_fingerprint_ui()
+
+    def _auto_label_with_fingerprints(self):
+        """Auto-label files in current folder based on fingerprint matches with reference folder."""
+        if not self.fingerprint_reference_dir:
+            QMessageBox.warning(self, "No Reference Folder", "Please select a reference folder first.")
+            return
+        
+        current_dir = self._get_audio_file_dir()
+        if current_dir == self.fingerprint_reference_dir:
+            QMessageBox.information(self, "Same Folder", "Current folder is the same as reference folder.")
+            return
+        
+        # Load reference fingerprints
+        ref_cache = load_fingerprint_cache(self.fingerprint_reference_dir)
+        ref_fingerprints = ref_cache.get("files", {})
+        
+        if not ref_fingerprints:
+            reply = QMessageBox.question(self, "No Reference Fingerprints",
+                                         "No fingerprints found in reference folder.\n"
+                                         "Generate them now?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self._generate_fingerprints_for_reference_folder()
+                ref_cache = load_fingerprint_cache(self.fingerprint_reference_dir)
+                ref_fingerprints = ref_cache.get("files", {})
+                if not ref_fingerprints:
+                    return
+            else:
+                return
+        
+        # Load current folder fingerprints
+        current_cache = load_fingerprint_cache(current_dir)
+        current_fingerprints = current_cache.get("files", {})
+        
+        # Get files to process (unlabeled files)
+        audio_files = self._list_audio_in_root()
+        unlabeled_files = [f for f in audio_files if not self.provided_names.get(f.name, "").strip()]
+        
+        if not unlabeled_files:
+            QMessageBox.information(self, "No Unlabeled Files", "All files already have names.")
+            return
+        
+        # Process each unlabeled file
+        matches_found = 0
+        progress = QProgressDialog("Matching fingerprints...", "Cancel", 0, len(unlabeled_files), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        for i, audio_file in enumerate(unlabeled_files):
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Matching {audio_file.name}...")
+            progress.setValue(i)
+            QApplication.processEvents()
+            
+            # Get or generate fingerprint for current file
+            current_fp = current_fingerprints.get(audio_file.name, {}).get("fingerprint")
+            if not current_fp:
+                try:
+                    samples, sr, dur_ms = decode_audio_samples(audio_file)
+                    current_fp = compute_audio_fingerprint(samples, sr)
+                    # Update cache
+                    size, mtime = file_signature(audio_file)
+                    current_cache["files"][audio_file.name] = {
+                        "fingerprint": current_fp,
+                        "size": size,
+                        "mtime": mtime,
+                        "duration_ms": dur_ms
+                    }
+                except Exception as e:
+                    print(f"Error processing {audio_file.name}: {e}")
+                    continue
+            
+            # Find best match in reference folder
+            best_match = None
+            best_score = 0.0
+            
+            for ref_name, ref_data in ref_fingerprints.items():
+                ref_fp = ref_data.get("fingerprint")
+                if ref_fp:
+                    score = compare_fingerprints(current_fp, ref_fp)
+                    if score > best_score:
+                        best_score = score
+                        best_match = ref_name
+            
+            # Apply match if above threshold
+            if best_match and best_score >= self.fingerprint_threshold:
+                # Use reference filename (without extension) as provided name
+                ref_stem = Path(best_match).stem
+                self.provided_names[audio_file.name] = ref_stem
+                matches_found += 1
+        
+        progress.setValue(len(unlabeled_files))
+        
+        # Save results
+        if matches_found > 0:
+            save_fingerprint_cache(current_dir, current_cache)
+            self._save_names()
+            self._refresh_right_table()
+        
+        QMessageBox.information(self, "Auto-Labeling Complete",
+                                f"Found {matches_found} matches out of {len(unlabeled_files)} unlabeled files.\n"
+                                f"Threshold: {self.fingerprint_threshold:.0%}")
+
+    def _generate_fingerprints_for_reference_folder(self):
+        """Generate fingerprints for the reference folder."""
+        if not self.fingerprint_reference_dir:
+            return
+        
+        # Get audio files in reference folder
+        ref_audio_files = []
+        for ext in AUDIO_EXTS:
+            ref_audio_files.extend(self.fingerprint_reference_dir.glob(f"*{ext}"))
+        
+        if not ref_audio_files:
+            QMessageBox.information(self, "No Audio Files", 
+                                    f"No audio files found in reference folder:\n{self.fingerprint_reference_dir}")
+            return
+        
+        cache = load_fingerprint_cache(self.fingerprint_reference_dir)
+        
+        progress = QProgressDialog("Generating reference fingerprints...", "Cancel", 0, len(ref_audio_files), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        generated = 0
+        for i, audio_file in enumerate(ref_audio_files):
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Processing {audio_file.name}...")
+            progress.setValue(i)
+            QApplication.processEvents()
+            
+            # Check if fingerprint already exists and is up to date
+            size, mtime = file_signature(audio_file)
+            existing = cache["files"].get(audio_file.name)
+            if existing and existing.get("size") == size and existing.get("mtime") == mtime:
+                continue
+            
+            try:
+                samples, sr, dur_ms = decode_audio_samples(audio_file)
+                fingerprint = compute_audio_fingerprint(samples, sr)
+                
+                cache["files"][audio_file.name] = {
+                    "fingerprint": fingerprint,
+                    "size": size,
+                    "mtime": mtime,
+                    "duration_ms": dur_ms
+                }
+                generated += 1
+                
+            except Exception as e:
+                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+        
+        progress.setValue(len(ref_audio_files))
+        save_fingerprint_cache(self.fingerprint_reference_dir, cache)
+        
+        QMessageBox.information(self, "Reference Fingerprints Generated",
+                                f"Generated {generated} new fingerprints in reference folder.")
 
     def closeEvent(self, ev):
         self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
