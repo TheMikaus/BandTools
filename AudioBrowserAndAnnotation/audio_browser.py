@@ -1016,7 +1016,6 @@ class AudioBrowser(QMainWindow):
 
         # Toggles
         self._restore_toggles()
-        self.statusBar().showMessage(f"Root: {self.root_path}")
         self._update_undo_actions_enabled()
 
     # ----- Icon -----
@@ -1049,7 +1048,7 @@ class AudioBrowser(QMainWindow):
 
     def _save_root(self, p: Path):
         self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
-        self.statusBar().showMessage(f"Root: {self.root_path}")
+        self.path_label.setText(f"Current Directory: {self.root_path}")
         self.fs_model.setRootPath(str(self.root_path))
         self._programmatic_selection = True
         try:
@@ -1295,7 +1294,19 @@ class AudioBrowser(QMainWindow):
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
         wa = QWidgetAction(self); wa.setDefaultWidget(self.auto_switch_cb); tb.addAction(wa)
 
-        splitter = QSplitter(self); self.setCentralWidget(splitter)
+        # Create main widget to hold path label and splitter
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins for cleaner look
+        
+        # Add path label at the top
+        self.path_label = QLabel()
+        self.path_label.setStyleSheet("QLabel { background-color: #f0f0f0; padding: 8px; border-bottom: 1px solid #ccc; font-weight: bold; }")
+        self.path_label.setText(f"Current Directory: {self.root_path}")
+        main_layout.addWidget(self.path_label)
+
+        splitter = QSplitter(self); main_layout.addWidget(splitter)
 
         # Tree model
         self.fs_model = QFileSystemModel(self)
