@@ -27,3 +27,4 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
 - Trying to figure out how I want a cloud based storage would work
 - Once I've finished feature creep on the application I plan on trying to refactor it into to more than one file.
+- Maybe have CoPilot add unit test like things.
