@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time, io
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -81,6 +81,21 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtWidgets import QStyleFactory
 
+# ========== Google Drive API imports ==========
+HAVE_GDRIVE = _ensure_import("google.auth.transport.requests", "google-auth") and \
+              _ensure_import("google.oauth2.credentials", "google-auth") and \
+              _ensure_import("googleapiclient.discovery", "google-api-python-client")
+
+if HAVE_GDRIVE:
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.credentials
+        import googleapiclient.discovery
+        from google_auth_oauthlib.flow import Flow
+        import json as gdrive_json
+    except Exception:
+        HAVE_GDRIVE = False
+
 # ========== Constants ==========
 APP_ORG = "YourCompany"
 APP_NAME = "Audio Folder Player"
@@ -95,6 +110,9 @@ SETTINGS_KEY_SHOW_ALL = "show_all_sets"
 SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "show_all_folder_notes"
 SETTINGS_KEY_FINGERPRINT_DIR = "fingerprint_reference_dir"
 SETTINGS_KEY_FINGERPRINT_THRESHOLD = "fingerprint_match_threshold"
+SETTINGS_KEY_GDRIVE_TOKEN = "gdrive_oauth_token"
+SETTINGS_KEY_GDRIVE_FOLDER_ID = "gdrive_folder_id"
+SETTINGS_KEY_GDRIVE_SYNC_STARTUP = "gdrive_sync_on_startup"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
@@ -198,6 +216,172 @@ def hex_to_color(s: str) -> QColor:
         return QColor(s) if s else QColor("#00cc66")
     except Exception:
         return QColor("#00cc66")
+
+# ========== Google Drive Service ==========
+class GoogleDriveService:
+    """Handles Google Drive OAuth and file operations for annotation sync."""
+    
+    def __init__(self, settings: QSettings):
+        self.settings = settings
+        self.service = None
+        self.credentials = None
+        
+        # OAuth2 configuration - these would typically be from a client secrets file
+        # For production, store client_id and client_secret securely
+        self.client_config = {
+            "web": {
+                "client_id": "your-client-id.googleusercontent.com",
+                "client_secret": "your-client-secret",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["http://localhost:8080"]
+            }
+        }
+        self.scopes = ['https://www.googleapis.com/auth/drive.file']
+        
+    def _load_credentials(self) -> bool:
+        """Load saved OAuth credentials from settings."""
+        if not HAVE_GDRIVE:
+            return False
+            
+        token_data = self.settings.value(SETTINGS_KEY_GDRIVE_TOKEN, "")
+        if not token_data:
+            return False
+            
+        try:
+            token_dict = gdrive_json.loads(token_data)
+            self.credentials = google.oauth2.credentials.Credentials(**token_dict)
+            
+            if self.credentials.expired and self.credentials.refresh_token:
+                request = google.auth.transport.requests.Request()
+                self.credentials.refresh(request)
+                self._save_credentials()
+                
+            self.service = googleapiclient.discovery.build('drive', 'v3', credentials=self.credentials)
+            return True
+        except Exception:
+            return False
+    
+    def _save_credentials(self):
+        """Save OAuth credentials to settings."""
+        if self.credentials:
+            token_dict = {
+                'token': self.credentials.token,
+                'refresh_token': self.credentials.refresh_token,
+                'token_uri': self.credentials.token_uri,
+                'client_id': self.credentials.client_id,
+                'client_secret': self.credentials.client_secret,
+                'scopes': self.credentials.scopes
+            }
+            self.settings.setValue(SETTINGS_KEY_GDRIVE_TOKEN, gdrive_json.dumps(token_dict))
+    
+    def authenticate(self, parent_widget=None) -> bool:
+        """Start OAuth flow to authenticate with Google Drive."""
+        if not HAVE_GDRIVE:
+            if parent_widget:
+                QMessageBox.warning(parent_widget, "Missing Dependencies", 
+                                  "Google Drive API libraries are not installed.")
+            return False
+            
+        try:
+            # Note: This is a simplified OAuth flow - in production you'd want 
+            # proper client secrets management and a proper redirect URI
+            QMessageBox.information(parent_widget, "OAuth Setup Required", 
+                                  "To use Google Drive sync, you need to:\n"
+                                  "1. Create a Google Cloud project\n"
+                                  "2. Enable the Drive API\n"
+                                  "3. Create OAuth2 credentials\n"
+                                  "4. Configure the client_id and client_secret in the code\n\n"
+                                  "This is a demo implementation.")
+            return False
+            
+        except Exception as e:
+            if parent_widget:
+                QMessageBox.warning(parent_widget, "Authentication Failed", 
+                                  f"Failed to authenticate with Google Drive:\n{e}")
+            return False
+    
+    def clear_credentials(self):
+        """Remove stored OAuth credentials."""
+        self.settings.remove(SETTINGS_KEY_GDRIVE_TOKEN)
+        self.credentials = None
+        self.service = None
+    
+    def is_authenticated(self) -> bool:
+        """Check if we have valid credentials."""
+        return self._load_credentials()
+    
+    def get_folder_info(self, folder_id: str) -> Optional[dict]:
+        """Get information about a Google Drive folder."""
+        if not self.service:
+            return None
+            
+        try:
+            folder = self.service.files().get(fileId=folder_id, fields='id,name,parents').execute()
+            return folder
+        except Exception:
+            return None
+    
+    def list_files_in_folder(self, folder_id: str) -> List[dict]:
+        """List annotation files in the specified folder."""
+        if not self.service:
+            return []
+            
+        try:
+            query = f"'{folder_id}' in parents and name contains '.json' and trashed=false"
+            results = self.service.files().list(q=query, fields='files(id,name,modifiedTime,version)').execute()
+            return results.get('files', [])
+        except Exception:
+            return []
+    
+    def download_file(self, file_id: str) -> Optional[str]:
+        """Download file content from Google Drive."""
+        if not self.service:
+            return None
+            
+        try:
+            request = self.service.files().get_media(fileId=file_id)
+            content = request.execute()
+            return content.decode('utf-8')
+        except Exception:
+            return None
+    
+    def upload_file(self, folder_id: str, filename: str, content: str) -> Optional[str]:
+        """Upload file to Google Drive folder."""
+        if not self.service:
+            return None
+            
+        try:
+            # Check if file already exists
+            query = f"'{folder_id}' in parents and name='{filename}' and trashed=false"
+            existing = self.service.files().list(q=query).execute().get('files', [])
+            
+            file_metadata = {'name': filename, 'parents': [folder_id]}
+            media = googleapiclient.http.MediaIoBaseUpload(
+                io.BytesIO(content.encode('utf-8')), 
+                mimetype='application/json',
+                resumable=True
+            )
+            
+            if existing:
+                # Update existing file
+                file_id = existing[0]['id']
+                file = self.service.files().update(
+                    fileId=file_id,
+                    media_body=media,
+                    fields='id,version'
+                ).execute()
+            else:
+                # Create new file
+                file = self.service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields='id,version'
+                ).execute()
+            
+            return file.get('id')
+        except Exception:
+            return None
 
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
@@ -1201,6 +1385,11 @@ class AudioBrowser(QMainWindow):
         self.fingerprint_threshold: float = float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
         self.fingerprint_cache: Dict[str, Dict] = {}  # loaded per directory
 
+        # Google Drive integration
+        self.gdrive_service = GoogleDriveService(self.settings)
+        sync_startup_raw = self.settings.value(SETTINGS_KEY_GDRIVE_SYNC_STARTUP, 0)
+        self.gdrive_sync_on_startup: bool = bool(int(sync_startup_raw)) if isinstance(sync_startup_raw, (int, str)) else False
+
         # UI
         self._init_ui()
 
@@ -1216,6 +1405,10 @@ class AudioBrowser(QMainWindow):
         self._update_folder_notes_ui()
         self._refresh_important_table()
         self._update_fingerprint_ui()
+
+        # Google Drive sync on startup (if enabled)
+        if HAVE_GDRIVE:
+            QTimer.singleShot(1000, self._sync_on_startup_if_enabled)  # Delay to let UI settle
 
         # Tree selection & timers
         self.tree.selectionModel().selectionChanged.connect(self._on_tree_selection_changed)
@@ -1528,6 +1721,28 @@ class AudioBrowser(QMainWindow):
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
         wa = QWidgetAction(self); wa.setDefaultWidget(self.auto_switch_cb); tb.addAction(wa)
+
+        # Google Drive controls
+        tb.addSeparator()
+        if HAVE_GDRIVE:
+            self.gdrive_setup_action = QAction("Setup Google Drive…", self)
+            self.gdrive_setup_action.triggered.connect(self._setup_google_drive)
+            tb.addAction(self.gdrive_setup_action)
+            
+            self.gdrive_sync_action = QAction("Sync Annotations", self)
+            self.gdrive_sync_action.triggered.connect(self._sync_annotations_manual)
+            tb.addAction(self.gdrive_sync_action)
+            
+            self.gdrive_sync_startup_cb = QCheckBox("Sync on startup")
+            self.gdrive_sync_startup_cb.setChecked(self.gdrive_sync_on_startup)
+            self.gdrive_sync_startup_cb.stateChanged.connect(self._on_gdrive_sync_startup_toggled)
+            wa_gdrive = QWidgetAction(self)
+            wa_gdrive.setDefaultWidget(self.gdrive_sync_startup_cb)
+            tb.addAction(wa_gdrive)
+        else:
+            gdrive_disabled_action = QAction("Google Drive (Not Available)", self)
+            gdrive_disabled_action.setEnabled(False)
+            tb.addAction(gdrive_disabled_action)
 
         # Create main widget to hold path label and splitter
         main_widget = QWidget()
@@ -3760,6 +3975,208 @@ class AudioBrowser(QMainWindow):
         
         QMessageBox.information(self, "Reference Fingerprints Generated",
                                 f"Generated {generated} new fingerprints in reference folder.")
+
+    # ----- Google Drive Integration -----
+    def _on_gdrive_sync_startup_toggled(self, state):
+        """Handle sync on startup checkbox toggle."""
+        self.gdrive_sync_on_startup = bool(state)
+        self.settings.setValue(SETTINGS_KEY_GDRIVE_SYNC_STARTUP, int(self.gdrive_sync_on_startup))
+
+    def _setup_google_drive(self):
+        """Setup Google Drive OAuth and folder selection."""
+        # First check if already authenticated
+        if self.gdrive_service.is_authenticated():
+            # Show options to manage existing setup
+            reply = QMessageBox.question(self, "Google Drive Setup",
+                                       "Google Drive is already configured.\n\n"
+                                       "What would you like to do?",
+                                       QMessageBox.StandardButton.Ok | 
+                                       QMessageBox.StandardButton.Reset | 
+                                       QMessageBox.StandardButton.Cancel)
+            
+            if reply == QMessageBox.StandardButton.Reset:
+                self._clear_google_drive_setup()
+                return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                return
+            # If Ok, continue to folder selection
+        else:
+            # Need to authenticate first
+            if not self.gdrive_service.authenticate(self):
+                return
+
+        # Show folder selection dialog
+        self._select_google_drive_folder()
+
+    def _clear_google_drive_setup(self):
+        """Clear Google Drive OAuth credentials and settings."""
+        reply = QMessageBox.question(self, "Clear Google Drive Setup",
+                                   "This will remove your Google Drive authentication and folder settings.\n\n"
+                                   "Are you sure?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.gdrive_service.clear_credentials()
+            self.settings.remove(SETTINGS_KEY_GDRIVE_FOLDER_ID)
+            QMessageBox.information(self, "Setup Cleared", 
+                                  "Google Drive setup has been cleared.")
+
+    def _select_google_drive_folder(self):
+        """Show dialog to select/enter Google Drive folder."""
+        current_folder_id = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER_ID, "")
+        
+        folder_id, ok = QInputDialog.getText(self, "Google Drive Folder",
+                                           "Enter the Google Drive folder ID for annotations:\n\n"
+                                           "To find the folder ID:\n"
+                                           "1. Open the folder in Google Drive\n"
+                                           "2. Copy the ID from the URL (after /folders/)\n\n"
+                                           "Current folder ID:",
+                                           text=current_folder_id)
+        
+        if ok and folder_id.strip():
+            folder_id = folder_id.strip()
+            
+            # Validate folder access
+            if self.gdrive_service.is_authenticated():
+                folder_info = self.gdrive_service.get_folder_info(folder_id)
+                if folder_info:
+                    self.settings.setValue(SETTINGS_KEY_GDRIVE_FOLDER_ID, folder_id)
+                    QMessageBox.information(self, "Folder Set", 
+                                          f"Google Drive folder set to:\n{folder_info.get('name', 'Unknown')}")
+                else:
+                    QMessageBox.warning(self, "Invalid Folder", 
+                                      "Could not access the specified folder. Please check the folder ID and permissions.")
+            else:
+                # Save anyway if not authenticated yet
+                self.settings.setValue(SETTINGS_KEY_GDRIVE_FOLDER_ID, folder_id)
+                QMessageBox.information(self, "Folder Saved", 
+                                      "Folder ID saved. Please authenticate with Google Drive to validate access.")
+
+    def _sync_annotations_manual(self):
+        """Manually trigger annotation sync."""
+        if not self.gdrive_service.is_authenticated():
+            QMessageBox.warning(self, "Not Authenticated", 
+                              "Please setup Google Drive authentication first.")
+            return
+            
+        folder_id = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER_ID, "")
+        if not folder_id:
+            QMessageBox.warning(self, "No Folder Set", 
+                              "Please set a Google Drive folder first.")
+            return
+            
+        self._sync_annotations(folder_id)
+
+    def _sync_annotations(self, folder_id: str):
+        """Perform bi-directional sync of annotations with Google Drive."""
+        if not self.gdrive_service.is_authenticated():
+            return
+            
+        try:
+            # Get current annotation file path
+            notes_path = self._notes_json_path()
+            local_notes_exist = notes_path.exists()
+            
+            # Get remote files
+            remote_files = self.gdrive_service.list_files_in_folder(folder_id)
+            notes_filename = notes_path.name
+            
+            # Find matching remote file
+            remote_notes = None
+            for remote_file in remote_files:
+                if remote_file['name'] == notes_filename:
+                    remote_notes = remote_file
+                    break
+            
+            should_download = False
+            should_upload = False
+            
+            if not local_notes_exist and remote_notes:
+                # No local file, but remote exists - download
+                should_download = True
+            elif local_notes_exist and not remote_notes:
+                # Local file exists, no remote - upload
+                should_upload = True
+            elif local_notes_exist and remote_notes:
+                # Both exist - compare modification times
+                local_mtime = notes_path.stat().st_mtime
+                remote_mtime_str = remote_notes.get('modifiedTime', '')
+                
+                try:
+                    # Parse Google Drive timestamp
+                    from datetime import datetime
+                    remote_mtime = datetime.fromisoformat(remote_mtime_str.replace('Z', '+00:00')).timestamp()
+                    
+                    if remote_mtime > local_mtime:
+                        should_download = True
+                    elif local_mtime > remote_mtime:
+                        should_upload = True
+                    # If times are equal, no sync needed
+                except:
+                    # If can't parse time, ask user
+                    reply = QMessageBox.question(self, "Sync Conflict",
+                                               "Cannot determine which annotation file is newer.\n\n"
+                                               "Upload local file to Google Drive?",
+                                               QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    should_upload = reply == QMessageBox.StandardButton.Yes
+            
+            if should_download and remote_notes:
+                # Download from remote
+                content = self.gdrive_service.download_file(remote_notes['id'])
+                if content:
+                    with open(notes_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    # Reload annotations
+                    self._load_notes()
+                    self._refresh_set_combo()
+                    self._load_annotations_for_current()
+                    
+                    QMessageBox.information(self, "Sync Complete", 
+                                          "Annotations downloaded from Google Drive.")
+                else:
+                    QMessageBox.warning(self, "Download Failed", 
+                                      "Failed to download annotations from Google Drive.")
+                    
+            elif should_upload:
+                # Upload to remote
+                if local_notes_exist:
+                    with open(notes_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    file_id = self.gdrive_service.upload_file(folder_id, notes_filename, content)
+                    if file_id:
+                        QMessageBox.information(self, "Sync Complete", 
+                                              "Annotations uploaded to Google Drive.")
+                    else:
+                        QMessageBox.warning(self, "Upload Failed", 
+                                          "Failed to upload annotations to Google Drive.")
+            else:
+                QMessageBox.information(self, "Already Synced", 
+                                      "Annotations are already up to date.")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Sync Failed", 
+                              f"Failed to sync annotations:\n{e}")
+
+    def _sync_on_startup_if_enabled(self):
+        """Check if sync on startup is enabled and perform sync."""
+        if not self.gdrive_sync_on_startup:
+            return
+            
+        if not self.gdrive_service.is_authenticated():
+            return
+            
+        folder_id = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER_ID, "")
+        if not folder_id:
+            return
+            
+        # Perform sync silently in background
+        try:
+            self._sync_annotations(folder_id)
+        except Exception:
+            # Fail silently on startup sync
+            pass
 
     def closeEvent(self, ev):
         self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
