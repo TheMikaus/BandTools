@@ -2437,6 +2437,7 @@ class AudioBrowser(QMainWindow):
         fname = self.current_audio_file.name
         lst = self.notes_by_file.setdefault(fname, [])
         lst.sort(key=lambda e: int(e.get("ms", 0)))
+        self._sync_fields_into_current_set()  # Sync notes_by_file to annotation set before reload
         self._load_annotations_for_current()
         if keep_pair is not None:
             set_id, uid = keep_pair
@@ -2517,6 +2518,9 @@ class AudioBrowser(QMainWindow):
             entry["ms"] = int(new_ms)
             item.setData(Qt.ItemDataRole.UserRole, int(new_ms))
             lst.sort(key=lambda e: int(e.get("ms", 0)))
+            # Sync if we modified current set's notes_by_file
+            if set_id == self.current_set_id:
+                self._sync_fields_into_current_set()
             self._load_annotations_for_current()
             self._select_row_by_uid(uid, set_id=set_id)
             self._schedule_save_notes(); self._refresh_important_table()
@@ -2560,6 +2564,8 @@ class AudioBrowser(QMainWindow):
             self._push_undo({"type":"delete","set":set_id,"file":fname,"entries":[dict(entry)]})
             lst[:] = [e for e in lst if int(e.get("uid",-1)) != uid]
 
+        # Sync current set changes before reload
+        self._sync_fields_into_current_set()
         self._load_annotations_for_current()
         self._schedule_save_notes(); self._refresh_important_table()
         self.waveform.set_selected_uid(None, None)
@@ -3221,6 +3227,9 @@ class AudioBrowser(QMainWindow):
 
         def _reload_if_current():
             if self.current_audio_file and self.current_audio_file.name == fname:
+                # If we modified the current set's notes_by_file, sync to annotation set before reload
+                if set_id == self.current_set_id:
+                    self._sync_fields_into_current_set()
                 self._load_annotations_for_current()
                 self._update_waveform_annotations()
             self._save_notes(); self._refresh_important_table()
