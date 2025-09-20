@@ -1425,6 +1425,7 @@ class AudioBrowser(QMainWindow):
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
             self.notes_by_file = {}; self.file_general = {}
+        self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
@@ -1442,6 +1443,15 @@ class AudioBrowser(QMainWindow):
         for s in self.annotation_sets:
             if s.get("id") == self.current_set_id: return s
         return self.annotation_sets[0] if self.annotation_sets else None
+
+    def _update_general_label(self):
+        """Update the general_label to show the current annotation set name."""
+        aset = self._get_current_set()
+        if aset:
+            set_name = aset.get("name", "Set")
+            self.general_label.setText(f"Song overview ({set_name}):")
+        else:
+            self.general_label.setText("Song overview (no set):")
 
     def _ensure_uids(self):
         mx = self._uid_counter
@@ -1855,6 +1865,7 @@ class AudioBrowser(QMainWindow):
             return
         name = name.strip() or self._default_annotation_set_name()
         aset["name"] = name.strip()
+        self._update_general_label()
         self._refresh_set_combo(); self._save_notes(); self._refresh_important_table(); self._load_annotations_for_current()
 
     def _on_delete_set(self):
