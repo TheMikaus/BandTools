@@ -1957,11 +1957,11 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table(); return
         fi = self._fi(idx)
         if fi.isDir():
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
@@ -1971,7 +1971,7 @@ class AudioBrowser(QMainWindow):
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table()
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -2007,6 +2007,7 @@ class AudioBrowser(QMainWindow):
             self._load_notes()
             self._ensure_uids()
             self._refresh_set_combo()
+            self._refresh_right_table()  # Refresh library table to show files from the new directory
         
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
@@ -2040,7 +2041,7 @@ class AudioBrowser(QMainWindow):
 
     def _play_next_file(self):
         if not self.current_audio_file: return
-        files = [p for p in self._list_audio_in_root()]
+        files = [p for p in self._list_audio_in_current_dir()]
         if not files: return
         try:
             files.sort(key=lambda p: p.name.lower())
@@ -2097,8 +2098,14 @@ class AudioBrowser(QMainWindow):
         if not self.root_path.exists(): return []
         return [p for p in sorted(self.root_path.iterdir()) if p.is_file() and p.suffix.lower() in {".wav",".wave"}]
 
+    def _list_audio_in_current_dir(self) -> List[Path]:
+        """List audio files in the directory containing the currently selected song, or root if no song selected."""
+        target_dir = self.current_audio_file.parent if self.current_audio_file else self.root_path
+        if not target_dir.exists(): return []
+        return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+
     def _refresh_right_table(self):
-        files = self._list_audio_in_root()
+        files = self._list_audio_in_current_dir()
         self.table.blockSignals(True); self.table.setRowCount(len(files))
         for row, p in enumerate(files):
             item_file = QTableWidgetItem(p.name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
