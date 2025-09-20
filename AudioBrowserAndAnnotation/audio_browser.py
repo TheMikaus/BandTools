@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time, io
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time, io, webbrowser
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -226,18 +226,23 @@ class GoogleDriveService:
         self.service = None
         self.credentials = None
         
-        # OAuth2 configuration - these would typically be from a client secrets file
-        # For production, store client_id and client_secret securely
+        # OAuth2 configuration - for production use, create a client_secrets.json file
+        # or set these via environment variables for security
         self.client_config = {
             "web": {
-                "client_id": "your-client-id.googleusercontent.com",
-                "client_secret": "your-client-secret",
+                "client_id": os.getenv("GDRIVE_CLIENT_ID", ""),
+                "client_secret": os.getenv("GDRIVE_CLIENT_SECRET", ""),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "redirect_uris": ["http://localhost:8080"]
             }
         }
         self.scopes = ['https://www.googleapis.com/auth/drive.file']
+        
+    def _has_client_config(self) -> bool:
+        """Check if OAuth client configuration is available."""
+        return (bool(self.client_config["web"]["client_id"]) and 
+                bool(self.client_config["web"]["client_secret"]))
         
     def _load_credentials(self) -> bool:
         """Load saved OAuth credentials from settings."""
@@ -282,18 +287,60 @@ class GoogleDriveService:
                 QMessageBox.warning(parent_widget, "Missing Dependencies", 
                                   "Google Drive API libraries are not installed.")
             return False
+        
+        if not self._has_client_config():
+            if parent_widget:
+                QMessageBox.information(parent_widget, "OAuth Configuration Required", 
+                                      "To use Google Drive sync, you need to configure OAuth credentials:\n\n"
+                                      "1. Go to Google Cloud Console (console.cloud.google.com)\n"
+                                      "2. Create a new project or select existing one\n"
+                                      "3. Enable the Google Drive API\n"
+                                      "4. Create OAuth 2.0 credentials (Desktop application)\n"
+                                      "5. Set environment variables:\n"
+                                      "   GDRIVE_CLIENT_ID=your_client_id\n"
+                                      "   GDRIVE_CLIENT_SECRET=your_client_secret\n"
+                                      "6. Restart the application\n\n"
+                                      "This is a one-time setup process.")
+            return False
             
         try:
-            # Note: This is a simplified OAuth flow - in production you'd want 
-            # proper client secrets management and a proper redirect URI
-            QMessageBox.information(parent_widget, "OAuth Setup Required", 
-                                  "To use Google Drive sync, you need to:\n"
-                                  "1. Create a Google Cloud project\n"
-                                  "2. Enable the Drive API\n"
-                                  "3. Create OAuth2 credentials\n"
-                                  "4. Configure the client_id and client_secret in the code\n\n"
-                                  "This is a demo implementation.")
-            return False
+            # For a desktop application, we would typically use a more sophisticated OAuth flow
+            # This is a simplified version - in production you might want to use a local web server
+            # or redirect to a custom URI scheme
+            if parent_widget:
+                QMessageBox.information(parent_widget, "Authentication Required", 
+                                      "Google Drive authentication will open in your web browser.\n"
+                                      "Please complete the authorization and copy the authorization code.")
+            
+            flow = Flow.from_client_config(self.client_config, scopes=self.scopes)
+            flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'  # For installed apps
+            
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            
+            # Try to open URL in browser
+            import webbrowser
+            webbrowser.open(auth_url)
+            
+            # Get authorization code from user
+            from PyQt6.QtWidgets import QInputDialog
+            code, ok = QInputDialog.getText(parent_widget, "Authorization Code",
+                                          "Enter the authorization code from Google:")
+            
+            if not ok or not code.strip():
+                return False
+                
+            # Exchange code for credentials
+            flow.fetch_token(code=code.strip())
+            self.credentials = flow.credentials
+            self._save_credentials()
+            
+            # Create service
+            self.service = googleapiclient.discovery.build('drive', 'v3', credentials=self.credentials)
+            
+            if parent_widget:
+                QMessageBox.information(parent_widget, "Authentication Successful", 
+                                      "Successfully authenticated with Google Drive!")
+            return True
             
         except Exception as e:
             if parent_widget:
@@ -4072,10 +4119,24 @@ class AudioBrowser(QMainWindow):
         if not self.gdrive_service.is_authenticated():
             return
             
+        # Show progress dialog
+        progress = QProgressDialog("Syncing annotations with Google Drive...", "Cancel", 0, 4, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setValue(0)
+        progress.show()
+        QApplication.processEvents()
+        
         try:
             # Get current annotation file path
             notes_path = self._notes_json_path()
             local_notes_exist = notes_path.exists()
+            
+            progress.setLabelText("Checking remote files...")
+            progress.setValue(1)
+            QApplication.processEvents()
+            
+            if progress.wasCanceled():
+                return
             
             # Get remote files
             remote_files = self.gdrive_service.list_files_in_folder(folder_id)
@@ -4088,15 +4149,25 @@ class AudioBrowser(QMainWindow):
                     remote_notes = remote_file
                     break
             
+            progress.setLabelText("Comparing file versions...")
+            progress.setValue(2)
+            QApplication.processEvents()
+            
+            if progress.wasCanceled():
+                return
+            
             should_download = False
             should_upload = False
+            sync_action = "No sync needed"
             
             if not local_notes_exist and remote_notes:
                 # No local file, but remote exists - download
                 should_download = True
+                sync_action = "Downloading from Google Drive"
             elif local_notes_exist and not remote_notes:
                 # Local file exists, no remote - upload
                 should_upload = True
+                sync_action = "Uploading to Google Drive"
             elif local_notes_exist and remote_notes:
                 # Both exist - compare modification times
                 local_mtime = notes_path.stat().st_mtime
@@ -4107,18 +4178,32 @@ class AudioBrowser(QMainWindow):
                     from datetime import datetime
                     remote_mtime = datetime.fromisoformat(remote_mtime_str.replace('Z', '+00:00')).timestamp()
                     
-                    if remote_mtime > local_mtime:
+                    if remote_mtime > local_mtime + 1:  # 1 second tolerance
                         should_download = True
-                    elif local_mtime > remote_mtime:
+                        sync_action = "Downloading newer version from Google Drive"
+                    elif local_mtime > remote_mtime + 1:  # 1 second tolerance
                         should_upload = True
-                    # If times are equal, no sync needed
+                        sync_action = "Uploading newer version to Google Drive"
+                    else:
+                        sync_action = "Files are up to date"
                 except:
                     # If can't parse time, ask user
+                    progress.hide()
                     reply = QMessageBox.question(self, "Sync Conflict",
                                                "Cannot determine which annotation file is newer.\n\n"
                                                "Upload local file to Google Drive?",
                                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     should_upload = reply == QMessageBox.StandardButton.Yes
+                    if should_upload:
+                        sync_action = "Uploading to Google Drive (user choice)"
+                    progress.show()
+            
+            progress.setLabelText(sync_action)
+            progress.setValue(3)
+            QApplication.processEvents()
+            
+            if progress.wasCanceled():
+                return
             
             if should_download and remote_notes:
                 # Download from remote
@@ -4132,9 +4217,12 @@ class AudioBrowser(QMainWindow):
                     self._refresh_set_combo()
                     self._load_annotations_for_current()
                     
+                    progress.setValue(4)
+                    progress.hide()
                     QMessageBox.information(self, "Sync Complete", 
-                                          "Annotations downloaded from Google Drive.")
+                                          "Annotations downloaded from Google Drive and reloaded.")
                 else:
+                    progress.hide()
                     QMessageBox.warning(self, "Download Failed", 
                                       "Failed to download annotations from Google Drive.")
                     
@@ -4146,18 +4234,27 @@ class AudioBrowser(QMainWindow):
                     
                     file_id = self.gdrive_service.upload_file(folder_id, notes_filename, content)
                     if file_id:
+                        progress.setValue(4)
+                        progress.hide()
                         QMessageBox.information(self, "Sync Complete", 
                                               "Annotations uploaded to Google Drive.")
                     else:
+                        progress.hide()
                         QMessageBox.warning(self, "Upload Failed", 
                                           "Failed to upload annotations to Google Drive.")
             else:
+                progress.setValue(4)
+                progress.hide()
                 QMessageBox.information(self, "Already Synced", 
                                       "Annotations are already up to date.")
                 
         except Exception as e:
+            progress.hide()
             QMessageBox.warning(self, "Sync Failed", 
                               f"Failed to sync annotations:\n{e}")
+        finally:
+            if progress.isVisible():
+                progress.hide()
 
     def _sync_on_startup_if_enabled(self):
         """Check if sync on startup is enabled and perform sync."""
