@@ -92,6 +92,7 @@ SETTINGS_KEY_VOLUME = "volume_0_100"
 SETTINGS_KEY_UNDO_CAP = "undo_capacity"
 SETTINGS_KEY_CUR_SET = "current_set_id"
 SETTINGS_KEY_SHOW_ALL = "show_all_sets"
+SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "show_all_folder_notes"
 SETTINGS_KEY_FINGERPRINT_DIR = "fingerprint_reference_dir"
 SETTINGS_KEY_FINGERPRINT_THRESHOLD = "fingerprint_match_threshold"
 NAMES_JSON = ".provided_names.json"
@@ -1186,6 +1187,10 @@ class AudioBrowser(QMainWindow):
         # Show-all toggle
         show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
         self.show_all_sets: bool = bool(int(show_all_raw)) if isinstance(show_all_raw, (int, str)) else False
+        
+        # Show-all folder notes toggle
+        show_all_folder_notes_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, 0)
+        self.show_all_folder_notes: bool = bool(int(show_all_folder_notes_raw)) if isinstance(show_all_folder_notes_raw, (int, str)) else False
 
         # Fingerprinting
         self.fingerprint_reference_dir: Optional[Path] = None
@@ -1627,9 +1632,17 @@ class AudioBrowser(QMainWindow):
         # Folder Notes tab
         self.folder_tab = QWidget(); folder_layout = QVBoxLayout(self.folder_tab)
         self.folder_label = QLabel("Notes for current folder:")
+        
+        # Show all folder notes checkbox
+        self.show_all_folder_notes_cb = QCheckBox("Show all folder notes from visible sets")
+        self.show_all_folder_notes_cb.setChecked(self.show_all_folder_notes)
+        self.show_all_folder_notes_cb.stateChanged.connect(self._on_show_all_folder_notes_toggled)
+        
         self.folder_notes_edit = QPlainTextEdit(); self.folder_notes_edit.setPlaceholderText("Write notes about this folder/collection.")
         self.folder_notes_edit.textChanged.connect(self._on_folder_notes_changed)
-        folder_layout.addWidget(self.folder_label); folder_layout.addWidget(self.folder_notes_edit, 1)
+        folder_layout.addWidget(self.folder_label)
+        folder_layout.addWidget(self.show_all_folder_notes_cb)
+        folder_layout.addWidget(self.folder_notes_edit, 1)
 
         self.imp_label = QLabel("Important annotations in this folder:")
         folder_layout.addWidget(self.imp_label)
@@ -1950,6 +1963,11 @@ class AudioBrowser(QMainWindow):
         self.settings.setValue(SETTINGS_KEY_SHOW_ALL, int(self.show_all_sets))
         self._configure_annotation_table()
         self._load_annotations_for_current()
+
+    def _on_show_all_folder_notes_toggled(self, _state):
+        self.show_all_folder_notes = bool(self.show_all_folder_notes_cb.isChecked())
+        self.settings.setValue(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, int(self.show_all_folder_notes))
+        self._update_folder_notes_ui()
 
     # ----- Tab order -----
     def _tab_index_by_name(self, name: str) -> int:
@@ -2869,23 +2887,65 @@ class AudioBrowser(QMainWindow):
         self._schedule_save_notes()
 
     def _on_folder_notes_changed(self):
-        aset = self._get_current_set()
-        if aset:
-            aset["folder_notes"] = self.folder_notes_edit.toPlainText()
-        self._schedule_save_notes()
+        # Only save changes when not in show-all mode (when it's editable)
+        if not self.show_all_folder_notes:
+            aset = self._get_current_set()
+            if aset:
+                aset["folder_notes"] = self.folder_notes_edit.toPlainText()
+            self._schedule_save_notes()
 
     def _schedule_save_notes(self):
         self._general_save_timer.start(600); self._folder_save_timer.start(600)
 
     def _update_folder_notes_ui(self):
+        self.folder_notes_edit.blockSignals(True)
         aset = self._get_current_set()
         set_name = aset.get("name", "Unknown Set") if aset else "No Set"
         # Show the current audio file's directory name, or root_path if no file selected
         current_dir = self._get_audio_file_dir()
         self.folder_label.setText(f"Notes for current folder ({set_name}): {current_dir.name}")
-        self.folder_notes_edit.blockSignals(True)
-        folder_notes = aset.get("folder_notes", "") if aset else ""
-        self.folder_notes_edit.setPlainText(folder_notes or "")
+        
+        if self.show_all_folder_notes:
+            # Show all folder notes from visible sets
+            self.folder_label.setText(f"Notes for current folder: {self.root_path.name} (All visible sets)")
+            
+            # Collect folder notes from all visible sets
+            notes_by_set = []
+            for s in self.annotation_sets:
+                if not bool(s.get("visible", True)): 
+                    continue
+                folder_notes = (s.get("folder_notes", "") or "").strip()
+                if folder_notes:
+                    set_name = s.get("name", "Unknown Set")
+                    notes_by_set.append((set_name, folder_notes))
+            
+            # Format the combined notes
+            if notes_by_set:
+                combined_text = ""
+                for i, (set_name, notes) in enumerate(notes_by_set):
+                    if i > 0:
+                        combined_text += "\n\n"
+                    combined_text += f"=== {set_name} ===\n{notes}"
+                self.folder_notes_edit.setPlainText(combined_text)
+            else:
+                self.folder_notes_edit.setPlainText("(No folder notes in visible sets)")
+            
+            # Make read-only when showing all sets
+            self.folder_notes_edit.setReadOnly(True)
+            self.folder_notes_edit.setStyleSheet("QPlainTextEdit { background-color: #f8f8f8; }")
+            
+        else:
+            # Show only current set folder notes (original behavior)
+            aset = self._get_current_set()
+            set_name = aset.get("name", "Unknown Set") if aset else "No Set"
+            self.folder_label.setText(f"Notes for current folder ({set_name}): {self.root_path.name}")
+            folder_notes = aset.get("folder_notes", "") if aset else ""
+            self.folder_notes_edit.setPlainText(folder_notes or "")
+            
+            # Make editable when showing single set
+            self.folder_notes_edit.setReadOnly(False)
+            self.folder_notes_edit.setStyleSheet("")
+        
         self.folder_notes_edit.blockSignals(False)
 
     # ----- Waveform annotations payload -----
