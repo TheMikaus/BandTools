@@ -39,8 +39,15 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
         except ImportError:
             return False
 
-if not _ensure_import("PyQt6", "PyQt6"):
-    raise RuntimeError("PyQt6 is required.")
+try:
+    import PyQt6
+    PYQT6_AVAILABLE = True
+except ImportError:
+    PYQT6_AVAILABLE = False
+
+if not PYQT6_AVAILABLE:
+    if not _ensure_import("PyQt6", "PyQt6"):
+        raise RuntimeError("PyQt6 is required.")
 
 HAVE_NUMPY = _ensure_import("numpy", "numpy")
 HAVE_PYDUB = _ensure_import("pydub", "pydub")
@@ -1746,7 +1753,7 @@ class AudioBrowser(QMainWindow):
 
         ann_layout.addLayout(set_row)
 
-        # Provided name editor
+        # Provided name editor and best take checkbox
         pn_row = QHBoxLayout()
         pn_row.addWidget(QLabel("Provided Name:"))
         self.provided_name_edit = QLineEdit()
@@ -1755,6 +1762,14 @@ class AudioBrowser(QMainWindow):
         self.provided_name_edit.returnPressed.connect(self._on_provided_name_edited)
         self.provided_name_edit.editingFinished.connect(self._on_provided_name_edited)
         pn_row.addWidget(self.provided_name_edit, 1)
+        
+        # Best Take checkbox in annotation tab
+        self.best_take_cb = QCheckBox("Best Take")
+        self.best_take_cb.setToolTip("Mark this song as the best take")
+        self.best_take_cb.setEnabled(False)
+        self.best_take_cb.stateChanged.connect(self._on_best_take_changed)
+        pn_row.addWidget(self.best_take_cb)
+        
         ann_layout.addLayout(pn_row)
 
         self.waveform = WaveformView(); self.waveform.bind_player(self.player)
@@ -2067,11 +2082,11 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
         fi = self._fi(idx)
         if fi.isDir():
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
@@ -2081,7 +2096,7 @@ class AudioBrowser(QMainWindow):
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_right_table()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -2118,9 +2133,11 @@ class AudioBrowser(QMainWindow):
             self._ensure_uids()
             self._refresh_set_combo()
             self._refresh_right_table()  # Refresh library table to show files from the new directory
+            self._update_folder_notes_ui()  # Update folder notes UI for the new directory
         
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
+        self._refresh_best_take_field()
         try: self.waveform.set_audio_file(path)
         except Exception: self.waveform.clear()
         self._update_waveform_annotations()
@@ -2180,6 +2197,7 @@ class AudioBrowser(QMainWindow):
         self.waveform.set_selected_uid(None, None)
         self._update_waveform_annotations()
         self._refresh_provided_name_field()
+        self._refresh_best_take_field()
 
     def _toggle_play_pause(self):
         st = self.player.playbackState()
@@ -2449,6 +2467,7 @@ class AudioBrowser(QMainWindow):
         self._refresh_important_table()
         self._update_waveform_annotations()
         self._refresh_provided_name_field()
+        self._refresh_best_take_field()
 
     def _append_annotation_row(self, entry: Dict, *, set_id: Optional[str]=None, set_name: Optional[str]=None, editable: bool=True):
         ms = int(entry.get("ms", 0))
@@ -2830,6 +2849,16 @@ class AudioBrowser(QMainWindow):
         finally:
             self.table.blockSignals(False)
 
+    # Best take checkbox on Annotations tab
+    def _on_best_take_changed(self, state):
+        if not self.current_audio_file:
+            return
+        fname = self.current_audio_file.name
+        is_checked = state == Qt.CheckState.Checked.value
+        self.file_best_takes[fname] = is_checked
+        self._save_notes()  # Save the annotation data including best_take
+        self._refresh_right_table()  # Update the library table to show the green highlighting
+
     def _refresh_provided_name_field(self):
         if not self.current_audio_file:
             self.provided_name_edit.setText("")
@@ -2838,6 +2867,17 @@ class AudioBrowser(QMainWindow):
         fname = self.current_audio_file.name
         self.provided_name_edit.setEnabled(True)
         self.provided_name_edit.setText(self.provided_names.get(fname, ""))
+
+    def _refresh_best_take_field(self):
+        if not self.current_audio_file:
+            self.best_take_cb.setChecked(False)
+            self.best_take_cb.setEnabled(False)
+            return
+        fname = self.current_audio_file.name
+        self.best_take_cb.setEnabled(True)
+        self.best_take_cb.blockSignals(True)  # Prevent triggering the change handler
+        self.best_take_cb.setChecked(self.file_best_takes.get(fname, False))
+        self.best_take_cb.blockSignals(False)
 
     # Autosave handlers
     def _on_general_changed(self):
@@ -2859,6 +2899,11 @@ class AudioBrowser(QMainWindow):
 
     def _update_folder_notes_ui(self):
         self.folder_notes_edit.blockSignals(True)
+        aset = self._get_current_set()
+        set_name = aset.get("name", "Unknown Set") if aset else "No Set"
+        # Show the current audio file's directory name, or root_path if no file selected
+        current_dir = self._get_audio_file_dir()
+        self.folder_label.setText(f"Notes for current folder ({set_name}): {current_dir.name}")
         
         if self.show_all_folder_notes:
             # Show all folder notes from visible sets
