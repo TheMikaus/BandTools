@@ -1065,6 +1065,7 @@ class AudioBrowser(QMainWindow):
                         if not isinstance(meta, dict): continue
                         files[str(fname)] = {
                             "general": str(meta.get("general", "") or ""),
+                            "best_take": bool(meta.get("best_take", False)),
                             "notes": [{
                                 "uid": int(n.get("uid", 0) or 0),
                                 "ms": int(n.get("ms", 0)),
@@ -1090,6 +1091,7 @@ class AudioBrowser(QMainWindow):
                             if not isinstance(meta, dict): continue
                             files[str(fname)] = {
                                 "general": str(meta.get("general", "") or ""),
+                                "best_take": bool(meta.get("best_take", False)),
                                 "notes": [{
                                     "uid": int(n.get("uid", 0) or 0),
                                     "ms": int(n.get("ms", 0)),
@@ -1170,6 +1172,8 @@ class AudioBrowser(QMainWindow):
         # For current set fields
         self.notes_by_file: Dict[str, List[Dict]] = {}
         self.file_general: Dict[str, str] = {}
+        self.file_best_takes: Dict[str, bool] = {}  # Track best takes per file in current set
+        self.folder_notes: str = ""
 
         # Show-all toggle
         show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
@@ -1317,7 +1321,8 @@ class AudioBrowser(QMainWindow):
 
     def _load_notes(self):
         self.annotation_sets = []
-        self.notes_by_file = {}; self.file_general = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.folder_notes = ""
+
         
         # Check for migration from legacy file
         user_notes_path = self._notes_json_path()
@@ -1355,6 +1360,7 @@ class AudioBrowser(QMainWindow):
                         if not isinstance(meta, dict): continue
                         files[str(fname)] = {
                             "general": str(meta.get("general", "") or ""),
+                            "best_take": bool(meta.get("best_take", False)),
                             "notes": [{
                                 "uid": int(n.get("uid", 0) or 0),
                                 "ms": int(n.get("ms", 0)),
@@ -1421,23 +1427,25 @@ class AudioBrowser(QMainWindow):
 
     def _load_current_set_into_fields(self):
         aset = self._get_current_set()
-        self.notes_by_file = {}; self.file_general = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}
         if aset:
             for fname, meta in aset.get("files", {}).items():
                 self.file_general[fname] = str(meta.get("general", "") or "")
+                self.file_best_takes[fname] = bool(meta.get("best_take", False))
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
-            self.notes_by_file = {}; self.file_general = {}
+            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}
         self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
         if not aset: return
         files = {}
-        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys())
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys())
         for fname in all_files:
             files[fname] = {
                 "general": self.file_general.get(fname, ""),
+                "best_take": self.file_best_takes.get(fname, False),
                 "notes": self.notes_by_file.get(fname, []),
             }
         aset["files"] = files
@@ -1666,10 +1674,11 @@ class AudioBrowser(QMainWindow):
         
         lib_layout.addWidget(fp_group)
         
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["File", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["File", "Best Take", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
         self.table.itemChanged.connect(self._on_table_item_changed)
@@ -2182,15 +2191,47 @@ class AudioBrowser(QMainWindow):
         self.table.blockSignals(True); self.table.setRowCount(len(files))
         for row, p in enumerate(files):
             item_file = QTableWidgetItem(p.name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
+            
+            # Best Take checkbox
+            item_best_take = QTableWidgetItem()
+            item_best_take.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsUserCheckable)
+            is_best_take = self.file_best_takes.get(p.name, False)
+            item_best_take.setCheckState(Qt.CheckState.Checked if is_best_take else Qt.CheckState.Unchecked)
+            
             item_name = QTableWidgetItem(self.provided_names.get(p.name, "")); item_name.setToolTip("Double-click to edit your Provided Name")
-            self.table.setItem(row, 0, item_file); self.table.setItem(row, 1, item_name)
+            
+            # Set green background for best takes
+            if is_best_take:
+                green_color = QColor(200, 255, 200)  # Light green
+                item_file.setBackground(green_color)
+                item_best_take.setBackground(green_color)
+                item_name.setBackground(green_color)
+            
+            self.table.setItem(row, 0, item_file)
+            self.table.setItem(row, 1, item_best_take)
+            self.table.setItem(row, 2, item_name)
         self.table.blockSignals(False)
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
-        if item.column() != 1: return
         row = item.row(); file_item = self.table.item(row, 0)
         if not file_item: return
-        self.provided_names[file_item.text()] = sanitize(item.text()); self._save_names()
+        filename = file_item.text()
+        
+        if item.column() == 1:  # Best Take checkbox
+            is_checked = item.checkState() == Qt.CheckState.Checked
+            self.file_best_takes[filename] = is_checked
+            self._save_notes()  # Save the annotation data including best_take
+            
+            # Update background colors for the entire row
+            green_color = QColor(200, 255, 200) if is_checked else QColor(255, 255, 255)
+            for col in range(self.table.columnCount()):
+                cell_item = self.table.item(row, col)
+                if cell_item:
+                    cell_item.setBackground(green_color)
+                    
+        elif item.column() == 2:  # Provided Name (editable)
+            self.provided_names[filename] = sanitize(item.text())
+            self._save_names()
 
     def _stop_if_no_file_selected(self):
         indexes = self.tree.selectionModel().selectedIndexes()
