@@ -786,6 +786,21 @@ class WaveformView(QWidget):
                     painter.setPen(border_pen)
                     painter.drawLine(int(left_x), 0, int(left_x), self.height())
                     painter.drawLine(int(right_x), 0, int(right_x), self.height())
+        elif self._clip_start_ms is not None or self._clip_end_ms is not None:
+            # Draw single yellow line when only start or end is specified
+            border_pen = QPen(QColor("#ffff00"))
+            border_pen.setWidth(2)
+            painter.setPen(border_pen)
+            
+            if self._clip_start_ms is not None:
+                start_x = self._ms_to_x(self._clip_start_ms)
+                if 0 <= start_x <= self.width():  # Only draw if visible
+                    painter.drawLine(int(start_x), 0, int(start_x), self.height())
+            
+            if self._clip_end_ms is not None:
+                end_x = self._ms_to_x(self._clip_end_ms)
+                if 0 <= end_x <= self.width():  # Only draw if visible
+                    painter.drawLine(int(end_x), 0, int(end_x), self.height())
 
         # Playhead
         dur = self._effective_duration()
