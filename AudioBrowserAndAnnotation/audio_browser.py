@@ -2019,13 +2019,6 @@ class AudioBrowser(QMainWindow):
             path = Path(fi.absoluteFilePath()); parent = path.parent
             if parent.resolve() != self.root_path.resolve():
                 self._save_root(parent)
-                src_idx = self.fs_model.index(str(path))
-                if src_idx.isValid():
-                    self._programmatic_selection = True
-                    try:
-                        self.tree.setCurrentIndex(self.file_proxy.mapFromSource(src_idx))
-                    finally:
-                        QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
             if not (self.current_audio_file and self.current_audio_file.resolve() == path.resolve()):
                 self._play_file(path)
             self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
@@ -2096,13 +2089,52 @@ class AudioBrowser(QMainWindow):
         try: self.waveform.set_audio_file(path)
         except Exception: self.waveform.clear()
         self._update_waveform_annotations()
+        
+        # Ensure the file is highlighted in the tree view (important for auto-progression)
+        self._highlight_file_in_tree(path)
+
+    def _highlight_file_in_tree(self, path: Path):
+        """Highlight the specified file in the tree view, ensuring it's visible and selected.
+        
+        This is particularly important for auto-progression so users can see which file
+        is currently playing when songs advance automatically.
+        """
         try:
+            # Get the source index for the file from the filesystem model
             src_idx = self.fs_model.index(str(path))
-            if src_idx.isValid():
-                self._programmatic_selection = True
-                try: self.tree.setCurrentIndex(self.file_proxy.mapFromSource(src_idx))
-                finally: QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
-        except Exception: pass
+            if not src_idx.isValid():
+                # File not found in filesystem model, this could happen if model is not updated
+                print(f"Warning: Could not find {path} in filesystem model")
+                return
+                
+            # Map from source model to proxy model
+            proxy_idx = self.file_proxy.mapFromSource(src_idx)
+            if not proxy_idx.isValid():
+                print(f"Warning: Could not map {path} to proxy model")
+                return
+            
+            # Set the programmatic selection flag to prevent triggering selection change events
+            self._programmatic_selection = True
+            
+            try:
+                # Ensure the parent directory is expanded so the file is visible
+                parent_idx = proxy_idx.parent()
+                if parent_idx.isValid():
+                    self.tree.setExpanded(parent_idx, True)
+                
+                # Select and highlight the file in the tree view
+                self.tree.setCurrentIndex(proxy_idx)
+                
+                # Ensure the selected item is visible (scroll to it if necessary)
+                self.tree.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.EnsureVisible)
+                
+            finally:
+                # Reset the programmatic selection flag after a short delay
+                QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+                
+        except Exception as e:
+            # Log the error but don't crash - tree highlighting is not critical for playback
+            print(f"Warning: Failed to highlight {path} in tree view: {e}")
 
     def _stop_playback(self):
         if self.player.playbackState() != QMediaPlayer.PlaybackState.StoppedState: self.player.stop()
@@ -2122,17 +2154,37 @@ class AudioBrowser(QMainWindow):
             self.player.play(); self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _play_next_file(self):
-        if not self.current_audio_file: return
+        """Auto-advance to the next audio file in the current directory.
+        
+        This method is called when auto-progression is enabled and a song finishes playing.
+        It will find the next file alphabetically and play it, ensuring the file is highlighted
+        in the tree view so users can see what is currently selected.
+        """
+        if not self.current_audio_file: 
+            return
+            
         files = [p for p in self._list_audio_in_current_dir()]
-        if not files: return
+        if not files: 
+            return
+            
         try:
+            # Sort files alphabetically for consistent ordering
             files.sort(key=lambda p: p.name.lower())
             cur = self.current_audio_file.resolve()
+            
+            # Find the current file and advance to the next one
             for i, p in enumerate(files):
                 if p.resolve() == cur:
-                    if i + 1 < len(files): self._play_file(files[i+1])
+                    if i + 1 < len(files):
+                        next_file = files[i + 1]
+                        print(f"Auto-progressing from '{cur.name}' to '{next_file.name}'")
+                        self._play_file(next_file)
+                    else:
+                        print(f"Auto-progression: reached end of playlist (last file: '{cur.name}')")
                     break
-        except Exception: pass
+        except Exception as e:
+            print(f"Error during auto-progression: {e}")
+            # Don't let auto-progression errors crash the application
 
     # ----- Slider/time -----
     _user_is_scrubbing = False
