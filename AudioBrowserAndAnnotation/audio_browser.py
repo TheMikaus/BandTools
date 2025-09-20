@@ -2456,9 +2456,30 @@ class AudioBrowser(QMainWindow):
     def _on_annotation_selection_changed(self, *_):
         ident = self._selected_row_identity()
         if not ident:
-            self.waveform.set_selected_uid(None, None); return
+            self.waveform.set_selected_uid(None, None)
+            return
         set_id, uid = ident
         self.waveform.set_selected_uid(set_id, uid)
+        
+        # Issue #23: If selected annotation is a clip, highlight it in waveform and populate textboxes
+        if self.current_audio_file:
+            fname = self.current_audio_file.name
+            aset, lst = self._get_set_and_list(set_id, fname)
+            if lst:
+                entry = self._find_entry_in_list(lst, uid)
+                if entry and entry.get("end_ms") is not None:
+                    # This is a clip annotation with start and end times
+                    start_ms = entry.get("ms")
+                    end_ms = entry.get("end_ms")
+                    self.clip_sel_start_ms = start_ms
+                    self.clip_sel_end_ms = end_ms
+                    self._update_clip_edits_from_selection()
+                else:
+                    # This is a point annotation - clear any existing clip selection
+                    if self.clip_sel_start_ms is not None or self.clip_sel_end_ms is not None:
+                        self.clip_sel_start_ms = None
+                        self.clip_sel_end_ms = None
+                        self._update_clip_edits_from_selection()
 
     # Waveform interactions
     def _on_waveform_seek_requested(self, ms: int):
