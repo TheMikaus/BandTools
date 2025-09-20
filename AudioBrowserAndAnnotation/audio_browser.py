@@ -1547,6 +1547,21 @@ class AudioBrowser(QMainWindow):
         self.tree.setColumnHidden(3, True)  # hide Date Modified column
         self.tree.setColumnWidth(0, 360)
         self.tree.setAlternatingRowColors(True)
+        # Enhanced selection styling for better visibility
+        self.tree.setStyleSheet("""
+            QTreeView::item:selected {
+                background-color: #1e3a8a;
+                color: white;
+            }
+            QTreeView::item:selected:active {
+                background-color: #1d4ed8;
+                color: white;
+            }
+            QTreeView::item:selected:!active {
+                background-color: #2563eb;
+                color: white;
+            }
+        """)
         self.tree.setSortingEnabled(True); self.tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.doubleClicked.connect(self._on_tree_double_clicked)
