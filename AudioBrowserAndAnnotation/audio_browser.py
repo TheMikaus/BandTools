@@ -39,8 +39,15 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
         except ImportError:
             return False
 
-if not _ensure_import("PyQt6", "PyQt6"):
-    raise RuntimeError("PyQt6 is required.")
+try:
+    import PyQt6
+    PYQT6_AVAILABLE = True
+except ImportError:
+    PYQT6_AVAILABLE = False
+
+if not PYQT6_AVAILABLE:
+    if not _ensure_import("PyQt6", "PyQt6"):
+        raise RuntimeError("PyQt6 is required.")
 
 HAVE_NUMPY = _ensure_import("numpy", "numpy")
 HAVE_PYDUB = _ensure_import("pydub", "pydub")
