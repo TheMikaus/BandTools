@@ -64,7 +64,7 @@ try:
     from PyQt6.QtWidgets import QFileSystemModel
 except Exception:
     from PyQt6.QtGui import QFileSystemModel  # type: ignore
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QMediaDevices
 from PyQt6.QtWidgets import (
     QApplication, QHBoxLayout, QHeaderView, QMainWindow, QMessageBox,
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
@@ -1558,9 +1558,17 @@ class AudioBrowser(QMainWindow):
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         player_bar.addWidget(self.volume_slider)
 
+        player_bar.addWidget(QLabel("Output"))
+        self.output_device_combo = QComboBox(); self.output_device_combo.setFixedWidth(200)
+        self.output_device_combo.currentIndexChanged.connect(self._on_output_device_changed)
+        player_bar.addWidget(self.output_device_combo)
+
         self.auto_progress_cb = QCheckBox("Auto-progress"); player_bar.addWidget(self.auto_progress_cb)
 
         right_layout.addLayout(player_bar)
+
+        # Initialize output devices
+        self._refresh_output_devices()
 
         self.now_playing = QLabel("No selection"); self.now_playing.setStyleSheet("color: #666;")
         right_layout.addWidget(self.now_playing)
@@ -1922,6 +1930,56 @@ class AudioBrowser(QMainWindow):
     def _on_volume_changed(self, val: int):
         self.audio_output.setVolume(max(0.0, min(1.0, val / 100.0)))
         self.settings.setValue(SETTINGS_KEY_VOLUME, int(val))
+
+    # ----- Audio Output Device -----
+    def _refresh_output_devices(self):
+        """Populate the output device combo box with available audio devices."""
+        current_device = self.audio_output.device()
+        current_description = current_device.description() if current_device else ""
+        
+        self.output_device_combo.clear()
+        devices = QMediaDevices.audioOutputs()
+        
+        selected_index = 0
+        for i, device in enumerate(devices):
+            self.output_device_combo.addItem(device.description(), device)
+            if device.description() == current_description:
+                selected_index = i
+        
+        if not devices:
+            self.output_device_combo.addItem("No devices available")
+            self.output_device_combo.setEnabled(False)
+        else:
+            self.output_device_combo.setEnabled(True)
+            self.output_device_combo.setCurrentIndex(selected_index)
+
+    def _on_output_device_changed(self, index: int):
+        """Handle output device selection change."""
+        if index < 0 or not self.output_device_combo.isEnabled():
+            return
+            
+        device = self.output_device_combo.itemData(index)
+        if device is None:
+            return
+            
+        # Store current playback state
+        was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        current_position = self.player.position()
+        current_volume = self.audio_output.volume()
+        
+        # Create new audio output with selected device
+        self.audio_output = QAudioOutput(device)
+        self.audio_output.setVolume(current_volume)
+        self.player.setAudioOutput(self.audio_output)
+        
+        # Resume playback if it was playing
+        if was_playing and current_position > 0:
+            self.player.setPosition(current_position)
+            self.player.play()
+            self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+        elif was_playing:
+            self.player.play()
+            self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     # ----- Tree helpers -----
     def _fi(self, proxy_idx: QModelIndex):
