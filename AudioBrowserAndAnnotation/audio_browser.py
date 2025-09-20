@@ -1124,6 +1124,7 @@ class AudioBrowser(QMainWindow):
             "name": s.get("name", "Set"),
             "color": s.get("color", "#00cc66"),
             "visible": bool(s.get("visible", True)),
+            "folder_notes": s.get("folder_notes", ""),
             "files": s.get("files", {}),
         }
 
