@@ -4,6 +4,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 # What are the features of the tool? (several features need to be retested)
 - Can play, stop, scrub through a wave or mp3 file.
 - Can give the file a song name/meta name
+- Can mark songs as "Best Take" from both the Library tab and Annotations tab
 - Can bulk rename the folder based off of the song name/meta names provided
 - Can leave a comment at a specific timestamp in the file (an annotation)
 - Can mark that annotation as "important"
@@ -22,6 +23,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - In the library tab click on the file name to start playing, put the name of the song in the provided name column. Do this for all songs.
 - Click "Batch Rename" to convert the files to the proper names.
 - Listen to each song, leaving annotations, and selecting clips of parts of the song that really stand out.
+- Mark your favorite recordings as "Best Take" either from the Library tab checkbox or from the Annotations tab checkbox while listening.
 
 # Note
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
