@@ -39,8 +39,15 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
         except ImportError:
             return False
 
-if not _ensure_import("PyQt6", "PyQt6"):
-    raise RuntimeError("PyQt6 is required.")
+try:
+    import PyQt6
+    PYQT6_AVAILABLE = True
+except ImportError:
+    PYQT6_AVAILABLE = False
+
+if not PYQT6_AVAILABLE:
+    if not _ensure_import("PyQt6", "PyQt6"):
+        raise RuntimeError("PyQt6 is required.")
 
 HAVE_NUMPY = _ensure_import("numpy", "numpy")
 HAVE_PYDUB = _ensure_import("pydub", "pydub")
@@ -2100,6 +2107,7 @@ class AudioBrowser(QMainWindow):
             self._ensure_uids()
             self._refresh_set_combo()
             self._refresh_right_table()  # Refresh library table to show files from the new directory
+            self._update_folder_notes_ui()  # Update folder notes UI for the new directory
         
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
@@ -2840,7 +2848,9 @@ class AudioBrowser(QMainWindow):
     def _update_folder_notes_ui(self):
         aset = self._get_current_set()
         set_name = aset.get("name", "Unknown Set") if aset else "No Set"
-        self.folder_label.setText(f"Notes for current folder ({set_name}): {self.root_path.name}")
+        # Show the current audio file's directory name, or root_path if no file selected
+        current_dir = self._get_audio_file_dir()
+        self.folder_label.setText(f"Notes for current folder ({set_name}): {current_dir.name}")
         self.folder_notes_edit.blockSignals(True)
         folder_notes = aset.get("folder_notes", "") if aset else ""
         self.folder_notes_edit.setPlainText(folder_notes or "")
