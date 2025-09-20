@@ -70,7 +70,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
-    QProgressDialog, QColorDialog, QInputDialog, QComboBox
+    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -2351,6 +2351,11 @@ class AudioBrowser(QMainWindow):
         try: self.annotation_table.selectionModel().selectionChanged.disconnect()
         except Exception: pass
         self.annotation_table.selectionModel().selectionChanged.connect(self._on_annotation_selection_changed)
+        
+        # Enable context menu and key handling for annotation table
+        self.annotation_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.annotation_table.customContextMenuRequested.connect(self._on_annotation_context_menu)
+        self.annotation_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     # ----- Helpers for cross-set editing -----
     def _get_set_and_list(self, set_id: str, fname: str):
@@ -2659,6 +2664,62 @@ class AudioBrowser(QMainWindow):
                         self.clip_sel_start_ms = None
                         self.clip_sel_end_ms = None
                         self._update_clip_edits_from_selection()
+
+    def _on_annotation_context_menu(self, position: QPoint):
+        """Handle right-click context menu on annotation table."""
+        if not self.annotation_table.itemAt(position):
+            return
+        
+        # Check if there are selected rows
+        selected_rows = self.annotation_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+        
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete Selected")
+        delete_action.triggered.connect(self._delete_selected_with_confirmation)
+        
+        # Show menu at the requested position
+        menu.exec(self.annotation_table.mapToGlobal(position))
+    
+    def _delete_selected_with_confirmation(self):
+        """Delete selected annotations after confirmation."""
+        if not self.current_audio_file:
+            return
+        
+        selected_rows = self.annotation_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+        
+        # Create confirmation message
+        count = len(selected_rows)
+        if count == 1:
+            message = "Delete this annotation? This action cannot be undone."
+        else:
+            message = f"Delete {count} selected annotations? This action cannot be undone."
+        
+        reply = QMessageBox.question(
+            self, "Delete Annotations",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No  # Default to No for safety
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self._delete_selected_annotations()
+
+    def keyPressEvent(self, event):
+        """Handle key press events for the main window."""
+        if event.key() == Qt.Key.Key_Delete:
+            # Check if annotation table has focus and selected items
+            if (self.annotation_table.hasFocus() and 
+                self.annotation_table.selectionModel().selectedRows()):
+                self._delete_selected_with_confirmation()
+                event.accept()
+                return
+        
+        # Call parent implementation for other keys
+        super().keyPressEvent(event)
 
     # Waveform interactions
     def _on_waveform_seek_requested(self, ms: int):
