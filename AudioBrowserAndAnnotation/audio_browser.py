@@ -1630,10 +1630,10 @@ class AudioBrowser(QMainWindow):
         
         lib_layout.addWidget(fp_group)
         
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["File", "Created", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["File", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents); hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
         self.table.itemChanged.connect(self._on_table_item_changed)
@@ -2086,17 +2086,13 @@ class AudioBrowser(QMainWindow):
         files = self._list_audio_in_root()
         self.table.blockSignals(True); self.table.setRowCount(len(files))
         for row, p in enumerate(files):
-            try: ctime = os.path.getctime(p)
-            except Exception: ctime = p.stat().st_mtime
             item_file = QTableWidgetItem(p.name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
-            item_created = QTableWidgetItem(datetime.fromtimestamp(ctime).strftime("%Y-%m-%d %H:%M:%S"))
-            item_created.setData(Qt.ItemDataRole.UserRole, int(ctime)); item_created.setFlags(item_created.flags() ^ Qt.ItemFlag.ItemIsEditable)
             item_name = QTableWidgetItem(self.provided_names.get(p.name, "")); item_name.setToolTip("Double-click to edit your Provided Name")
-            self.table.setItem(row, 0, item_file); self.table.setItem(row, 1, item_created); self.table.setItem(row, 2, item_name)
+            self.table.setItem(row, 0, item_file); self.table.setItem(row, 1, item_name)
         self.table.blockSignals(False)
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
-        if item.column() != 2: return
+        if item.column() != 1: return
         row = item.row(); file_item = self.table.item(row, 0)
         if not file_item: return
         self.provided_names[file_item.text()] = sanitize(item.text()); self._save_names()
@@ -2513,10 +2509,10 @@ class AudioBrowser(QMainWindow):
             for row in range(self.table.rowCount()):
                 it = self.table.item(row, 0)
                 if it and it.text() == file_name:
-                    tgt = self.table.item(row, 2)
+                    tgt = self.table.item(row, 1)
                     if tgt is None:
                         tgt = QTableWidgetItem(new_value)
-                        self.table.setItem(row, 2, tgt)
+                        self.table.setItem(row, 1, tgt)
                     else:
                         tgt.setText(new_value)
                     break
