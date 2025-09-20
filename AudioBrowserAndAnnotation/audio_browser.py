@@ -1506,7 +1506,9 @@ class AudioBrowser(QMainWindow):
         self.tree = QTreeView()
         self.tree.setModel(self.file_proxy)
         self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
-        self.tree.setColumnHidden(2, True)  # show: Name, Size/Time, Date Modified
+        self.tree.setColumnHidden(1, True)  # hide Size/Time column
+        self.tree.setColumnHidden(2, True)  # hide Type column  
+        self.tree.setColumnHidden(3, True)  # hide Date Modified column
         self.tree.setColumnWidth(0, 360)
         self.tree.setAlternatingRowColors(True)
         self.tree.setSortingEnabled(True); self.tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
