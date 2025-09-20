@@ -1170,7 +1170,6 @@ class AudioBrowser(QMainWindow):
         # For current set fields
         self.notes_by_file: Dict[str, List[Dict]] = {}
         self.file_general: Dict[str, str] = {}
-        self.folder_notes: str = ""
 
         # Show-all toggle
         show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
@@ -1302,9 +1301,9 @@ class AudioBrowser(QMainWindow):
         save_json(self._names_json_path(), self.provided_names)
 
     # ----- Annotation sets load/save -----
-    def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None):
+    def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None, carry_folder_notes: str = ""):
         sid = uuid.uuid4().hex[:8]
-        aset = {"id": sid, "name": self._default_annotation_set_name(), "color": "#00cc66", "visible": True, "files": {}}
+        aset = {"id": sid, "name": self._default_annotation_set_name(), "color": "#00cc66", "visible": True, "folder_notes": carry_folder_notes, "files": {}}
         if carry_notes or carry_general:
             all_files = set((carry_notes or {}).keys()) | set((carry_general or {}).keys())
             for fname in all_files:
@@ -1318,7 +1317,7 @@ class AudioBrowser(QMainWindow):
 
     def _load_notes(self):
         self.annotation_sets = []
-        self.notes_by_file = {}; self.file_general = {}; self.folder_notes = ""
+        self.notes_by_file = {}; self.file_general = {}
         
         # Check for migration from legacy file
         user_notes_path = self._notes_json_path()
@@ -1337,7 +1336,8 @@ class AudioBrowser(QMainWindow):
         data = load_json(user_notes_path, {})
         try:
             if isinstance(data, dict) and "sets" in data:
-                self.folder_notes = str(data.get("folder_notes", "") or "")
+                # Handle migration from global folder_notes to per-set folder_notes
+                global_folder_notes = str(data.get("folder_notes", "") or "")
                 sets = data.get("sets") or []
                 cleaned = []
                 for s in sets:
@@ -1346,6 +1346,10 @@ class AudioBrowser(QMainWindow):
                     name = str(s.get("name", "") or "Set")
                     color = str(s.get("color", "#00cc66") or "#00cc66")
                     visible = bool(s.get("visible", True))
+                    # Handle per-set folder notes, migrating from global if needed
+                    folder_notes = str(s.get("folder_notes", "") or "")
+                    if not folder_notes and global_folder_notes:
+                        folder_notes = global_folder_notes  # Migrate global notes to each set
                     files = {}
                     for fname, meta in (s.get("files", {}) or {}).items():
                         if not isinstance(meta, dict): continue
@@ -1358,7 +1362,7 @@ class AudioBrowser(QMainWindow):
                                 "important": bool(n.get("important", False))
                             } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                         }
-                    cleaned.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files})
+                    cleaned.append({"id": sid, "name": name, "color": color, "visible": visible, "folder_notes": folder_notes, "files": files})
                 if not cleaned:
                     self._create_default_set()
                 else:
@@ -1371,7 +1375,7 @@ class AudioBrowser(QMainWindow):
                     self._load_current_set_into_fields()
             else:
                 # Legacy single-set file
-                self.folder_notes = str(data.get("folder_notes", "") or "")
+                legacy_folder_notes = str(data.get("folder_notes", "") or "")
                 fgen, fnote = {}, {}
                 if isinstance(data, dict) and "files" in data:
                     for fname, meta in (data.get("files", {}) or {}).items():
@@ -1387,7 +1391,7 @@ class AudioBrowser(QMainWindow):
                                 "important": bool(n.get("important", False))
                             })
                         fnote[str(fname)] = clean
-                self._create_default_set(carry_notes=fnote, carry_general=fgen)
+                self._create_default_set(carry_notes=fnote, carry_general=fgen, carry_folder_notes=legacy_folder_notes)
         except Exception:
             self._create_default_set()
 
@@ -1401,7 +1405,6 @@ class AudioBrowser(QMainWindow):
             payload = {
                 "version": 3,
                 "updated": datetime.now().isoformat(timespec="seconds"),
-                "folder_notes": self.folder_notes,
                 "sets": internal_sets,
             }
             save_json(self._notes_json_path(), payload)
@@ -1809,6 +1812,7 @@ class AudioBrowser(QMainWindow):
         if aset: self.set_visible_cb.setChecked(bool(aset.get("visible", True)))
         self._update_waveform_annotations()
         self._refresh_important_table()
+        self._update_folder_notes_ui()  # Update folder notes UI when set changes
 
     def _on_set_visible_toggled(self, _state):
         aset = self._get_current_set()
@@ -2579,15 +2583,21 @@ class AudioBrowser(QMainWindow):
         self._schedule_save_notes()
 
     def _on_folder_notes_changed(self):
-        self.folder_notes = self.folder_notes_edit.toPlainText(); self._schedule_save_notes()
+        aset = self._get_current_set()
+        if aset:
+            aset["folder_notes"] = self.folder_notes_edit.toPlainText()
+        self._schedule_save_notes()
 
     def _schedule_save_notes(self):
         self._general_save_timer.start(600); self._folder_save_timer.start(600)
 
     def _update_folder_notes_ui(self):
-        self.folder_label.setText(f"Notes for current folder: {self.root_path.name}")
+        aset = self._get_current_set()
+        set_name = aset.get("name", "Unknown Set") if aset else "No Set"
+        self.folder_label.setText(f"Notes for current folder ({set_name}): {self.root_path.name}")
         self.folder_notes_edit.blockSignals(True)
-        self.folder_notes_edit.setPlainText(self.folder_notes or "")
+        folder_notes = aset.get("folder_notes", "") if aset else ""
+        self.folder_notes_edit.setPlainText(folder_notes or "")
         self.folder_notes_edit.blockSignals(False)
 
     # ----- Waveform annotations payload -----
@@ -2824,11 +2834,17 @@ class AudioBrowser(QMainWindow):
         save_path, _ = QFileDialog.getSaveFileName(self, "Export Annotations", default_path, "Text Files (*.txt);;All Files (*)")
         if not save_path: return
         lines: List[str] = []
-        if (self.folder_notes or "").strip():
-            lines.append(f"[Folder] {self.root_path}")
-            for ln in (self.folder_notes.replace("\r\n", "\n").split("\n")):
-                lines.append(ln.rstrip())
-            lines.append("")
+        
+        # Export folder notes from all visible annotation sets
+        for s in self.annotation_sets:
+            if not bool(s.get("visible", True)): continue
+            folder_notes = (s.get("folder_notes", "") or "").strip()
+            if folder_notes:
+                set_name = s.get("name", "Unknown Set")
+                lines.append(f"[Folder - {set_name}] {self.root_path}")
+                for ln in folder_notes.replace("\r\n", "\n").split("\n"):
+                    lines.append(ln.rstrip())
+                lines.append("")
         parent_name = self.root_path.name
         all_files = set()
         for s in self.annotation_sets:
