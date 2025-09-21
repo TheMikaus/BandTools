@@ -644,6 +644,8 @@ class WaveformView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumHeight(140)
+        # Enable focus so the widget can receive keyboard events
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._peaks: Optional[List[Tuple[float, float]]] = None
         self._peaks_loading: List[Tuple[float, float]] = []
         self._duration_ms: int = 0
@@ -962,6 +964,8 @@ class WaveformView(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            # Set focus to this widget so it can receive keyboard events
+            self.setFocus()
             x = int(event.position().x())
             hit = self._nearest_marker(x)
             if hit is not None:
@@ -987,6 +991,23 @@ class WaveformView(QWidget):
             self.markerReleased.emit(sid, uid, int(ms))
             event.accept(); return
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        """Handle key press events for the waveform widget."""
+        if event.key() == Qt.Key.Key_Space:
+            # Find the parent AudioBrowser window and call its toggle play/pause method
+            parent_widget = self.parent()
+            while parent_widget:
+                if hasattr(parent_widget, '_toggle_play_pause'):
+                    parent_widget._toggle_play_pause()
+                    event.accept()
+                    return
+                parent_widget = parent_widget.parent()
+            event.ignore()
+            return
+        
+        # Call parent implementation for other keys
+        super().keyPressEvent(event)
 
 # ========== FileInfo proxy to show Size/Time ==========
 class FileInfoProxyModel(QIdentityProxyModel):
