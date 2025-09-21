@@ -27,6 +27,9 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 
 # Note
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
-- Trying to figure out how I want a cloud based storage would work
 - Once I've finished feature creep on the application I plan on trying to refactor it into to more than one file.
-- Maybe have CoPilot add unit test like things.
+- Maybe have CoPilot add unit test like things
+
+# Cloud based storage
+- Initial thoughts were to use Google drive's oAuth, but that seems to require me to register the app, and I dont' really want to do that, nor do I want to others to have to. So I cancelled that out for now.
+- Maybe allow a user to specify an FTP server?
