@@ -19,13 +19,21 @@ This document describes the audio fingerprinting feature implemented for the Aud
 - **Best Match Selection**: Finds closest match above threshold
 
 ### 3. User Interface Components
-- **Reference Folder Selection**: Choose folder containing named reference songs
-- **Threshold Control**: Slider to adjust matching sensitivity
+- **Practice Folder Discovery**: Automatically finds all folders with fingerprints
+- **Threshold Control**: Slider to adjust matching sensitivity (50-95%, default 70%)
 - **Generate Fingerprints Button**: Create fingerprints for current folder
-- **Auto-Label Button**: Automatically suggest names based on matches
-- **Status Display**: Shows fingerprint cache information
+- **Auto-Label Button**: Automatically suggest names based on cross-folder matches
+- **Show Practice Folders Button**: Display detailed information about available practice folders
+- **Status Display**: Shows current folder fingerprints and available songs for matching
 
-### 4. Caching System
+### 4. Cross-Folder Matching System
+- **Automatic Discovery**: Finds all practice folders with fingerprint caches
+- **Unique Song Prioritization**: Prioritizes songs that appear in only one folder for reliable identification
+- **Multi-Folder Handling**: Can still match songs that appear in multiple folders
+- **Source Attribution**: Shows which folder each match came from
+- **Detailed Results**: Provides comprehensive feedback on matching process
+
+### 5. Caching System
 - **JSON Storage**: Fingerprints stored in `.audio_fingerprints.json` files
 - **File Integrity**: Uses file size and modification time for cache validation
 - **Per-Folder Cache**: Separate cache files for each directory
@@ -63,25 +71,48 @@ Loads fingerprint cache from directory.
 #### `save_fingerprint_cache(dirpath: Path, cache: Dict) -> None`
 Saves fingerprint cache to directory.
 
+#### `discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]`
+Discovers all subdirectories that contain fingerprint cache files.
+- **Parameters**: Root directory to search
+- **Returns**: List of directories containing `.audio_fingerprints.json` files
+
+#### `collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
+Collects fingerprints from multiple folders and organizes by filename.
+- **Parameters**: 
+  - `folder_paths`: List of directories to scan for fingerprints
+  - `exclude_dir`: Optional directory to exclude from collection
+- **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information
+
+#### `find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict, threshold: float) -> Optional[Tuple[str, float, Path]]`
+Finds the best match for a target fingerprint across multiple folders, prioritizing unique songs.
+- **Parameters**:
+  - `target_fingerprint`: The fingerprint to match against
+  - `fingerprint_map`: Dictionary from `collect_fingerprints_from_folders`
+  - `threshold`: Minimum similarity threshold (0.0 to 1.0)
+- **Returns**: Tuple of (filename, similarity_score, source_folder) or None
+
 ### UI Methods
 
 #### `_select_fingerprint_reference_folder()`
-Opens dialog to select reference folder containing named songs.
+Opens dialog to select reference folder containing named songs. (Legacy - now optional as system auto-discovers practice folders)
 
 #### `_generate_fingerprints_for_folder()`
 Generates fingerprints for all audio files in current folder.
 
 #### `_auto_label_with_fingerprints()`
-Automatically labels unlabeled files based on reference fingerprints.
+Automatically labels unlabeled files based on cross-folder fingerprint matching. Now searches across all practice folders automatically.
+
+#### `_show_practice_folders_info()`
+Shows detailed information about discovered practice folders and available fingerprints for matching.
 
 #### `_update_fingerprint_ui()`
-Updates UI elements to reflect current fingerprint state.
+Updates UI elements to reflect current fingerprint state and available practice folders.
 
 ## Configuration
 
 ### Settings (stored in QSettings)
-- `fingerprint_reference_dir`: Path to reference folder
-- `fingerprint_match_threshold`: Matching threshold (0.0-1.0)
+- `fingerprint_reference_dir`: Path to reference folder (optional - used as fallback if no practice folders found)
+- `fingerprint_match_threshold`: Matching threshold (0.0-1.0, default 0.7)
 
 ### Constants
 - `FINGERPRINTS_JSON = ".audio_fingerprints.json"`: Cache filename
@@ -90,17 +121,27 @@ Updates UI elements to reflect current fingerprint state.
 
 ## Usage Workflow
 
-### Initial Setup
+### Cross-Folder Matching (New - Recommended)
+1. **Generate fingerprints** for multiple practice session folders as you create recordings
+2. **Navigate** to any folder with unlabeled practice recordings
+3. **Click "Auto-Label Files"** - the system automatically discovers and uses fingerprints from all practice folders
+4. **Review results** - the system prioritizes songs that appear in only one folder for most reliable identification
+5. **Use "Show Practice Folders"** button to see detailed information about available fingerprints
+6. **Use existing "Batch Rename"** feature to apply final names
+
+### Legacy Reference Folder Workflow
 1. Select a reference folder containing named audio files
 2. Click "Generate Fingerprints..." to create reference fingerprints
 3. Adjust threshold if needed (70% recommended)
+4. Navigate to folder with unlabeled practice recordings
+5. Click "Auto-Label Files" to get name suggestions based on reference folder
+6. Review and edit suggested names as needed
 
-### Regular Use
-1. Navigate to folder with unlabeled practice recordings
-2. Click "Generate Fingerprints..." for current folder (optional - done automatically during matching)
-3. Click "Auto-Label Files" to get name suggestions
-4. Review and edit suggested names as needed
-5. Use existing "Batch Rename" feature to apply final names
+### Key Advantages of Cross-Folder Matching
+- **No reference folder needed** - works with any practice folders that have fingerprints
+- **Unique song prioritization** - songs appearing in only one folder provide most reliable identification
+- **Automatic discovery** - finds all practice folders with fingerprints automatically
+- **Detailed feedback** - shows which folder each match came from and whether it's unique
 
 ## Technical Details
 
