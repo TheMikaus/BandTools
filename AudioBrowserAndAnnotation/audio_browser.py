@@ -459,6 +459,112 @@ def save_fingerprint_cache(dirpath: Path, cache: Dict) -> None:
     """Save fingerprint cache to directory."""
     save_json(dirpath / FINGERPRINTS_JSON, cache)
 
+def discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]:
+    """
+    Discover all subdirectories that contain fingerprint cache files.
+    Returns list of directories that have .audio_fingerprints.json files.
+    """
+    practice_folders = []
+    if not root_path.exists() or not root_path.is_dir():
+        return practice_folders
+    
+    # Check root directory itself
+    if (root_path / FINGERPRINTS_JSON).exists():
+        practice_folders.append(root_path)
+    
+    # Check immediate subdirectories
+    try:
+        for item in root_path.iterdir():
+            if item.is_dir() and (item / FINGERPRINTS_JSON).exists():
+                practice_folders.append(item)
+    except (OSError, PermissionError):
+        pass  # Skip directories we can't read
+    
+    return practice_folders
+
+def collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Optional[Path] = None) -> Dict[str, Dict]:
+    """
+    Collect fingerprints from multiple folders and organize by filename.
+    
+    Args:
+        folder_paths: List of directories to scan for fingerprints
+        exclude_dir: Optional directory to exclude from collection
+    
+    Returns:
+        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data}
+        Format: {
+            "song1.mp3": [
+                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}},
+                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}}
+            ]
+        }
+    """
+    fingerprint_map = {}
+    
+    for folder_path in folder_paths:
+        if exclude_dir and folder_path.resolve() == exclude_dir.resolve():
+            continue
+            
+        cache = load_fingerprint_cache(folder_path)
+        files_data = cache.get("files", {})
+        
+        for filename, file_data in files_data.items():
+            fingerprint = file_data.get("fingerprint")
+            if fingerprint:  # Only include files with valid fingerprints
+                if filename not in fingerprint_map:
+                    fingerprint_map[filename] = []
+                
+                fingerprint_map[filename].append({
+                    "fingerprint": fingerprint,
+                    "folder": folder_path,
+                    "data": file_data
+                })
+    
+    return fingerprint_map
+
+def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float) -> Optional[Tuple[str, float, Path]]:
+    """
+    Find the best match for a target fingerprint across multiple folders.
+    Prioritizes matches that appear in only one folder (unique identification).
+    
+    Args:
+        target_fingerprint: The fingerprint to match against
+        fingerprint_map: Dictionary from collect_fingerprints_from_folders
+        threshold: Minimum similarity threshold (0.0 to 1.0)
+    
+    Returns:
+        Tuple of (filename, similarity_score, source_folder) or None if no match above threshold
+    """
+    best_matches = []  # List of (filename, score, folder, folder_count)
+    
+    for filename, fingerprint_entries in fingerprint_map.items():
+        folder_count = len(fingerprint_entries)
+        
+        # Find best score for this filename across all its instances
+        best_score_for_file = 0.0
+        best_folder_for_file = None
+        
+        for entry in fingerprint_entries:
+            score = compare_fingerprints(target_fingerprint, entry["fingerprint"])
+            if score > best_score_for_file:
+                best_score_for_file = score
+                best_folder_for_file = entry["folder"]
+        
+        if best_score_for_file >= threshold:
+            best_matches.append((filename, best_score_for_file, best_folder_for_file, folder_count))
+    
+    if not best_matches:
+        return None
+    
+    # Sort by priority: 
+    # 1. Files appearing in only one folder (folder_count=1) get priority
+    # 2. Then by similarity score (descending)
+    # 3. Then by filename for consistency
+    best_matches.sort(key=lambda x: (-1 if x[3] == 1 else 0, x[1], x[0]), reverse=True)
+    
+    best_match = best_matches[0]
+    return (best_match[0], best_match[1], best_match[2])
+
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
     progress = pyqtSignal(int, str, list, int, int)
@@ -1701,6 +1807,10 @@ class AudioBrowser(QMainWindow):
         self.auto_label_btn.clicked.connect(self._auto_label_with_fingerprints)
         self.auto_label_btn.setEnabled(False)  # Enabled when reference folder is set
         threshold_row.addWidget(self.auto_label_btn)
+        
+        self.show_practice_folders_btn = QPushButton("Show Practice Folders")
+        self.show_practice_folders_btn.clicked.connect(self._show_practice_folders_info)
+        threshold_row.addWidget(self.show_practice_folders_btn)
         
         fp_layout.addLayout(threshold_row)
         
@@ -3513,20 +3623,103 @@ class AudioBrowser(QMainWindow):
     # ----- Fingerprinting methods -----
     def _update_fingerprint_ui(self):
         """Update fingerprint UI elements."""
-        if self.fingerprint_reference_dir:
-            self.fingerprint_ref_label.setText(str(self.fingerprint_reference_dir))
-            self.fingerprint_ref_label.setStyleSheet("color: #333;")
-            self.auto_label_btn.setEnabled(True)
-        else:
-            self.fingerprint_ref_label.setText("(None selected)")
-            self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
-            self.auto_label_btn.setEnabled(False)
-        
-        # Update status
+        # Discover practice folders with fingerprints
+        practice_folders = discover_practice_folders_with_fingerprints(self.root_path)
         current_dir = self._get_audio_file_dir()
-        cache = load_fingerprint_cache(current_dir)
-        num_fingerprints = len(cache.get("files", {}))
-        self.fingerprint_status.setText(f"Current folder has {num_fingerprints} cached fingerprints")
+        
+        # Count total fingerprints available for matching (excluding current folder)
+        fingerprint_map = collect_fingerprints_from_folders(practice_folders, exclude_dir=current_dir)
+        total_available_songs = len(fingerprint_map)
+        unique_songs = sum(1 for song_entries in fingerprint_map.values() if len(song_entries) == 1)
+        
+        # Enable auto-label if we have practice folders with fingerprints
+        can_auto_label = bool(practice_folders) and (len(practice_folders) > 1 or 
+                             (len(practice_folders) == 1 and practice_folders[0].resolve() != current_dir.resolve()))
+        
+        if practice_folders:
+            # Show practice folder information
+            if len(practice_folders) == 1:
+                if practice_folders[0].resolve() == current_dir.resolve():
+                    folder_text = f"Current folder only ({practice_folders[0].name})"
+                else:
+                    folder_text = f"1 practice folder: {practice_folders[0].name}"
+            else:
+                other_folders = [f for f in practice_folders if f.resolve() != current_dir.resolve()]
+                if other_folders:
+                    folder_text = f"{len(other_folders)} other practice folders"
+                else:
+                    folder_text = f"{len(practice_folders)} practice folders (all current)"
+            
+            self.fingerprint_ref_label.setText(folder_text)
+            self.fingerprint_ref_label.setStyleSheet("color: #333;")
+        else:
+            # Fall back to reference folder display if no practice folders found
+            if self.fingerprint_reference_dir:
+                self.fingerprint_ref_label.setText(f"Reference: {self.fingerprint_reference_dir.name}")
+                self.fingerprint_ref_label.setStyleSheet("color: #333;")
+            else:
+                self.fingerprint_ref_label.setText("(No fingerprints found)")
+                self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+        
+        self.auto_label_btn.setEnabled(can_auto_label)
+        
+        # Update status with current folder and available songs info
+        current_cache = load_fingerprint_cache(current_dir)
+        num_current_fingerprints = len(current_cache.get("files", {}))
+        
+        status_parts = [f"Current: {num_current_fingerprints} fingerprints"]
+        if total_available_songs > 0:
+            status_parts.append(f"Available: {total_available_songs} songs")
+            if unique_songs > 0:
+                status_parts.append(f"({unique_songs} unique)")
+        
+        self.fingerprint_status.setText(" | ".join(status_parts))
+
+    def _show_practice_folders_info(self):
+        """Show information about discovered practice folders and their fingerprints."""
+        practice_folders = discover_practice_folders_with_fingerprints(self.root_path)
+        current_dir = self._get_audio_file_dir()
+        
+        if not practice_folders:
+            QMessageBox.information(self, "No Practice Folders Found", 
+                                  "No practice folders with fingerprints were found.\n\n"
+                                  "To use cross-folder matching:\n"
+                                  "1. Navigate to practice session folders\n"
+                                  "2. Generate fingerprints for each folder\n"
+                                  "3. The system will automatically find and use them for matching")
+            return
+        
+        # Collect detailed information
+        info_lines = [f"Found {len(practice_folders)} practice folder(s) with fingerprints:\n"]
+        
+        total_songs = 0
+        unique_songs = 0
+        fingerprint_map = collect_fingerprints_from_folders(practice_folders, exclude_dir=current_dir)
+        
+        for folder in practice_folders:
+            cache = load_fingerprint_cache(folder)
+            num_files = len(cache.get("files", {}))
+            total_songs += num_files
+            
+            is_current = folder.resolve() == current_dir.resolve()
+            current_marker = " (current)" if is_current else ""
+            info_lines.append(f"• {folder.name}: {num_files} fingerprints{current_marker}")
+        
+        # Count unique songs (appearing in only one folder)
+        for song_entries in fingerprint_map.values():
+            if len(song_entries) == 1:
+                unique_songs += 1
+        
+        available_for_matching = len(fingerprint_map)
+        info_lines.append(f"\nAvailable for matching: {available_for_matching} songs")
+        info_lines.append(f"Unique songs (best for identification): {unique_songs}")
+        info_lines.append(f"Multi-folder songs: {available_for_matching - unique_songs}")
+        
+        if available_for_matching > 0:
+            info_lines.append(f"\nThe system prioritizes matches from songs that appear in only one folder,")
+            info_lines.append(f"as these provide the most reliable identification.")
+        
+        QMessageBox.information(self, "Practice Folders Information", "\n".join(info_lines))
 
     def _select_fingerprint_reference_folder(self):
         """Let user select a folder containing reference audio files with fingerprints."""
@@ -3601,33 +3794,34 @@ class AudioBrowser(QMainWindow):
         self._update_fingerprint_ui()
 
     def _auto_label_with_fingerprints(self):
-        """Auto-label files in current folder based on fingerprint matches with reference folder."""
-        if not self.fingerprint_reference_dir:
-            QMessageBox.warning(self, "No Reference Folder", "Please select a reference folder first.")
-            return
-        
+        """Auto-label files in current folder based on fingerprint matches from practice folders."""
         current_dir = self._get_audio_file_dir()
-        if current_dir == self.fingerprint_reference_dir:
-            QMessageBox.information(self, "Same Folder", "Current folder is the same as reference folder.")
+        
+        # Discover all practice folders with fingerprints
+        practice_folders = discover_practice_folders_with_fingerprints(self.root_path)
+        
+        # If no practice folders found, fall back to reference folder approach
+        if not practice_folders:
+            if not self.fingerprint_reference_dir:
+                QMessageBox.warning(self, "No Fingerprints Available", 
+                                  "No fingerprints found in practice folders.\n"
+                                  "Please select a reference folder or generate fingerprints for practice folders first.")
+                return
+            practice_folders = [self.fingerprint_reference_dir]
+        
+        # If current folder is the only one with fingerprints, nothing to match against
+        if len(practice_folders) == 1 and practice_folders[0].resolve() == current_dir.resolve():
+            QMessageBox.information(self, "No Other Practice Folders", 
+                                  "Current folder is the only one with fingerprints. Need other practice folders to match against.")
             return
         
-        # Load reference fingerprints
-        ref_cache = load_fingerprint_cache(self.fingerprint_reference_dir)
-        ref_fingerprints = ref_cache.get("files", {})
+        # Collect fingerprints from all practice folders (excluding current)
+        fingerprint_map = collect_fingerprints_from_folders(practice_folders, exclude_dir=current_dir)
         
-        if not ref_fingerprints:
-            reply = QMessageBox.question(self, "No Reference Fingerprints",
-                                         "No fingerprints found in reference folder.\n"
-                                         "Generate them now?",
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
-                self._generate_fingerprints_for_reference_folder()
-                ref_cache = load_fingerprint_cache(self.fingerprint_reference_dir)
-                ref_fingerprints = ref_cache.get("files", {})
-                if not ref_fingerprints:
-                    return
-            else:
-                return
+        if not fingerprint_map:
+            QMessageBox.warning(self, "No Reference Fingerprints", 
+                              "No fingerprints found in other practice folders.")
+            return
         
         # Load current folder fingerprints
         current_cache = load_fingerprint_cache(current_dir)
@@ -3643,9 +3837,12 @@ class AudioBrowser(QMainWindow):
         
         # Process each unlabeled file
         matches_found = 0
-        progress = QProgressDialog("Matching fingerprints...", "Cancel", 0, len(unlabeled_files), self)
+        unique_matches = 0  # Matches from songs appearing in only one folder
+        progress = QProgressDialog("Matching fingerprints across practice folders...", "Cancel", 0, len(unlabeled_files), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.show()
+        
+        match_details = []  # For detailed results message
         
         for i, audio_file in enumerate(unlabeled_files):
             if progress.wasCanceled():
@@ -3673,24 +3870,30 @@ class AudioBrowser(QMainWindow):
                     print(f"Error processing {audio_file.name}: {e}")
                     continue
             
-            # Find best match in reference folder
-            best_match = None
-            best_score = 0.0
+            # Find best match across all practice folders
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold)
             
-            for ref_name, ref_data in ref_fingerprints.items():
-                ref_fp = ref_data.get("fingerprint")
-                if ref_fp:
-                    score = compare_fingerprints(current_fp, ref_fp)
-                    if score > best_score:
-                        best_score = score
-                        best_match = ref_name
-            
-            # Apply match if above threshold
-            if best_match and best_score >= self.fingerprint_threshold:
-                # Use reference filename (without extension) as provided name
-                ref_stem = Path(best_match).stem
-                self.provided_names[audio_file.name] = ref_stem
+            if match_result:
+                matched_filename, score, source_folder = match_result
+                
+                # Use matched filename (without extension) as provided name
+                matched_stem = Path(matched_filename).stem
+                self.provided_names[audio_file.name] = matched_stem
                 matches_found += 1
+                
+                # Check if this was a unique match (song appears in only one folder)
+                folder_count = len(fingerprint_map[matched_filename])
+                if folder_count == 1:
+                    unique_matches += 1
+                
+                # Store details for result message
+                match_details.append({
+                    "file": audio_file.name,
+                    "match": matched_stem,
+                    "score": score,
+                    "folder": source_folder.name,
+                    "unique": folder_count == 1
+                })
         
         progress.setValue(len(unlabeled_files))
         
@@ -3700,9 +3903,21 @@ class AudioBrowser(QMainWindow):
             self._save_names()
             self._refresh_right_table()
         
-        QMessageBox.information(self, "Auto-Labeling Complete",
-                                f"Found {matches_found} matches out of {len(unlabeled_files)} unlabeled files.\n"
-                                f"Threshold: {self.fingerprint_threshold:.0%}")
+        # Show detailed results
+        result_message = f"Found {matches_found} matches out of {len(unlabeled_files)} unlabeled files.\n"
+        result_message += f"Unique matches (song in only one folder): {unique_matches}\n"
+        result_message += f"Threshold: {self.fingerprint_threshold:.0%}\n"
+        result_message += f"Scanned {len(practice_folders)} practice folders\n\n"
+        
+        if match_details:
+            result_message += "Match details:\n"
+            for detail in match_details[:5]:  # Show first 5 matches
+                unique_indicator = " (unique)" if detail["unique"] else ""
+                result_message += f"• {detail['file']} → {detail['match']} ({detail['score']:.0%}, from {detail['folder']}){unique_indicator}\n"
+            if len(match_details) > 5:
+                result_message += f"... and {len(match_details) - 5} more matches"
+        
+        QMessageBox.information(self, "Auto-Labeling Complete", result_message)
 
     def _generate_fingerprints_for_reference_folder(self):
         """Generate fingerprints for the reference folder."""
