@@ -95,6 +95,7 @@ SETTINGS_KEY_SHOW_ALL = "show_all_sets"
 SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "show_all_folder_notes"
 SETTINGS_KEY_FINGERPRINT_DIR = "fingerprint_reference_dir"
 SETTINGS_KEY_FINGERPRINT_THRESHOLD = "fingerprint_match_threshold"
+SETTINGS_KEY_FINGERPRINT_ALGORITHM = "fingerprint_algorithm"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
@@ -516,10 +517,296 @@ def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
         else:
             return 0.0
 
+# ========== Multiple fingerprinting algorithms ==========
+
+def compute_spectral_fingerprint(samples: List[float], sr: int) -> List[float]:
+    """
+    Original spectral analysis fingerprinting algorithm (renamed for clarity).
+    This is the same as the original compute_audio_fingerprint function.
+    """
+    return compute_audio_fingerprint(samples, sr)
+
+def compute_lightweight_fingerprint(samples: List[float], sr: int) -> List[float]:
+    """
+    Lightweight fingerprint using downsampled STFT with log-spaced frequency bands.
+    Based on the algorithm suggestion in the issue:
+    - Downsample to ~11 kHz, take up to the middle 60s
+    - STFT - group magnitudes into ~32 log-spaced frequency bands (60–6000 Hz)
+    - Log/normalize → average over time
+    - Return 32-D vector per file for cosine similarity comparison
+    """
+    if not HAVE_NUMPY:
+        # Simple fallback - just return fixed-size vector
+        return [0.1] * 32
+        
+    arr = np.asarray(samples, dtype=np.float32)
+    
+    # Target sample rate ~11kHz
+    target_sr = 11025
+    if sr > target_sr:
+        # Simple decimation by taking every nth sample
+        decim_factor = sr // target_sr
+        arr = arr[::decim_factor]
+        effective_sr = sr // decim_factor
+    else:
+        effective_sr = sr
+    
+    # Take middle 60 seconds max (more stable than intros/outros)
+    max_samples = 60 * effective_sr  # 60 seconds worth
+    if len(arr) > max_samples:
+        start_idx = (len(arr) - max_samples) // 2
+        arr = arr[start_idx:start_idx + max_samples]
+    
+    # STFT parameters
+    n_fft = 2048
+    hop_length = n_fft // 4
+    
+    # Frequency range: 60-6000 Hz
+    min_freq = 60
+    max_freq = min(6000, effective_sr // 2)  # Don't exceed Nyquist
+    
+    # Create 32 log-spaced frequency bands
+    n_bands = 32
+    freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bands + 1)
+    
+    # Convert frequencies to FFT bin indices
+    bin_indices = (freq_bins * n_fft / effective_sr).astype(int)
+    bin_indices = np.clip(bin_indices, 0, n_fft // 2)
+    
+    band_energies = []
+    
+    # Process overlapping windows for STFT
+    window = np.hanning(n_fft)
+    frame_energies = []
+    
+    for i in range(0, len(arr) - n_fft + 1, hop_length):
+        frame = arr[i:i + n_fft] * window
+        fft = np.fft.rfft(frame)
+        magnitude = np.abs(fft)
+        
+        # Group into log-spaced frequency bands
+        frame_bands = []
+        for b in range(n_bands):
+            start_bin = bin_indices[b]
+            end_bin = bin_indices[b + 1]
+            if end_bin > start_bin:
+                # Average magnitude in this frequency band
+                band_energy = float(np.mean(magnitude[start_bin:end_bin]))
+            else:
+                band_energy = 0.0
+            frame_bands.append(band_energy)
+        
+        frame_energies.append(frame_bands)
+    
+    if not frame_energies:
+        return [0.0] * n_bands
+    
+    # Average over time (all frames)
+    frame_energies = np.array(frame_energies)
+    avg_bands = np.mean(frame_energies, axis=0)
+    
+    # Apply log compression and normalization
+    avg_bands = np.log1p(avg_bands)  # log(1 + x) to handle zeros
+    
+    # Normalize to unit vector for cosine similarity
+    norm = np.linalg.norm(avg_bands)
+    if norm > 0:
+        avg_bands = avg_bands / norm
+    
+    return avg_bands.tolist()
+
+def compute_chromaprint_fingerprint(samples: List[float], sr: int) -> List[float]:
+    """
+    Mock ChromaPrint/AcoustID fingerprint algorithm.
+    In a real implementation, this would use the chromaprint library.
+    For now, this is a placeholder that generates a different fingerprint pattern.
+    """
+    if not HAVE_NUMPY:
+        return [0.2] * 96  # Different size from other algorithms
+        
+    arr = np.asarray(samples, dtype=np.float32)
+    
+    # Mock chromaprint-style processing
+    # Real ChromaPrint would extract chroma features and create hash fingerprints
+    # This is a simplified version that creates a different pattern
+    
+    segment_length = min(sr, len(arr) // 4)  # Different segment size
+    if segment_length < 256:
+        segment_length = min(256, len(arr))
+    
+    fingerprint = []
+    hop_length = segment_length // 8  # Smaller hop for more detail
+    
+    for i in range(0, len(arr) - segment_length + 1, hop_length):
+        segment = arr[i:i + segment_length]
+        
+        # Mock chroma-like feature extraction
+        fft = np.fft.rfft(segment * np.hanning(len(segment)))
+        magnitude = np.abs(fft)
+        
+        # Extract 12 chroma-like features (representing musical notes)
+        n_chroma = 12
+        chroma_features = []
+        
+        for c in range(n_chroma):
+            # Sum harmonics that correspond to this chroma class
+            chroma_energy = 0.0
+            for harmonic in range(1, 6):  # First 5 harmonics
+                freq_bin = int(c * len(magnitude) / n_chroma * harmonic) % len(magnitude)
+                if freq_bin < len(magnitude):
+                    chroma_energy += magnitude[freq_bin]
+            chroma_features.append(float(chroma_energy))
+        
+        # Normalize
+        total = sum(chroma_features)
+        if total > 0:
+            chroma_features = [f / total for f in chroma_features]
+            
+        fingerprint.extend(chroma_features)
+    
+    # Limit to reasonable size
+    return fingerprint[:96]  # 12 chroma * 8 segments
+
+def compute_audfprint_fingerprint(samples: List[float], sr: int) -> List[float]:
+    """
+    Mock audfprint (constellation/fingerprint approach) algorithm.
+    Real audfprint uses peak constellation matching.
+    This is a placeholder with a different pattern.
+    """
+    if not HAVE_NUMPY:
+        return [0.3] * 200  # Different size again
+        
+    arr = np.asarray(samples, dtype=np.float32)
+    
+    # Mock constellation-style processing
+    # Real audfprint would find spectral peaks and create hash pairs
+    segment_length = sr // 4  # 0.25 second segments
+    if segment_length < 512:
+        segment_length = min(512, len(arr))
+        
+    constellation_features = []
+    hop_length = segment_length // 2  # 50% overlap
+    
+    for i in range(0, len(arr) - segment_length + 1, hop_length):
+        segment = arr[i:i + segment_length]
+        
+        # Mock peak finding in frequency domain
+        fft = np.fft.rfft(segment * np.hanning(len(segment)))
+        magnitude = np.abs(fft)
+        
+        # Find local peaks (simplified)
+        peaks = []
+        for j in range(2, len(magnitude) - 2):
+            if (magnitude[j] > magnitude[j-1] and 
+                magnitude[j] > magnitude[j+1] and
+                magnitude[j] > magnitude[j-2] and 
+                magnitude[j] > magnitude[j+2]):
+                peaks.append((j, magnitude[j]))
+        
+        # Sort by magnitude and take top peaks
+        peaks.sort(key=lambda x: x[1], reverse=True)
+        top_peaks = peaks[:10]  # Top 10 peaks
+        
+        # Create features from peak positions and magnitudes
+        segment_features = [0.0] * 20  # 10 peaks * 2 features each
+        for idx, (freq_bin, mag) in enumerate(top_peaks):
+            if idx < 10:
+                segment_features[idx * 2] = float(freq_bin) / len(magnitude)  # Normalized frequency
+                segment_features[idx * 2 + 1] = float(mag) / np.max(magnitude)  # Normalized magnitude
+                
+        constellation_features.extend(segment_features)
+    
+    # Limit size and return
+    return constellation_features[:200]
+
+# Dictionary of available algorithms
+FINGERPRINT_ALGORITHMS = {
+    "spectral": {
+        "name": "Spectral Analysis",
+        "description": "Original spectral band analysis (default)",
+        "compute_func": compute_spectral_fingerprint
+    },
+    "lightweight": {
+        "name": "Lightweight STFT", 
+        "description": "Downsampled STFT with log-spaced bands",
+        "compute_func": compute_lightweight_fingerprint
+    },
+    "chromaprint": {
+        "name": "ChromaPrint-style",
+        "description": "Mock chroma-based fingerprinting",
+        "compute_func": compute_chromaprint_fingerprint
+    },
+    "audfprint": {
+        "name": "AudFprint-style",
+        "description": "Mock constellation/peak-based approach", 
+        "compute_func": compute_audfprint_fingerprint
+    }
+}
+
+DEFAULT_ALGORITHM = "spectral"
+
+def compute_multiple_fingerprints(samples: List[float], sr: int, algorithms: List[str] = None) -> Dict[str, List[float]]:
+    """
+    Compute fingerprints using multiple algorithms.
+    
+    Args:
+        samples: Audio sample data
+        sr: Sample rate
+        algorithms: List of algorithm names to compute. If None, computes all.
+    
+    Returns:
+        Dictionary mapping algorithm names to fingerprint lists
+    """
+    if algorithms is None:
+        algorithms = list(FINGERPRINT_ALGORITHMS.keys())
+    
+    fingerprints = {}
+    for alg_name in algorithms:
+        if alg_name in FINGERPRINT_ALGORITHMS:
+            compute_func = FINGERPRINT_ALGORITHMS[alg_name]["compute_func"]
+            try:
+                fingerprints[alg_name] = compute_func(samples, sr)
+            except Exception as e:
+                print(f"Error computing {alg_name} fingerprint: {e}")
+                # Fallback to basic pattern
+                fingerprints[alg_name] = [0.1] * 50
+    
+    return fingerprints
+
+def migrate_fingerprint_cache(cache: Dict) -> Dict:
+    """
+    Migrate old single-fingerprint cache format to new multiple-algorithms format.
+    Old format: cache["files"][filename]["fingerprint"] = [...]
+    New format: cache["files"][filename]["fingerprints"] = {"algorithm": [...], ...}
+    """
+    if "files" not in cache:
+        return cache
+    
+    migrated = False
+    for filename, file_data in cache["files"].items():
+        if isinstance(file_data, dict) and "fingerprint" in file_data and "fingerprints" not in file_data:
+            # Migrate from old format
+            old_fingerprint = file_data["fingerprint"]
+            # Assume old fingerprint was from the spectral algorithm (default)
+            file_data["fingerprints"] = {DEFAULT_ALGORITHM: old_fingerprint}
+            # Remove old key
+            del file_data["fingerprint"]
+            migrated = True
+    
+    if migrated:
+        print("Migrated fingerprint cache to new multi-algorithm format")
+    
+    return cache
+
 def load_fingerprint_cache(dirpath: Path) -> Dict:
     """Load fingerprint cache from directory."""
     data = load_json(dirpath / FINGERPRINTS_JSON, None)
-    return data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
+    cache = data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
+    
+    # Migrate old format if needed
+    cache = migrate_fingerprint_cache(cache)
+    
+    return cache
 
 def save_fingerprint_cache(dirpath: Path, cache: Dict) -> None:
     """Save fingerprint cache to directory."""
@@ -548,12 +835,13 @@ def discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]:
     
     return practice_folders
 
-def collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Optional[Path] = None) -> Dict[str, Dict]:
+def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]:
     """
     Collect fingerprints from multiple folders and organize by filename.
     
     Args:
         folder_paths: List of directories to scan for fingerprints
+        algorithm: Which fingerprint algorithm to use (e.g., 'spectral', 'lightweight')
         exclude_dir: Optional directory to exclude from collection
     
     Returns:
@@ -579,8 +867,14 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Opt
         provided_names = load_json(names_json_path, {}) or {}
         
         for filename, file_data in files_data.items():
-            fingerprint = file_data.get("fingerprint")
-            if fingerprint:  # Only include files with valid fingerprints
+            # Get fingerprint for the selected algorithm
+            fingerprints = file_data.get("fingerprints", {})
+            if not fingerprints and "fingerprint" in file_data:
+                # Handle legacy format (migration should have handled this, but just in case)
+                fingerprints = {DEFAULT_ALGORITHM: file_data["fingerprint"]}
+            
+            fingerprint = fingerprints.get(algorithm)
+            if fingerprint:  # Only include files with fingerprint for this algorithm
                 if filename not in fingerprint_map:
                     fingerprint_map[filename] = []
                 
@@ -1415,6 +1709,10 @@ class AudioBrowser(QMainWindow):
             self.fingerprint_reference_dir = Path(ref_dir_str)
         
         self.fingerprint_threshold: float = float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
+        self.fingerprint_algorithm: str = self.settings.value(SETTINGS_KEY_FINGERPRINT_ALGORITHM, DEFAULT_ALGORITHM)
+        # Validate the algorithm exists
+        if self.fingerprint_algorithm not in FINGERPRINT_ALGORITHMS:
+            self.fingerprint_algorithm = DEFAULT_ALGORITHM
         self.fingerprint_cache: Dict[str, Dict] = {}  # loaded per directory
         
         # Auto-labeling state management
@@ -1912,6 +2210,21 @@ class AudioBrowser(QMainWindow):
         self.select_ref_btn.clicked.connect(self._select_fingerprint_reference_folder)
         ref_row.addWidget(self.select_ref_btn)
         fp_layout.addLayout(ref_row)
+        
+        # Algorithm selection
+        algorithm_row = QHBoxLayout()
+        algorithm_row.addWidget(QLabel("Fingerprint algorithm:"))
+        self.algorithm_combo = QComboBox()
+        for alg_key, alg_info in FINGERPRINT_ALGORITHMS.items():
+            self.algorithm_combo.addItem(alg_info["name"], alg_key)
+        # Set current selection
+        current_idx = self.algorithm_combo.findData(self.fingerprint_algorithm)
+        if current_idx >= 0:
+            self.algorithm_combo.setCurrentIndex(current_idx)
+        self.algorithm_combo.currentTextChanged.connect(self._on_fingerprint_algorithm_changed)
+        algorithm_row.addWidget(self.algorithm_combo)
+        algorithm_row.addStretch(1)
+        fp_layout.addLayout(algorithm_row)
         
         # Threshold and actions
         threshold_row = QHBoxLayout()
@@ -3693,7 +4006,7 @@ class AudioBrowser(QMainWindow):
             return
             
         # Collect fingerprints from all available folders (excluding current)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
         
         if not fingerprint_map:
             QMessageBox.warning(self, "No Reference Fingerprints", 
@@ -3719,16 +4032,26 @@ class AudioBrowser(QMainWindow):
             progress.setValue(int((i / len(audio_files)) * 100))
             QApplication.processEvents()
             
-            # Get or generate fingerprint for current file
-            current_fp = current_cache.get("files", {}).get(audio_file.name, {}).get("fingerprint")
+            # Get or generate fingerprint for current file using selected algorithm
+            current_file_data = current_cache.get("files", {}).get(audio_file.name, {})
+            fingerprints = current_file_data.get("fingerprints", {})
+            # Handle legacy format
+            if not fingerprints and "fingerprint" in current_file_data:
+                fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
+            
+            current_fp = fingerprints.get(self.fingerprint_algorithm)
             if not current_fp:
                 try:
                     samples, sr, dur_ms = decode_audio_samples(audio_file)
-                    current_fp = compute_audio_fingerprint(samples, sr)
-                    # Update cache
+                    # Generate fingerprint for current algorithm
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, [self.fingerprint_algorithm])
+                    current_fp = new_fingerprints.get(self.fingerprint_algorithm)
+                    
+                    # Update cache with new fingerprint
                     size, mtime = file_signature(audio_file)
+                    fingerprints.update(new_fingerprints)
                     current_cache.setdefault("files", {})[audio_file.name] = {
-                        "fingerprint": current_fp,
+                        "fingerprints": fingerprints,
                         "size": size,
                         "mtime": mtime,
                         "duration_ms": dur_ms
@@ -4288,7 +4611,7 @@ class AudioBrowser(QMainWindow):
                 all_fingerprint_folders.append(self.fingerprint_reference_dir)
         
         # Count total fingerprints available for matching (excluding current folder)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
         total_available_songs = len(fingerprint_map)
         unique_songs = sum(1 for song_entries in fingerprint_map.values() if len(song_entries) == 1)
         
@@ -4331,7 +4654,10 @@ class AudioBrowser(QMainWindow):
         current_cache = load_fingerprint_cache(current_dir)
         num_current_fingerprints = len(current_cache.get("files", {}))
         
-        status_parts = [f"Current: {num_current_fingerprints} fingerprints"]
+        # Add algorithm info to status
+        algorithm_name = FINGERPRINT_ALGORITHMS[self.fingerprint_algorithm]["name"]
+        status_parts = [f"Algorithm: {algorithm_name}"]
+        status_parts.append(f"Current: {num_current_fingerprints} fingerprints")
         if total_available_songs > 0:
             status_parts.append(f"Available: {total_available_songs} songs")
             if unique_songs > 0:
@@ -4366,7 +4692,7 @@ class AudioBrowser(QMainWindow):
         
         total_songs = 0
         unique_songs = 0
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
         
         for folder in all_fingerprint_folders:
             cache = load_fingerprint_cache(folder)
@@ -4414,6 +4740,14 @@ class AudioBrowser(QMainWindow):
         """Handle threshold change."""
         self.fingerprint_threshold = value / 100.0
         self.settings.setValue(SETTINGS_KEY_FINGERPRINT_THRESHOLD, self.fingerprint_threshold)
+
+    def _on_fingerprint_algorithm_changed(self):
+        """Handle algorithm change."""
+        selected_data = self.algorithm_combo.currentData()
+        if selected_data and selected_data in FINGERPRINT_ALGORITHMS:
+            self.fingerprint_algorithm = selected_data
+            self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, self.fingerprint_algorithm)
+            self._update_fingerprint_ui()
 
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
@@ -4466,18 +4800,35 @@ class AudioBrowser(QMainWindow):
                 continue  # Skip if already cached and file unchanged
             
             try:
-                # Generate fingerprint
+                # Generate fingerprints for multiple algorithms
                 samples, sr, dur_ms = decode_audio_samples(audio_file)
-                fingerprint = compute_audio_fingerprint(samples, sr)
                 
-                # Store in cache
-                cache["files"][audio_file.name] = {
-                    "fingerprint": fingerprint,
-                    "size": size,
-                    "mtime": mtime,
-                    "duration_ms": dur_ms
-                }
-                generated += 1
+                # Get existing fingerprints for this file (if any)
+                existing_entry = cache["files"].get(audio_file.name, {})
+                existing_fingerprints = existing_entry.get("fingerprints", {})
+                
+                # Generate all algorithms if force regenerate, otherwise only missing ones
+                if force_regenerate:
+                    algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
+                else:
+                    algorithms_to_generate = [alg for alg in FINGERPRINT_ALGORITHMS.keys() 
+                                              if alg not in existing_fingerprints]
+                
+                if algorithms_to_generate:
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, algorithms_to_generate)
+                    
+                    # Merge with existing fingerprints
+                    all_fingerprints = existing_fingerprints.copy()
+                    all_fingerprints.update(new_fingerprints)
+                    
+                    # Store in cache
+                    cache["files"][audio_file.name] = {
+                        "fingerprints": all_fingerprints,
+                        "size": size,
+                        "mtime": mtime,
+                        "duration_ms": dur_ms
+                    }
+                    generated += 1
                 
             except Exception as e:
                 print(f"Error generating fingerprint for {audio_file.name}: {e}")
@@ -4533,7 +4884,7 @@ class AudioBrowser(QMainWindow):
             return
         
         # Collect fingerprints from all available folders (excluding current)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
         
         if not fingerprint_map:
             QMessageBox.warning(self, "No Reference Fingerprints", 
@@ -4569,16 +4920,26 @@ class AudioBrowser(QMainWindow):
             progress.setValue(i)
             QApplication.processEvents()
             
-            # Get or generate fingerprint for current file
-            current_fp = current_fingerprints.get(audio_file.name, {}).get("fingerprint")
+            # Get or generate fingerprint for current file using selected algorithm
+            current_file_data = current_fingerprints.get(audio_file.name, {})
+            fingerprints = current_file_data.get("fingerprints", {})
+            # Handle legacy format
+            if not fingerprints and "fingerprint" in current_file_data:
+                fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
+                
+            current_fp = fingerprints.get(self.fingerprint_algorithm)
             if not current_fp:
                 try:
                     samples, sr, dur_ms = decode_audio_samples(audio_file)
-                    current_fp = compute_audio_fingerprint(samples, sr)
-                    # Update cache
+                    # Generate fingerprint for current algorithm
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, [self.fingerprint_algorithm])
+                    current_fp = new_fingerprints.get(self.fingerprint_algorithm)
+                    
+                    # Update cache with new fingerprint
                     size, mtime = file_signature(audio_file)
+                    fingerprints.update(new_fingerprints)
                     current_cache["files"][audio_file.name] = {
-                        "fingerprint": current_fp,
+                        "fingerprints": fingerprints,
                         "size": size,
                         "mtime": mtime,
                         "duration_ms": dur_ms
@@ -4724,22 +5085,49 @@ class AudioBrowser(QMainWindow):
             progress.setValue(i)
             QApplication.processEvents()
             
-            # Check if fingerprint already exists and is up to date
+            # Check if fingerprints already exist and are up to date
             size, mtime = file_signature(audio_file)
             existing = cache["files"].get(audio_file.name)
-            if existing and existing.get("size") == size and existing.get("mtime") == mtime:
+            
+            # Check if we need to generate any new fingerprints
+            existing_fingerprints = existing.get("fingerprints", {}) if existing else {}
+            # Handle legacy format
+            if not existing_fingerprints and existing and "fingerprint" in existing:
+                existing_fingerprints = {DEFAULT_ALGORITHM: existing["fingerprint"]}
+            
+            needs_update = (not existing or 
+                          existing.get("size") != size or 
+                          existing.get("mtime") != mtime or 
+                          len(existing_fingerprints) < len(FINGERPRINT_ALGORITHMS))
+            
+            if not needs_update:
                 continue
             
             try:
                 samples, sr, dur_ms = decode_audio_samples(audio_file)
-                fingerprint = compute_audio_fingerprint(samples, sr)
                 
-                cache["files"][audio_file.name] = {
-                    "fingerprint": fingerprint,
-                    "size": size,
-                    "mtime": mtime,
-                    "duration_ms": dur_ms
-                }
+                # Determine which algorithms to generate
+                if not existing or existing.get("size") != size or existing.get("mtime") != mtime:
+                    # File changed, regenerate all algorithms
+                    algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
+                else:
+                    # File unchanged, only generate missing algorithms
+                    algorithms_to_generate = [alg for alg in FINGERPRINT_ALGORITHMS.keys() 
+                                              if alg not in existing_fingerprints]
+                
+                if algorithms_to_generate:
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, algorithms_to_generate)
+                    
+                    # Merge with existing fingerprints
+                    all_fingerprints = existing_fingerprints.copy()
+                    all_fingerprints.update(new_fingerprints)
+                    
+                    cache["files"][audio_file.name] = {
+                        "fingerprints": all_fingerprints,
+                        "size": size,
+                        "mtime": mtime,
+                        "duration_ms": dur_ms
+                    }
                 generated += 1
                 
             except Exception as e:
