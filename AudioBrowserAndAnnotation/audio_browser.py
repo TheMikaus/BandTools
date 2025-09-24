@@ -2303,8 +2303,8 @@ class AudioBrowser(QMainWindow):
             self._set_current_practice_folder(path.parent)
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
-            if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
-                return
+            # Always play the selected file, even if it's already the current file
+            # This allows restarting the same song from the beginning when clicked
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
@@ -2320,9 +2320,7 @@ class AudioBrowser(QMainWindow):
 
     # ----- Playback -----
     def _play_file(self, path: Path):
-        if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
-            return
-        
+        # Always play the file, even if it's the same as current - this allows restarting
         # Check if we need to reload annotations from a different directory
         prev_audio_dir = self.current_audio_file.parent if self.current_audio_file else None
         new_audio_dir = path.parent
