@@ -4200,6 +4200,26 @@ class AudioBrowser(QMainWindow):
         
         cache = load_fingerprint_cache(current_dir)
         
+        # Check if fingerprints already exist in the current folder
+        existing_fingerprints = len(cache.get("files", {}))
+        force_regenerate = False
+        
+        if existing_fingerprints > 0:
+            # Prompt user to confirm regeneration
+            reply = QMessageBox.question(
+                self, 
+                "Regenerate Fingerprints", 
+                f"This folder already contains {existing_fingerprints} fingerprint(s).\n\n"
+                f"Do you want to regenerate all fingerprints for the {len(audio_files)} audio files in this folder?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                force_regenerate = True
+            else:
+                return
+        
         progress = QProgressDialog("Generating fingerprints...", "Cancel", 0, len(audio_files), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.show()
@@ -4213,10 +4233,10 @@ class AudioBrowser(QMainWindow):
             progress.setValue(i)
             QApplication.processEvents()
             
-            # Check if fingerprint already exists and is up to date
+            # Check if fingerprint already exists and is up to date (unless force regenerating)
             size, mtime = file_signature(audio_file)
             existing = cache["files"].get(audio_file.name)
-            if existing and existing.get("size") == size and existing.get("mtime") == mtime:
+            if not force_regenerate and existing and existing.get("size") == size and existing.get("mtime") == mtime:
                 continue  # Skip if already cached and file unchanged
             
             try:
@@ -4239,9 +4259,14 @@ class AudioBrowser(QMainWindow):
         progress.setValue(len(audio_files))
         save_fingerprint_cache(current_dir, cache)
         
-        QMessageBox.information(self, "Fingerprints Generated", 
-                                f"Generated {generated} new fingerprints.\n"
-                                f"Total fingerprints in folder: {len(cache['files'])}")
+        if force_regenerate:
+            QMessageBox.information(self, "Fingerprints Regenerated", 
+                                    f"Regenerated {generated} fingerprints.\n"
+                                    f"Total fingerprints in folder: {len(cache['files'])}")
+        else:
+            QMessageBox.information(self, "Fingerprints Generated", 
+                                    f"Generated {generated} new fingerprints.\n"
+                                    f"Total fingerprints in folder: {len(cache['files'])}")
         self._update_fingerprint_ui()
 
     def _auto_label_with_fingerprints(self):
