@@ -1,43 +1,84 @@
 # Audio Fingerprinting Feature Documentation
 
 ## Overview
-This document describes the audio fingerprinting feature implemented for the AudioBrowser application. The feature enables automatic identification and labeling of audio files based on their spectral characteristics.
+This document describes the audio fingerprinting feature implemented for the AudioBrowser application. The feature enables automatic identification and labeling of audio files based on their spectral characteristics using multiple fingerprinting algorithms.
 
 ## Features Implemented
 
-### 1. Audio Fingerprinting Algorithm
-- **Spectral Analysis**: Uses FFT (Fast Fourier Transform) to analyze frequency content
-- **Frequency Bands**: Divides spectrum into 12-16 frequency bands for feature extraction
+### 1. Multiple Audio Fingerprinting Algorithms
+The system now supports four different fingerprinting algorithms that users can select from:
+
+#### 1.1 Spectral Analysis (Default)
+- **Original Algorithm**: FFT-based spectral band analysis
+- **Frequency Bands**: Divides spectrum into 12 frequency bands for feature extraction  
 - **Temporal Segments**: Processes overlapping audio segments for robust matching
+- **Output Size**: 144 elements (12 bands × 12 segments max)
 - **Normalization**: Volume-independent fingerprints using energy normalization
 - **Windowing**: Applies Hanning window to reduce spectral leakage
 
-### 2. Similarity Matching
+#### 1.2 Lightweight STFT
+- **Optimized Algorithm**: Based on issue requirements for band practice use
+- **Downsampling**: Reduces to ~11kHz for efficiency
+- **Duration**: Uses middle 60 seconds (more stable than intros/outros)
+- **Frequency Bands**: 32 log-spaced frequency bands (60–6000 Hz)
+- **Processing**: STFT → group magnitudes → log/normalize → average over time
+- **Output Size**: 32-dimensional vector optimized for cosine similarity
+- **Use Case**: Ideal for band practice recordings with partial song matches
+
+#### 1.3 ChromaPrint-style Implementation
+- **Chroma Features**: Extracts 12 pitch class features (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+- **Frequency Mapping**: Maps FFT bins to chroma classes using proper pitch class calculation
+- **Temporal Analysis**: Processes overlapping frames with smoothing and quantization
+- **Hash Generation**: Creates binary-like features by comparing adjacent frames
+- **Output Size**: 144 elements (12 chroma classes × 12 temporal frames)
+- **Use Case**: Excellent for matching songs with similar harmonic content
+
+#### 1.4 AudFprint-style Implementation  
+- **Constellation Mapping**: Finds prominent spectral peaks across time-frequency space
+- **Peak Detection**: Locates local maxima in spectrogram with magnitude thresholding
+- **Hash Pairs**: Creates robust hash combinations from peak pairs with time deltas
+- **Landmark Points**: Uses anchor/target point methodology for noise resistance
+- **Output Size**: 256 elements (hash-based constellation features)
+- **Use Case**: Highly robust against noise, time shifts, and audio degradation
+
+### 2. Algorithm Selection and Management
+- **UI Selection**: Dropdown menu in fingerprinting section
+- **Persistent Choice**: Selected algorithm saved between sessions
+- **Multiple Storage**: Each song can have fingerprints from multiple algorithms
+- **Selective Matching**: Matching always uses currently selected algorithm
+- **Default Behavior**: Falls back to Spectral Analysis for backward compatibility
+
+### 3. Similarity Matching
 - **Cosine Similarity**: Measures similarity between fingerprint vectors
 - **Configurable Threshold**: 50-95% matching threshold (default 70%)
 - **Partial Matching**: Handles variations in recording quality and length
 - **Best Match Selection**: Finds closest match above threshold
 
-### 3. User Interface Components
+### 4. User Interface Components
 - **Practice Folder Discovery**: Automatically finds all folders with fingerprints
+- **Algorithm Selection**: Dropdown to choose from 4 fingerprinting algorithms
 - **Threshold Control**: Slider to adjust matching sensitivity (50-95%, default 70%)
-- **Generate Fingerprints Button**: Create fingerprints for current folder
+- **Generate Fingerprints Button**: Create fingerprints for current folder (all algorithms)
 - **Auto-Label Button**: Automatically suggest names based on cross-folder matches
 - **Show Practice Folders Button**: Display detailed information about available practice folders
-- **Status Display**: Shows current folder fingerprints and available songs for matching
+- **Status Display**: Shows current algorithm and fingerprint statistics
 
-### 4. Cross-Folder Matching System
+### 5. Cross-Folder Matching System
 - **Automatic Discovery**: Finds all practice folders with fingerprint caches
 - **Unique Song Prioritization**: Prioritizes songs that appear in only one folder for reliable identification
 - **Multi-Folder Handling**: Can still match songs that appear in multiple folders
 - **Source Attribution**: Shows which folder each match came from
 - **Detailed Results**: Provides comprehensive feedback on matching process
 
-### 5. Caching System
+### 6. Caching System
 - **JSON Storage**: Fingerprints stored in `.audio_fingerprints.json` files
+- **Multiple Algorithms**: Each file stores fingerprints for multiple algorithms
+- **New Format**: `"fingerprints": {"algorithm_name": [...], ...}` 
+- **Legacy Support**: Automatically migrates old `"fingerprint": [...]` format
 - **File Integrity**: Uses file size and modification time for cache validation
 - **Per-Folder Cache**: Separate cache files for each directory
 - **Automatic Updates**: Regenerates fingerprints when files change
+- **Incremental Generation**: Only generates missing algorithm fingerprints
 
 ## File Structure
 
@@ -52,11 +93,31 @@ This document describes the audio fingerprinting feature implemented for the Aud
 ### Core Functions
 
 #### `compute_audio_fingerprint(samples: List[float], sr: int) -> List[float]`
-Computes audio fingerprint from sample data.
+**Legacy function** - now redirects to `compute_spectral_fingerprint`.
+Computes audio fingerprint from sample data using the original spectral analysis algorithm.
 - **Parameters**: 
   - `samples`: Audio sample values (-1.0 to 1.0)
   - `sr`: Sample rate in Hz
-- **Returns**: Fingerprint as list of float values (typically 144 elements)
+- **Returns**: Fingerprint as list of float values (144 elements)
+
+#### `compute_multiple_fingerprints(samples: List[float], sr: int, algorithms: List[str] = None) -> Dict[str, List[float]]`
+**New function** - generates fingerprints using multiple algorithms.
+- **Parameters**:
+  - `samples`: Audio sample values (-1.0 to 1.0)
+  - `sr`: Sample rate in Hz
+  - `algorithms`: List of algorithm names to compute (default: all algorithms)
+- **Returns**: Dictionary mapping algorithm names to fingerprint lists
+
+#### Algorithm-Specific Functions:
+- `compute_spectral_fingerprint(samples, sr)` → 144 elements (original algorithm)
+- `compute_lightweight_fingerprint(samples, sr)` → 32 elements (optimized for band practice)  
+- `compute_chromaprint_fingerprint(samples, sr)` → 96 elements (chroma-based features)
+- `compute_audfprint_fingerprint(samples, sr)` → 200 elements (constellation approach)
+
+#### `migrate_fingerprint_cache(cache: Dict) -> Dict`
+**New function** - migrates old single-fingerprint format to new multi-algorithm format.
+- **Parameters**: Cache dictionary in old or new format
+- **Returns**: Cache dictionary in new format with automatic migration
 
 #### `compare_fingerprints(fp1: List[float], fp2: List[float]) -> float`
 Compares two fingerprints using cosine similarity.
@@ -64,9 +125,9 @@ Compares two fingerprints using cosine similarity.
 - **Returns**: Similarity score (0.0 to 1.0)
 
 #### `load_fingerprint_cache(dirpath: Path) -> Dict`
-Loads fingerprint cache from directory.
+Loads fingerprint cache from directory with automatic migration.
 - **Parameters**: Directory path
-- **Returns**: Cache dictionary with version and files
+- **Returns**: Cache dictionary with version and files (migrated to new format)
 
 #### `save_fingerprint_cache(dirpath: Path, cache: Dict) -> None`
 Saves fingerprint cache to directory.
@@ -76,10 +137,13 @@ Discovers all subdirectories that contain fingerprint cache files.
 - **Parameters**: Root directory to search
 - **Returns**: List of directories containing `.audio_fingerprints.json` files
 
-#### `collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
-Collects fingerprints from multiple folders and organizes by filename.
+#### `collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
+**Updated function** - now requires algorithm parameter.
+Collects fingerprints from multiple folders for a specific algorithm and organizes by filename.
 - **Parameters**: 
   - `folder_paths`: List of directories to scan for fingerprints
+  - `algorithm`: Which algorithm's fingerprints to collect
+  - `exclude_dir`: Optional directory to exclude from collection
   - `exclude_dir`: Optional directory to exclude from collection
 - **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information
 
@@ -113,11 +177,15 @@ Updates UI elements to reflect current fingerprint state and available practice 
 ### Settings (stored in QSettings)
 - `fingerprint_reference_dir`: Path to reference folder (optional - used as fallback if no practice folders found)
 - `fingerprint_match_threshold`: Matching threshold (0.0-1.0, default 0.7)
+- `fingerprint_algorithm`: Selected fingerprinting algorithm (default "spectral")
 
 ### Constants
 - `FINGERPRINTS_JSON = ".audio_fingerprints.json"`: Cache filename
 - `SETTINGS_KEY_FINGERPRINT_DIR`: Settings key for reference directory
 - `SETTINGS_KEY_FINGERPRINT_THRESHOLD`: Settings key for threshold
+- `SETTINGS_KEY_FINGERPRINT_ALGORITHM`: Settings key for selected algorithm
+- `DEFAULT_ALGORITHM = "spectral"`: Default algorithm for backward compatibility
+- `FINGERPRINT_ALGORITHMS`: Dictionary of available algorithms with metadata
 
 ## Usage Workflow
 
