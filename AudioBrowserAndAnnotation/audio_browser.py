@@ -1863,6 +1863,15 @@ class AudioBrowser(QMainWindow):
         
         fp_layout.addLayout(threshold_row)
         
+        # Clear names section
+        clear_row = QHBoxLayout()
+        clear_row.addStretch(1)  # Push button to the right
+        self.clear_all_names_btn = QPushButton("Clear All Provided Names")
+        self.clear_all_names_btn.clicked.connect(self._on_clear_all_provided_names)
+        self.clear_all_names_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; }")
+        clear_row.addWidget(self.clear_all_names_btn)
+        fp_layout.addLayout(clear_row)
+        
         # Status label
         self.fingerprint_status = QLabel("")
         self.fingerprint_status.setStyleSheet("color: #666; font-size: 11px;")
@@ -3415,6 +3424,43 @@ class AudioBrowser(QMainWindow):
         self._resort_and_rebuild_table_preserving_selection()
         self._schedule_save_notes()
         QMessageBox.information(self, "Cleared", f"Removed {len(removed_subsections)} sub-sections.")
+
+    def _on_clear_all_provided_names(self):
+        """Clear all provided names from the current practice session files."""
+        # Get the current directory where provided names are stored
+        current_dir = self._get_audio_file_dir()
+        
+        # Check if there are any provided names to clear
+        if not self.provided_names:
+            QMessageBox.information(self, "No Provided Names", "No provided names found to clear.")
+            return
+        
+        # Confirmation dialog
+        reply = QMessageBox.question(self, "Clear All Provided Names",
+                                   f"Remove all provided names from files in this practice session?\n\n"
+                                   f"Directory: {current_dir}\n"
+                                   f"This will clear {len(self.provided_names)} provided name(s).",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Count how many names we're clearing
+        cleared_count = len(self.provided_names)
+        
+        # Clear all provided names
+        self.provided_names.clear()
+        
+        # Save the empty provided names to the JSON file
+        self._save_names()
+        
+        # Refresh the library table to show the cleared names
+        self._refresh_right_table()
+        
+        # Clear the provided name field if there's a current file
+        self._refresh_provided_name_field()
+        
+        # Show confirmation message
+        QMessageBox.information(self, "Cleared", f"Removed {cleared_count} provided name(s).")
 
     def _on_subsection_relabel_all_clicked(self):
         """Re-run fingerprinting to label all sub-sections in current folder."""
