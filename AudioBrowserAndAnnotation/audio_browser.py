@@ -491,11 +491,11 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Opt
         exclude_dir: Optional directory to exclude from collection
     
     Returns:
-        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data}
+        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name}
         Format: {
             "song1.mp3": [
-                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}},
-                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}}
+                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name"},
+                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}, "provided_name": "Song Name"}
             ]
         }
     """
@@ -508,21 +508,31 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], exclude_dir: Opt
         cache = load_fingerprint_cache(folder_path)
         files_data = cache.get("files", {})
         
+        # Load provided names from this folder
+        names_json_path = folder_path / NAMES_JSON
+        provided_names = load_json(names_json_path, {}) or {}
+        
         for filename, file_data in files_data.items():
             fingerprint = file_data.get("fingerprint")
             if fingerprint:  # Only include files with valid fingerprints
                 if filename not in fingerprint_map:
                     fingerprint_map[filename] = []
                 
+                # Get the provided name for this file, fallback to filename stem
+                provided_name = provided_names.get(filename, "").strip()
+                if not provided_name:
+                    provided_name = Path(filename).stem
+                
                 fingerprint_map[filename].append({
                     "fingerprint": fingerprint,
                     "folder": folder_path,
-                    "data": file_data
+                    "data": file_data,
+                    "provided_name": provided_name
                 })
     
     return fingerprint_map
 
-def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float) -> Optional[Tuple[str, float, Path]]:
+def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float) -> Optional[Tuple[str, float, Path, str]]:
     """
     Find the best match for a target fingerprint across multiple folders.
     Prioritizes matches that appear in only one folder (unique identification).
@@ -533,9 +543,9 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         threshold: Minimum similarity threshold (0.0 to 1.0)
     
     Returns:
-        Tuple of (filename, similarity_score, source_folder) or None if no match above threshold
+        Tuple of (filename, similarity_score, source_folder, provided_name) or None if no match above threshold
     """
-    best_matches = []  # List of (filename, score, folder, folder_count)
+    best_matches = []  # List of (filename, score, folder, folder_count, provided_name)
     
     for filename, fingerprint_entries in fingerprint_map.items():
         folder_count = len(fingerprint_entries)
@@ -543,15 +553,17 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         # Find best score for this filename across all its instances
         best_score_for_file = 0.0
         best_folder_for_file = None
+        best_provided_name = None
         
         for entry in fingerprint_entries:
             score = compare_fingerprints(target_fingerprint, entry["fingerprint"])
             if score > best_score_for_file:
                 best_score_for_file = score
                 best_folder_for_file = entry["folder"]
+                best_provided_name = entry["provided_name"]
         
         if best_score_for_file >= threshold:
-            best_matches.append((filename, best_score_for_file, best_folder_for_file, folder_count))
+            best_matches.append((filename, best_score_for_file, best_folder_for_file, folder_count, best_provided_name))
     
     if not best_matches:
         return None
@@ -563,7 +575,7 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     best_matches.sort(key=lambda x: (-1 if x[3] == 1 else 0, x[1], x[0]), reverse=True)
     
     best_match = best_matches[0]
-    return (best_match[0], best_match[1], best_match[2])
+    return (best_match[0], best_match[1], best_match[2], best_match[4])
 
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
@@ -3895,11 +3907,10 @@ class AudioBrowser(QMainWindow):
             match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold)
             
             if match_result:
-                matched_filename, score, source_folder = match_result
+                matched_filename, score, source_folder, provided_name = match_result
                 
-                # Use matched filename (without extension) as provided name
-                matched_stem = Path(matched_filename).stem
-                self.provided_names[audio_file.name] = matched_stem
+                # Use the provided name from the matched fingerprint's folder
+                self.provided_names[audio_file.name] = provided_name
                 matches_found += 1
                 
                 # Check if this was a unique match (song appears in only one folder)
@@ -3910,7 +3921,7 @@ class AudioBrowser(QMainWindow):
                 # Store details for result message
                 match_details.append({
                     "file": audio_file.name,
-                    "match": matched_stem,
+                    "match": provided_name,
                     "score": score,
                     "folder": source_folder.name,
                     "unique": folder_count == 1
