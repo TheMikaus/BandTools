@@ -40,14 +40,3 @@ exe = EXE(
     console=False,
     icon='app_icon.ico',   # <— executable icon
 )
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='AudioFolderPlayer'
-)
