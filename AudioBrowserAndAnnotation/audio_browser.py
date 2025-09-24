@@ -1310,6 +1310,9 @@ class AudioBrowser(QMainWindow):
         self.player.errorOccurred.connect(self._on_media_error)
         self.player.mediaStatusChanged.connect(self._on_media_status)
         self.player.durationChanged.connect(self._on_duration_changed)
+        
+        # Listen for audio device changes
+        QMediaDevices.audioOutputsChanged.connect(self._refresh_output_devices)
 
         vol_raw = self.settings.value(SETTINGS_KEY_VOLUME, 90)
         vol = int(vol_raw) if isinstance(vol_raw, (int, str)) else 90
