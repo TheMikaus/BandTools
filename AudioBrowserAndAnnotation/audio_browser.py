@@ -1138,6 +1138,85 @@ class ConvertWorker(QObject):
             self.progress.emit(done, total, src.name)
         self.finished.emit(False)
 
+# ========== Fingerprint worker ==========
+class FingerprintWorker(QObject):
+    progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
+    file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
+    finished = pyqtSignal(int, bool)  # generated_count, canceled
+
+    def __init__(self, audio_files: List[str], current_dir: str, force_regenerate: bool):
+        super().__init__()
+        self._audio_files = [str(p) for p in audio_files]
+        self._current_dir = Path(current_dir)
+        self._force_regenerate = bool(force_regenerate)
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def run(self):
+        cache = load_fingerprint_cache(self._current_dir)
+        generated = 0
+        total_files = len(self._audio_files)
+        
+        for i, audio_file_str in enumerate(self._audio_files):
+            if self._cancel:
+                self.finished.emit(generated, True)
+                return
+                
+            audio_file = Path(audio_file_str)
+            self.progress.emit(i, total_files, audio_file.name)
+            
+            try:
+                # Check if fingerprint already exists and is up to date (unless force regenerating)
+                size, mtime = file_signature(audio_file)
+                existing = cache["files"].get(audio_file.name)
+                if not self._force_regenerate and existing and existing.get("size") == size and existing.get("mtime") == mtime:
+                    self.file_done.emit(audio_file.name, True, "Skipped (already cached)")
+                    continue  # Skip if already cached and file unchanged
+                
+                # Generate fingerprints for multiple algorithms
+                samples, sr, dur_ms = decode_audio_samples(audio_file)
+                
+                # Get existing fingerprints for this file (if any)
+                existing_entry = cache["files"].get(audio_file.name, {})
+                existing_fingerprints = existing_entry.get("fingerprints", {})
+                
+                # Generate all algorithms if force regenerate, otherwise only missing ones
+                if self._force_regenerate:
+                    algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
+                else:
+                    algorithms_to_generate = [alg for alg in FINGERPRINT_ALGORITHMS.keys() 
+                                              if alg not in existing_fingerprints]
+                
+                if algorithms_to_generate:
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, algorithms_to_generate)
+                    
+                    # Merge with existing fingerprints
+                    all_fingerprints = existing_fingerprints.copy()
+                    all_fingerprints.update(new_fingerprints)
+                    
+                    # Store in cache
+                    cache["files"][audio_file.name] = {
+                        "fingerprints": all_fingerprints,
+                        "size": size,
+                        "mtime": mtime,
+                        "duration_ms": dur_ms
+                    }
+                    generated += 1
+                    self.file_done.emit(audio_file.name, True, f"Generated {len(algorithms_to_generate)} algorithm(s)")
+                else:
+                    self.file_done.emit(audio_file.name, True, "Skipped (all algorithms already cached)")
+                
+            except Exception as e:
+                error_msg = f"Error generating fingerprint: {e}"
+                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+                self.file_done.emit(audio_file.name, False, error_msg)
+        
+        # Save the cache after processing all files
+        save_fingerprint_cache(self._current_dir, cache)
+        self.finished.emit(generated, False)
+
 # ========== Waveform view ==========
 class WaveformView(QWidget):
     markerMoved = pyqtSignal(str, int, int)     # set_id, uid, ms
@@ -4889,6 +4968,12 @@ class AudioBrowser(QMainWindow):
 
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
+        # Check if a fingerprinting operation is already in progress
+        if hasattr(self, '_fingerprint_thread') and self._fingerprint_thread.isRunning():
+            QMessageBox.warning(self, "Fingerprinting In Progress", 
+                              "Fingerprinting is already in progress. Please wait for it to complete.")
+            return
+            
         current_dir = self._get_audio_file_dir()
         audio_files = self._list_audio_in_current_dir()
         
@@ -4918,71 +5003,86 @@ class AudioBrowser(QMainWindow):
             else:
                 return
         
-        progress = QProgressDialog("Generating fingerprints...", "Cancel", 0, len(audio_files), self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        
-        generated = 0
-        for i, audio_file in enumerate(audio_files):
-            if progress.wasCanceled():
-                break
-                
-            progress.setLabelText(f"Processing {audio_file.name}...")
-            progress.setValue(i)
-            QApplication.processEvents()
+        # Create progress dialog
+        self._fingerprint_progress = QProgressDialog("Preparing fingerprint generation...", "Cancel", 0, len(audio_files), self)
+        self._fingerprint_progress.setWindowTitle("Generating Fingerprints")
+        self._fingerprint_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._fingerprint_progress.setAutoClose(False)
+        self._fingerprint_progress.setAutoReset(False)
+        self._fingerprint_progress.setMinimumDuration(0)
+        self._fingerprint_progress.setValue(0)
+
+        # Create and setup the worker thread
+        self._fingerprint_thread = QThread(self)
+        self._fingerprint_worker = FingerprintWorker([str(f) for f in audio_files], str(current_dir), force_regenerate)
+        self._fingerprint_worker.moveToThread(self._fingerprint_thread)
+
+        # Variables to track results
+        self._fingerprint_generated_count = 0
+        self._fingerprint_force_regenerate = force_regenerate
+
+        # Connect signals
+        def on_progress(current_index: int, total_files: int, filename: str):
+            self._fingerprint_progress.setLabelText(f"Processing {filename}...")
+            self._fingerprint_progress.setValue(current_index)
+
+        def on_file_done(filename: str, success: bool, message: str):
+            if success and "Generated" in message:
+                self._fingerprint_generated_count += 1
+
+        def on_finished(generated_count: int, canceled: bool):
+            self._fingerprint_progress.hide()
             
-            # Check if fingerprint already exists and is up to date (unless force regenerating)
-            size, mtime = file_signature(audio_file)
-            existing = cache["files"].get(audio_file.name)
-            if not force_regenerate and existing and existing.get("size") == size and existing.get("mtime") == mtime:
-                continue  # Skip if already cached and file unchanged
-            
-            try:
-                # Generate fingerprints for multiple algorithms
-                samples, sr, dur_ms = decode_audio_samples(audio_file)
+            if canceled:
+                QMessageBox.information(self, "Fingerprinting Canceled", "Fingerprint generation was canceled.")
+            else:
+                # Reload cache to get final count
+                final_cache = load_fingerprint_cache(current_dir)
+                total_fingerprints = len(final_cache.get("files", {}))
                 
-                # Get existing fingerprints for this file (if any)
-                existing_entry = cache["files"].get(audio_file.name, {})
-                existing_fingerprints = existing_entry.get("fingerprints", {})
-                
-                # Generate all algorithms if force regenerate, otherwise only missing ones
-                if force_regenerate:
-                    algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
+                if self._fingerprint_force_regenerate:
+                    QMessageBox.information(self, "Fingerprints Regenerated", 
+                                            f"Regenerated fingerprints for {generated_count} files.\n"
+                                            f"Total fingerprints in folder: {total_fingerprints}")
                 else:
-                    algorithms_to_generate = [alg for alg in FINGERPRINT_ALGORITHMS.keys() 
-                                              if alg not in existing_fingerprints]
-                
-                if algorithms_to_generate:
-                    new_fingerprints = compute_multiple_fingerprints(samples, sr, algorithms_to_generate)
-                    
-                    # Merge with existing fingerprints
-                    all_fingerprints = existing_fingerprints.copy()
-                    all_fingerprints.update(new_fingerprints)
-                    
-                    # Store in cache
-                    cache["files"][audio_file.name] = {
-                        "fingerprints": all_fingerprints,
-                        "size": size,
-                        "mtime": mtime,
-                        "duration_ms": dur_ms
-                    }
-                    generated += 1
-                
-            except Exception as e:
-                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+                    QMessageBox.information(self, "Fingerprints Generated", 
+                                            f"Generated fingerprints for {generated_count} files.\n"
+                                            f"Total fingerprints in folder: {total_fingerprints}")
+            
+            # Update UI and cleanup
+            self._update_fingerprint_ui()
+            self._cleanup_fingerprint_thread()
+
+        def on_error():
+            self._fingerprint_progress.hide()
+            QMessageBox.critical(self, "Fingerprinting Error", "An error occurred during fingerprint generation.")
+            self._cleanup_fingerprint_thread()
+
+        # Connect all signals
+        self._fingerprint_thread.started.connect(self._fingerprint_worker.run)
+        self._fingerprint_worker.progress.connect(on_progress)
+        self._fingerprint_worker.file_done.connect(on_file_done)
+        self._fingerprint_worker.finished.connect(on_finished)
+        self._fingerprint_progress.canceled.connect(self._fingerprint_worker.cancel)
+
+        # Start the thread
+        self._fingerprint_thread.start()
+        self._fingerprint_progress.exec()
+
+    def _cleanup_fingerprint_thread(self):
+        """Clean up fingerprint worker thread and related objects."""
+        if hasattr(self, '_fingerprint_worker'):
+            self._fingerprint_worker.deleteLater()
+            delattr(self, '_fingerprint_worker')
         
-        progress.setValue(len(audio_files))
-        save_fingerprint_cache(current_dir, cache)
-        
-        if force_regenerate:
-            QMessageBox.information(self, "Fingerprints Regenerated", 
-                                    f"Regenerated {generated} fingerprints.\n"
-                                    f"Total fingerprints in folder: {len(cache['files'])}")
-        else:
-            QMessageBox.information(self, "Fingerprints Generated", 
-                                    f"Generated {generated} new fingerprints.\n"
-                                    f"Total fingerprints in folder: {len(cache['files'])}")
-        self._update_fingerprint_ui()
+        if hasattr(self, '_fingerprint_thread'):
+            self._fingerprint_thread.quit()
+            self._fingerprint_thread.wait()
+            self._fingerprint_thread.deleteLater()
+            delattr(self, '_fingerprint_thread')
+            
+        if hasattr(self, '_fingerprint_progress'):
+            delattr(self, '_fingerprint_progress')
 
     def _auto_label_with_fingerprints(self):
         """Auto-label files in current folder based on fingerprint matches from practice folders."""
