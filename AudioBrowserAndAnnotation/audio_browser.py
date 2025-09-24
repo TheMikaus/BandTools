@@ -1327,6 +1327,10 @@ class AudioBrowser(QMainWindow):
         
         self.fingerprint_threshold: float = float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
         self.fingerprint_cache: Dict[str, Dict] = {}  # loaded per directory
+        
+        # Auto-labeling state management
+        self.auto_label_in_progress: bool = False
+        self.auto_label_backup_names: Dict[str, str] = {}
 
         # UI
         self._init_ui()
@@ -1839,6 +1843,24 @@ class AudioBrowser(QMainWindow):
         self.fingerprint_status = QLabel("")
         self.fingerprint_status.setStyleSheet("color: #666; font-size: 11px;")
         fp_layout.addWidget(self.fingerprint_status)
+        
+        # Apply/Cancel buttons for auto-labeling (initially hidden)
+        self.auto_label_buttons_row = QHBoxLayout()
+        self.auto_label_buttons_row.addStretch(1)  # Push buttons to the right
+        self.auto_label_apply_btn = QPushButton("Apply")
+        self.auto_label_apply_btn.clicked.connect(self._on_auto_label_apply)
+        self.auto_label_apply_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }")
+        self.auto_label_buttons_row.addWidget(self.auto_label_apply_btn)
+        
+        self.auto_label_cancel_btn = QPushButton("Cancel")
+        self.auto_label_cancel_btn.clicked.connect(self._on_auto_label_cancel)
+        self.auto_label_cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; }")
+        self.auto_label_buttons_row.addWidget(self.auto_label_cancel_btn)
+        
+        self.auto_label_buttons_widget = QWidget()
+        self.auto_label_buttons_widget.setLayout(self.auto_label_buttons_row)
+        self.auto_label_buttons_widget.setVisible(False)  # Initially hidden
+        fp_layout.addWidget(self.auto_label_buttons_widget)
         
         lib_layout.addWidget(fp_group)
         
@@ -3653,9 +3675,10 @@ class AudioBrowser(QMainWindow):
         total_available_songs = len(fingerprint_map)
         unique_songs = sum(1 for song_entries in fingerprint_map.values() if len(song_entries) == 1)
         
-        # Enable auto-label if we have practice folders with fingerprints
-        can_auto_label = bool(practice_folders) and (len(practice_folders) > 1 or 
-                             (len(practice_folders) == 1 and practice_folders[0].resolve() != current_dir.resolve()))
+        # Enable auto-label if we have practice folders with fingerprints AND no auto-labeling in progress
+        can_auto_label = (not self.auto_label_in_progress and 
+                         bool(practice_folders) and (len(practice_folders) > 1 or 
+                             (len(practice_folders) == 1 and practice_folders[0].resolve() != current_dir.resolve())))
         
         if practice_folders:
             # Show practice folder information
@@ -3816,7 +3839,16 @@ class AudioBrowser(QMainWindow):
 
     def _auto_label_with_fingerprints(self):
         """Auto-label files in current folder based on fingerprint matches from practice folders."""
+        # Check if auto-labeling is already in progress
+        if self.auto_label_in_progress:
+            QMessageBox.warning(self, "Auto-Labeling In Progress", 
+                              "Auto-labeling is already in progress. Please apply or cancel the current operation first.")
+            return
+            
         current_dir = self._get_audio_file_dir()
+        
+        # Create backup of current provided names
+        self.auto_label_backup_names = self.provided_names.copy()
         
         # Discover all practice folders with fingerprints
         practice_folders = discover_practice_folders_with_fingerprints(self.root_path)
@@ -3918,27 +3950,81 @@ class AudioBrowser(QMainWindow):
         
         progress.setValue(len(unlabeled_files))
         
-        # Save results
+        # Don't save immediately - show apply/cancel buttons instead
         if matches_found > 0:
+            # Update fingerprint cache but don't save names yet
             save_fingerprint_cache(current_dir, current_cache)
-            self._save_names()
             self._refresh_right_table()
+            
+            # Set auto-labeling state and show apply/cancel buttons
+            self.auto_label_in_progress = True
+            self.auto_label_buttons_widget.setVisible(True)
+            
+            # Show summary of what would be applied
+            result_message = f"Found {matches_found} matches out of {len(unlabeled_files)} unlabeled files.\n"
+            result_message += f"Unique matches (song in only one folder): {unique_matches}\n"
+            result_message += f"Threshold: {self.fingerprint_threshold:.0%}\n"
+            result_message += f"Scanned {len(practice_folders)} practice folders\n\n"
+            
+            if match_details:
+                result_message += "Match details:\n"
+                for detail in match_details[:5]:  # Show first 5 matches
+                    unique_indicator = " (unique)" if detail["unique"] else ""
+                    result_message += f"• {detail['file']} → {detail['match']} ({detail['score']:.0%}, from {detail['folder']}){unique_indicator}\n"
+                if len(match_details) > 5:
+                    result_message += f"... and {len(match_details) - 5} more matches\n"
+                    
+            result_message += "\nUse Apply to save these changes or Cancel to discard them."
+            
+            QMessageBox.information(self, "Auto-Labeling Preview", result_message)
+        else:
+            # No matches found, no need for apply/cancel buttons
+            result_message = f"No matches found for {len(unlabeled_files)} unlabeled files.\n"
+            result_message += f"Threshold: {self.fingerprint_threshold:.0%}\n"
+            result_message += f"Scanned {len(practice_folders)} practice folders"
+            
+            QMessageBox.information(self, "Auto-Labeling Complete", result_message)
+
+    def _on_auto_label_apply(self):
+        """Apply the auto-labeling changes and hide the apply/cancel buttons."""
+        if not self.auto_label_in_progress:
+            return
+            
+        # Save the changes
+        self._save_names()
         
-        # Show detailed results
-        result_message = f"Found {matches_found} matches out of {len(unlabeled_files)} unlabeled files.\n"
-        result_message += f"Unique matches (song in only one folder): {unique_matches}\n"
-        result_message += f"Threshold: {self.fingerprint_threshold:.0%}\n"
-        result_message += f"Scanned {len(practice_folders)} practice folders\n\n"
+        # Reset state
+        self.auto_label_in_progress = False
+        self.auto_label_backup_names.clear()
+        self.auto_label_buttons_widget.setVisible(False)
         
-        if match_details:
-            result_message += "Match details:\n"
-            for detail in match_details[:5]:  # Show first 5 matches
-                unique_indicator = " (unique)" if detail["unique"] else ""
-                result_message += f"• {detail['file']} → {detail['match']} ({detail['score']:.0%}, from {detail['folder']}){unique_indicator}\n"
-            if len(match_details) > 5:
-                result_message += f"... and {len(match_details) - 5} more matches"
+        # Update UI state
+        self._update_fingerprint_ui()
         
-        QMessageBox.information(self, "Auto-Labeling Complete", result_message)
+        # Show confirmation
+        QMessageBox.information(self, "Changes Applied", 
+                              "Auto-labeling changes have been saved successfully.")
+
+    def _on_auto_label_cancel(self):
+        """Cancel the auto-labeling changes and restore the previous state."""
+        if not self.auto_label_in_progress:
+            return
+            
+        # Restore the backup
+        self.provided_names = self.auto_label_backup_names.copy()
+        self._refresh_right_table()
+        
+        # Reset state
+        self.auto_label_in_progress = False
+        self.auto_label_backup_names.clear()
+        self.auto_label_buttons_widget.setVisible(False)
+        
+        # Update UI state
+        self._update_fingerprint_ui()
+        
+        # Show confirmation
+        QMessageBox.information(self, "Changes Cancelled", 
+                              "Auto-labeling changes have been discarded.")
 
     def _generate_fingerprints_for_reference_folder(self):
         """Generate fingerprints for the reference folder."""
