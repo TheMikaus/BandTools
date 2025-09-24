@@ -25,18 +25,21 @@ The system now supports four different fingerprinting algorithms that users can 
 - **Output Size**: 32-dimensional vector optimized for cosine similarity
 - **Use Case**: Ideal for band practice recordings with partial song matches
 
-#### 1.3 ChromaPrint-style (Mock Implementation)
-- **Chroma Features**: Extracts musical note-based characteristics
-- **Harmonic Analysis**: Sums harmonics for each chroma class (12 musical notes)
-- **Output Size**: 96 elements (12 chroma × 8 segments)
-- **Use Case**: Good for matching songs with similar musical content
+#### 1.3 ChromaPrint-style Implementation
+- **Chroma Features**: Extracts 12 pitch class features (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+- **Frequency Mapping**: Maps FFT bins to chroma classes using proper pitch class calculation
+- **Temporal Analysis**: Processes overlapping frames with smoothing and quantization
+- **Hash Generation**: Creates binary-like features by comparing adjacent frames
+- **Output Size**: 144 elements (12 chroma classes × 12 temporal frames)
+- **Use Case**: Excellent for matching songs with similar harmonic content
 
-#### 1.4 AudFprint-style (Mock Implementation)  
-- **Constellation Approach**: Peak-based fingerprinting similar to audfprint
-- **Peak Detection**: Finds spectral peaks in frequency domain
-- **Features**: Combines peak frequencies and magnitudes
-- **Output Size**: 200 elements (10 peaks × 2 features × 10 segments)
-- **Use Case**: Robust against noise and variations
+#### 1.4 AudFprint-style Implementation  
+- **Constellation Mapping**: Finds prominent spectral peaks across time-frequency space
+- **Peak Detection**: Locates local maxima in spectrogram with magnitude thresholding
+- **Hash Pairs**: Creates robust hash combinations from peak pairs with time deltas
+- **Landmark Points**: Uses anchor/target point methodology for noise resistance
+- **Output Size**: 256 elements (hash-based constellation features)
+- **Use Case**: Highly robust against noise, time shifts, and audio degradation
 
 ### 2. Algorithm Selection and Management
 - **UI Selection**: Dropdown menu in fingerprinting section

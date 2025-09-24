@@ -617,107 +617,239 @@ def compute_lightweight_fingerprint(samples: List[float], sr: int) -> List[float
 
 def compute_chromaprint_fingerprint(samples: List[float], sr: int) -> List[float]:
     """
-    Mock ChromaPrint/AcoustID fingerprint algorithm.
-    In a real implementation, this would use the chromaprint library.
-    For now, this is a placeholder that generates a different fingerprint pattern.
+    ChromaPrint-inspired fingerprint algorithm.
+    Based on the actual ChromaPrint methodology:
+    - Extracts chroma features (12 semitone classes) 
+    - Uses overlapping frames with FFT analysis
+    - Maps frequencies to chroma bins using proper pitch class mapping
+    - Applies temporal smoothing and quantization
+    - Generates compact binary-like hash representation
     """
     if not HAVE_NUMPY:
-        return [0.2] * 96  # Different size from other algorithms
+        # Simple fallback without numpy
+        return [float(i % 12) / 12.0 for i in range(144)]  # 12 chroma * 12 frames
         
     arr = np.asarray(samples, dtype=np.float32)
     
-    # Mock chromaprint-style processing
-    # Real ChromaPrint would extract chroma features and create hash fingerprints
-    # This is a simplified version that creates a different pattern
+    # ChromaPrint-style parameters
+    frame_size = 4096  # Frame size for FFT
+    hop_length = frame_size // 4  # 75% overlap
     
-    segment_length = min(sr, len(arr) // 4)  # Different segment size
-    if segment_length < 256:
-        segment_length = min(256, len(arr))
+    # Chroma parameters
+    n_chroma = 12  # 12 semitones (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
+    min_frequency = 80.0  # Minimum frequency to consider (Hz)
+    max_frequency = min(sr // 2, 5000.0)  # Maximum frequency
     
-    fingerprint = []
-    hop_length = segment_length // 8  # Smaller hop for more detail
+    # Create frequency to chroma mapping
+    def freq_to_chroma(freq):
+        """Convert frequency to chroma class (0-11)"""
+        if freq <= 0:
+            return 0
+        # A4 (440 Hz) = note 69 in MIDI, which is chroma class 9 (A)
+        # Formula: chroma = (12 * log2(freq/440)) % 12, adjusted for A=9
+        note_number = 12 * np.log2(freq / 440.0) + 69
+        chroma_class = int(note_number) % 12
+        return chroma_class
     
-    for i in range(0, len(arr) - segment_length + 1, hop_length):
-        segment = arr[i:i + segment_length]
+    chroma_frames = []
+    window = np.hanning(frame_size)
+    
+    for i in range(0, len(arr) - frame_size + 1, hop_length):
+        frame = arr[i:i + frame_size] * window
         
-        # Mock chroma-like feature extraction
-        fft = np.fft.rfft(segment * np.hanning(len(segment)))
-        magnitude = np.abs(fft)
+        # Compute FFT
+        fft_result = np.fft.rfft(frame)
+        magnitude = np.abs(fft_result)
         
-        # Extract 12 chroma-like features (representing musical notes)
-        n_chroma = 12
-        chroma_features = []
+        # Create frequency bins
+        freqs = np.fft.rfftfreq(frame_size, 1.0 / sr)
         
-        for c in range(n_chroma):
-            # Sum harmonics that correspond to this chroma class
-            chroma_energy = 0.0
-            for harmonic in range(1, 6):  # First 5 harmonics
-                freq_bin = int(c * len(magnitude) / n_chroma * harmonic) % len(magnitude)
-                if freq_bin < len(magnitude):
-                    chroma_energy += magnitude[freq_bin]
-            chroma_features.append(float(chroma_energy))
+        # Initialize chroma vector
+        chroma_vector = np.zeros(n_chroma)
         
-        # Normalize
-        total = sum(chroma_features)
-        if total > 0:
-            chroma_features = [f / total for f in chroma_features]
+        # Map frequency bins to chroma classes
+        for j, freq in enumerate(freqs):
+            if min_frequency <= freq <= max_frequency:
+                chroma_class = freq_to_chroma(freq)
+                chroma_vector[chroma_class] += magnitude[j]
+        
+        # Normalize the chroma vector
+        total_energy = np.sum(chroma_vector)
+        if total_energy > 0:
+            chroma_vector = chroma_vector / total_energy
             
-        fingerprint.extend(chroma_features)
+        chroma_frames.append(chroma_vector)
     
-    # Limit to reasonable size
-    return fingerprint[:96]  # 12 chroma * 8 segments
+    if not chroma_frames:
+        return [0.0] * (n_chroma * 12)  # Fallback
+    
+    # Convert to numpy array for easier manipulation
+    chroma_matrix = np.array(chroma_frames)
+    
+    # Apply temporal smoothing (simple moving average)
+    smoothed_chroma = []
+    window_size = 3
+    for i in range(len(chroma_matrix)):
+        start_idx = max(0, i - window_size // 2)
+        end_idx = min(len(chroma_matrix), i + window_size // 2 + 1)
+        smoothed_frame = np.mean(chroma_matrix[start_idx:end_idx], axis=0)
+        smoothed_chroma.append(smoothed_frame)
+    
+    # Quantize and create hash-like features
+    # ChromaPrint-style: compare adjacent frames to create binary features
+    hash_features = []
+    for i in range(len(smoothed_chroma) - 1):
+        current_frame = smoothed_chroma[i]
+        next_frame = smoothed_chroma[i + 1]
+        
+        # Create binary-like features by comparing chroma values
+        frame_hash = []
+        for c in range(n_chroma):
+            # Compare current vs next frame for each chroma class
+            diff = next_frame[c] - current_frame[c]
+            # Convert to quantized feature (0.0 or 1.0)
+            feature = 1.0 if diff > 0 else 0.0
+            frame_hash.append(feature)
+        
+        hash_features.extend(frame_hash)
+    
+    # Limit to consistent size (12 chroma classes * 12 time frames = 144 features)
+    target_size = 144
+    if len(hash_features) > target_size:
+        # Downsample by taking every nth element
+        step = len(hash_features) / target_size
+        downsampled = [hash_features[int(i * step)] for i in range(target_size)]
+        return downsampled
+    elif len(hash_features) < target_size:
+        # Pad with zeros
+        return hash_features + [0.0] * (target_size - len(hash_features))
+    else:
+        return hash_features
 
 def compute_audfprint_fingerprint(samples: List[float], sr: int) -> List[float]:
     """
-    Mock audfprint (constellation/fingerprint approach) algorithm.
-    Real audfprint uses peak constellation matching.
-    This is a placeholder with a different pattern.
+    AudFprint-inspired constellation fingerprint algorithm.
+    Based on the actual audfprint methodology:
+    - Creates spectrogram and finds prominent spectral peaks
+    - Uses constellation mapping with landmark/anchor points
+    - Generates hash pairs from peak combinations in time-frequency space
+    - Creates robust fingerprint resistant to noise and time shifting
     """
     if not HAVE_NUMPY:
-        return [0.3] * 200  # Different size again
+        # Simple fallback without numpy
+        return [float((i * 7 + 13) % 256) / 256.0 for i in range(256)]
         
     arr = np.asarray(samples, dtype=np.float32)
     
-    # Mock constellation-style processing
-    # Real audfprint would find spectral peaks and create hash pairs
-    segment_length = sr // 4  # 0.25 second segments
-    if segment_length < 512:
-        segment_length = min(512, len(arr))
-        
-    constellation_features = []
-    hop_length = segment_length // 2  # 50% overlap
+    # AudFprint-style parameters
+    frame_size = 2048  # Frame size for STFT
+    hop_length = frame_size // 4  # 75% overlap
+    n_peaks_per_frame = 5  # Number of peaks to extract per frame
     
-    for i in range(0, len(arr) - segment_length + 1, hop_length):
-        segment = arr[i:i + segment_length]
+    # Frequency range for peak detection
+    min_freq_bin = int(300 * frame_size / sr)  # ~300 Hz minimum
+    max_freq_bin = int(2000 * frame_size / sr)  # ~2000 Hz maximum
+    max_freq_bin = min(max_freq_bin, frame_size // 2)
+    
+    # Peak detection parameters
+    peak_threshold_ratio = 0.3  # Minimum relative magnitude for peaks
+    
+    constellation_points = []  # List of (time_frame, freq_bin, magnitude) tuples
+    window = np.hanning(frame_size)
+    
+    # Step 1: Create spectrogram and extract peaks
+    time_frame = 0
+    for i in range(0, len(arr) - frame_size + 1, hop_length):
+        frame = arr[i:i + frame_size] * window
         
-        # Mock peak finding in frequency domain
-        fft = np.fft.rfft(segment * np.hanning(len(segment)))
-        magnitude = np.abs(fft)
+        # Compute FFT
+        fft_result = np.fft.rfft(frame)
+        magnitude = np.abs(fft_result)
         
-        # Find local peaks (simplified)
+        # Find local maxima (peaks) in the specified frequency range
         peaks = []
-        for j in range(2, len(magnitude) - 2):
+        for j in range(min_freq_bin + 2, min(max_freq_bin, len(magnitude) - 2)):
+            # Check if this bin is a local maximum
             if (magnitude[j] > magnitude[j-1] and 
                 magnitude[j] > magnitude[j+1] and
                 magnitude[j] > magnitude[j-2] and 
                 magnitude[j] > magnitude[j+2]):
-                peaks.append((j, magnitude[j]))
-        
-        # Sort by magnitude and take top peaks
-        peaks.sort(key=lambda x: x[1], reverse=True)
-        top_peaks = peaks[:10]  # Top 10 peaks
-        
-        # Create features from peak positions and magnitudes
-        segment_features = [0.0] * 20  # 10 peaks * 2 features each
-        for idx, (freq_bin, mag) in enumerate(top_peaks):
-            if idx < 10:
-                segment_features[idx * 2] = float(freq_bin) / len(magnitude)  # Normalized frequency
-                segment_features[idx * 2 + 1] = float(mag) / np.max(magnitude)  # Normalized magnitude
                 
-        constellation_features.extend(segment_features)
+                # Check if magnitude is above threshold
+                frame_max = np.max(magnitude[min_freq_bin:max_freq_bin])
+                if magnitude[j] > peak_threshold_ratio * frame_max:
+                    peaks.append((j, magnitude[j]))
+        
+        # Sort peaks by magnitude and take the strongest ones
+        peaks.sort(key=lambda x: x[1], reverse=True)
+        top_peaks = peaks[:n_peaks_per_frame]
+        
+        # Add peaks to constellation
+        for freq_bin, mag in top_peaks:
+            constellation_points.append((time_frame, freq_bin, mag))
+        
+        time_frame += 1
     
-    # Limit size and return
-    return constellation_features[:200]
+    if len(constellation_points) < 2:
+        return [0.0] * 256  # Fallback if no peaks found
+    
+    # Step 2: Create hash pairs from constellation points
+    hash_features = []
+    max_time_delta = 10  # Maximum time difference for hash pairs
+    
+    for i, (t1, f1, m1) in enumerate(constellation_points):
+        # Create hash pairs with nearby points
+        anchor_hashes = []
+        
+        for j, (t2, f2, m2) in enumerate(constellation_points[i+1:], i+1):
+            time_delta = t2 - t1
+            
+            # Only consider points within reasonable time distance
+            if time_delta > max_time_delta:
+                break
+            
+            if time_delta > 0:  # Ensure we're looking forward in time
+                # Create hash from frequency pair and time delta
+                # This simulates audfprint's hash generation
+                freq_hash = (f1 * 1000 + f2) % 65536  # Frequency pair hash
+                time_hash = time_delta * 4096  # Time delta component
+                combined_hash = (freq_hash + time_hash) % 65536
+                
+                # Normalize to 0-1 range
+                normalized_hash = combined_hash / 65536.0
+                anchor_hashes.append(normalized_hash)
+        
+        # Limit number of hashes per anchor point
+        anchor_hashes = anchor_hashes[:8]  # Max 8 hashes per anchor
+        hash_features.extend(anchor_hashes)
+        
+        # Stop if we have enough hash features
+        if len(hash_features) >= 256:
+            break
+    
+    # Step 3: Create consistent-sized fingerprint
+    target_size = 256  # Audfprint-style size
+    
+    if len(hash_features) > target_size:
+        # Use statistical sampling to maintain diversity
+        step = len(hash_features) / target_size
+        sampled = [hash_features[int(i * step)] for i in range(target_size)]
+        return sampled
+    elif len(hash_features) < target_size:
+        # Pad with derived values to maintain some structure
+        padding = []
+        for i in range(target_size - len(hash_features)):
+            # Create synthetic hash values based on existing ones
+            if hash_features:
+                base_idx = i % len(hash_features)
+                synthetic_hash = (hash_features[base_idx] + i * 0.001) % 1.0
+                padding.append(synthetic_hash)
+            else:
+                padding.append(float(i) / target_size)
+        
+        return hash_features + padding
+    else:
+        return hash_features
 
 # Dictionary of available algorithms
 FINGERPRINT_ALGORITHMS = {
@@ -733,12 +865,12 @@ FINGERPRINT_ALGORITHMS = {
     },
     "chromaprint": {
         "name": "ChromaPrint-style",
-        "description": "Mock chroma-based fingerprinting",
+        "description": "Chroma-based fingerprinting with pitch class mapping",
         "compute_func": compute_chromaprint_fingerprint
     },
     "audfprint": {
         "name": "AudFprint-style",
-        "description": "Mock constellation/peak-based approach", 
+        "description": "Constellation approach with spectral peak hashing", 
         "compute_func": compute_audfprint_fingerprint
     }
 }
