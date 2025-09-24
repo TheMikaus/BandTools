@@ -1353,6 +1353,7 @@ class AudioBrowser(QMainWindow):
         self.clip_sel_start_ms: Optional[int] = None
         self.clip_sel_end_ms: Optional[int] = None
         self._clip_play_end_ms: Optional[int] = None
+        self._clip_play_start_ms: Optional[int] = None  # For looping clips
         self._clip_playing: bool = False
         # Sub-section playback state
         self._subsection_start_ms: Optional[int] = None
@@ -1843,6 +1844,7 @@ class AudioBrowser(QMainWindow):
         player_bar.addWidget(self.output_device_combo)
 
         self.auto_progress_cb = QCheckBox("Auto-progress"); player_bar.addWidget(self.auto_progress_cb)
+        self.loop_cb = QCheckBox("Loop"); player_bar.addWidget(self.loop_cb)
 
         right_layout.addLayout(player_bar)
 
@@ -2063,8 +2065,6 @@ class AudioBrowser(QMainWindow):
         self.subsec_name_edit = QLineEdit(); self.subsec_name_edit.setPlaceholderText("e.g. Chorus, Verse 1, Solo")
         self.subsec_name_edit.setMaximumWidth(150)
         subsec_row.addWidget(self.subsec_name_edit)
-        self.subsec_loops_cb = QCheckBox("Loops")
-        subsec_row.addWidget(self.subsec_loops_cb)
         self.subsec_label_btn = QPushButton("Label Subsection")
         self.subsec_clear_all_btn = QPushButton("Clear All")
         self.subsec_relabel_all_btn = QPushButton("Re-label All")
@@ -2912,7 +2912,6 @@ class AudioBrowser(QMainWindow):
         try:
             end_ms = entry.get("end_ms")
             is_subsection = entry.get("subsection", False)
-            loops = entry.get("loops", False)
             if end_ms is not None:
                 # time item is at self._c_time
                 titem = self.annotation_table.item(r, self._c_time)
@@ -2920,8 +2919,6 @@ class AudioBrowser(QMainWindow):
                     time_text = f"{human_time_ms(int(ms))} - {human_time_ms(int(end_ms))}"
                     if is_subsection:
                         time_text += " [SUB]"
-                        if loops:
-                            time_text += " [LOOP]"
                     titem.setText(time_text)
                     titem.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                     
@@ -3058,7 +3055,6 @@ class AudioBrowser(QMainWindow):
         """Play a sub-section with optional looping."""
         start_ms = int(entry.get("ms", 0))
         end_ms = int(entry.get("end_ms", 0))
-        loops = entry.get("loops", False)
         
         if end_ms <= start_ms:
             return
@@ -3066,7 +3062,7 @@ class AudioBrowser(QMainWindow):
         # Set up sub-section playback
         self._subsection_start_ms = start_ms
         self._subsection_end_ms = end_ms
-        self._subsection_loops = loops
+        self._subsection_loops = self.loop_cb.isChecked()  # Use global loop state
         self._subsection_playing = True
         
         # Start playback
@@ -3485,6 +3481,8 @@ class AudioBrowser(QMainWindow):
         if int(self.clip_sel_start_ms) >= int(self.clip_sel_end_ms): return
         self._clip_play_end_ms = int(self.clip_sel_end_ms)
         self._clip_playing = True
+        # Store clip start for looping
+        self._clip_play_start_ms = int(self.clip_sel_start_ms)
         self.player.setPosition(int(self.clip_sel_start_ms)); self.player.play()
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
@@ -3492,15 +3490,21 @@ class AudioBrowser(QMainWindow):
         # Handle clip playback ending
         if self._clip_playing and self._clip_play_end_ms is not None:
             if int(pos_ms) >= int(self._clip_play_end_ms):
-                self.player.pause()
-                self._clip_playing = False
-                self._clip_play_end_ms = None
-                self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+                if self.loop_cb.isChecked() and self._clip_play_start_ms is not None:
+                    # Loop back to clip start
+                    self.player.setPosition(int(self._clip_play_start_ms))
+                else:
+                    # Stop playing
+                    self.player.pause()
+                    self._clip_playing = False
+                    self._clip_play_end_ms = None
+                    self._clip_play_start_ms = None
+                    self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
                 
         # Handle sub-section playback and looping
         if self._subsection_playing and self._subsection_end_ms is not None:
             if int(pos_ms) >= int(self._subsection_end_ms):
-                if self._subsection_loops and self._subsection_start_ms is not None:
+                if self.loop_cb.isChecked() and self._subsection_start_ms is not None:
                     # Loop back to start
                     self.player.setPosition(int(self._subsection_start_ms))
                 else:
@@ -3514,7 +3518,7 @@ class AudioBrowser(QMainWindow):
 
     def _on_clip_cancel_clicked(self):
         self.clip_sel_start_ms = None; self.clip_sel_end_ms = None
-        self._clip_play_end_ms = None; self._clip_playing = False
+        self._clip_play_end_ms = None; self._clip_play_start_ms = None; self._clip_playing = False
         # Also reset sub-section playback
         self._subsection_playing = False
         self._subsection_start_ms = None
@@ -3563,7 +3567,6 @@ class AudioBrowser(QMainWindow):
             
         fname = self.current_audio_file.name
         uid = self._uid_counter; self._uid_counter += 1
-        loops = self.subsec_loops_cb.isChecked()
         
         entry = {
             "uid": int(uid), 
@@ -3571,15 +3574,13 @@ class AudioBrowser(QMainWindow):
             "end_ms": int(self.clip_sel_end_ms), 
             "text": name, 
             "important": False,
-            "subsection": True,
-            "loops": loops
+            "subsection": True
         }
         
         self.notes_by_file.setdefault(fname, []).append(entry)
         self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
         self.subsec_name_edit.clear()
-        self.subsec_loops_cb.setChecked(False)
         self._on_clip_cancel_clicked()
         self._schedule_save_notes()
 
@@ -3800,8 +3801,7 @@ class AudioBrowser(QMainWindow):
                 "end_ms": int(subsection.get("end_ms", 0)),
                 "text": str(subsection.get("text", "")),
                 "important": False,
-                "subsection": True,
-                "loops": subsection.get("loops", False)
+                "subsection": True
             }
             self.notes_by_file[fname].append(entry)
             copied_count += 1
