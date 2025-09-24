@@ -115,6 +115,72 @@ MARKER_HIT_TOLERANCE_PX = 8
 # Conversion
 DEFAULT_MP3_BITRATE = "192k"
 
+# ========== Custom Widgets ==========
+class BestTakeIndicatorWidget(QWidget):
+    """Custom widget that shows colored squares for each annotation set that marked a file as best take."""
+    
+    def __init__(self, best_take_sets: List[Dict[str, Any]], current_set_id: str = "", parent=None):
+        super().__init__(parent)
+        self.best_take_sets = best_take_sets
+        self.current_set_id = current_set_id
+        self.setMinimumHeight(20)
+        self.setMaximumHeight(20)
+        # Make it checkable-like behavior for the current set
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw background
+        painter.fillRect(self.rect(), QColor(255, 255, 255))
+        
+        if not self.best_take_sets:
+            return
+            
+        # Calculate square size and spacing
+        square_size = min(16, self.height() - 4)
+        spacing = 2
+        total_width = len(self.best_take_sets) * square_size + (len(self.best_take_sets) - 1) * spacing
+        start_x = max(2, (self.width() - total_width) // 2)
+        start_y = (self.height() - square_size) // 2
+        
+        # Draw colored squares for each annotation set
+        for i, best_take_set in enumerate(self.best_take_sets):
+            x = start_x + i * (square_size + spacing)
+            color = QColor(best_take_set["color"])
+            
+            # Draw the square
+            painter.fillRect(x, start_y, square_size, square_size, color)
+            
+            # Draw border (thicker for current set)
+            pen_width = 3 if best_take_set["id"] == self.current_set_id else 1
+            painter.setPen(QPen(QColor(0, 0, 0), pen_width))
+            painter.drawRect(x, start_y, square_size, square_size)
+    
+    def update_best_takes(self, best_take_sets: List[Dict[str, Any]], current_set_id: str = ""):
+        self.best_take_sets = best_take_sets
+        self.current_set_id = current_set_id
+        self.update()
+
+    def mousePressEvent(self, event):
+        """Handle clicks to toggle best take for current set."""
+        # Calculate which square was clicked (if any)
+        if not self.best_take_sets:
+            return
+            
+        square_size = min(16, self.height() - 4)
+        spacing = 2
+        total_width = len(self.best_take_sets) * square_size + (len(self.best_take_sets) - 1) * spacing
+        start_x = max(2, (self.width() - total_width) // 2)
+        
+        click_x = event.pos().x()
+        
+        # Check if click is within the squares area
+        if click_x >= start_x and click_x <= start_x + total_width:
+            # Emit a custom signal or call parent method
+            self.parent().on_best_take_clicked()
+
 # ========== Helpers ==========
 def human_time_ms(ms: int) -> str:
     if ms < 0: return "0:00"
@@ -1365,6 +1431,7 @@ class AudioBrowser(QMainWindow):
         # Populate UI
         self._refresh_set_combo()
         self._refresh_right_table()
+        self._refresh_annotation_legend()
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
         self._refresh_important_table()
@@ -1437,6 +1504,7 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         self._update_folder_notes_ui()
         self._refresh_important_table()
+        self._refresh_annotation_legend()
         self._update_fingerprint_ui()
         self.waveform.clear()
 
@@ -1915,6 +1983,10 @@ class AudioBrowser(QMainWindow):
         self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
 
         self.table.cellClicked.connect(self._on_library_cell_clicked)
+        
+        # Add legend for annotation set colors
+        self.legend_widget = self._create_annotation_legend()
+        lib_layout.addWidget(self.legend_widget)
 # Annotations tab
         self.ann_tab = QWidget(); ann_layout = QVBoxLayout(self.ann_tab)
 
@@ -2064,6 +2136,54 @@ class AudioBrowser(QMainWindow):
         self._general_save_timer = QTimer(self); self._general_save_timer.setSingleShot(True); self._general_save_timer.timeout.connect(self._save_notes)
         self._folder_save_timer = QTimer(self); self._folder_save_timer.setSingleShot(True); self._folder_save_timer.timeout.connect(self._save_notes)
 
+    def _create_annotation_legend(self) -> QWidget:
+        """Create a legend widget showing annotation set colors and names."""
+        legend_widget = QWidget()
+        legend_layout = QHBoxLayout(legend_widget)
+        legend_layout.setContentsMargins(5, 5, 5, 5)
+        
+        legend_label = QLabel("Best Take Legend:")
+        legend_label.setStyleSheet("font-weight: bold;")
+        legend_layout.addWidget(legend_label)
+        
+        # Create colored squares with labels for each visible annotation set
+        for aset in self.annotation_sets:
+            if not aset.get("visible", True):
+                continue
+                
+            # Create a container for this legend item
+            item_widget = QWidget()
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(5)
+            
+            # Color square
+            color_square = QLabel()
+            color_square.setFixedSize(16, 16)
+            color_square.setStyleSheet(f"background-color: {aset.get('color', '#00cc66')}; border: 1px solid black;")
+            item_layout.addWidget(color_square)
+            
+            # Set name
+            name_label = QLabel(aset.get("name", "Unknown"))
+            name_label.setStyleSheet("font-size: 12px;")
+            item_layout.addWidget(name_label)
+            
+            legend_layout.addWidget(item_widget)
+        
+        legend_layout.addStretch()  # Push everything to the left
+        return legend_widget
+    
+    def _refresh_annotation_legend(self):
+        """Refresh the annotation legend when sets change."""
+        # Remove old legend and create new one
+        lib_layout = self.lib_tab.layout()
+        if hasattr(self, 'legend_widget') and self.legend_widget:
+            lib_layout.removeWidget(self.legend_widget)
+            self.legend_widget.deleteLater()
+        
+        self.legend_widget = self._create_annotation_legend()
+        lib_layout.addWidget(self.legend_widget)
+
     # ----- Set controls helpers -----
     def _refresh_set_combo(self):
         self.set_combo.blockSignals(True)
@@ -2098,6 +2218,7 @@ class AudioBrowser(QMainWindow):
         self._update_waveform_annotations()
         self._refresh_important_table()
         self._update_folder_notes_ui()  # Update folder notes UI when set changes
+        self._refresh_right_table()  # Refresh table to show current set's best takes with border
 
     def _on_set_visible_toggled(self, _state):
         aset = self._get_current_set()
@@ -2106,6 +2227,8 @@ class AudioBrowser(QMainWindow):
         self._save_notes()
         self._update_waveform_annotations()
         self._refresh_important_table()
+        self._refresh_annotation_legend()
+        self._refresh_right_table()
         self._load_annotations_for_current()
 
     def _on_set_pick_color(self):
@@ -2135,6 +2258,8 @@ class AudioBrowser(QMainWindow):
         self._refresh_set_combo()
         self._load_annotations_for_current()
         self._save_notes()
+        self._refresh_annotation_legend()
+        self._refresh_right_table()
 
     def _on_rename_set(self):
         aset = self._get_current_set()
@@ -2169,6 +2294,8 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         self._save_notes()
         self._refresh_important_table()
+        self._refresh_annotation_legend()
+        self._refresh_right_table()
 
     # ----- Show-all toggle -----
     def _on_show_all_toggled(self, _state):
@@ -2350,6 +2477,7 @@ class AudioBrowser(QMainWindow):
             self._refresh_set_combo()
             self._refresh_right_table()  # Refresh library table to show files from the new directory
             self._update_folder_notes_ui()  # Update folder notes UI for the new directory
+            self._refresh_annotation_legend()
         
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
@@ -2545,50 +2673,68 @@ class AudioBrowser(QMainWindow):
         if not target_dir.exists(): return []
         return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
 
+    def _get_all_best_takes_for_file(self, filename: str) -> List[Dict[str, Any]]:
+        """Get all annotation sets that have marked this file as a best take, along with their colors."""
+        best_take_sets = []
+        for aset in self.annotation_sets:
+            if not aset.get("visible", True):
+                continue  # Skip invisible sets
+            file_meta = aset.get("files", {}).get(filename, {})
+            if file_meta.get("best_take", False):
+                best_take_sets.append({
+                    "id": aset.get("id"),
+                    "name": aset.get("name", "Unknown"),
+                    "color": aset.get("color", "#00cc66")
+                })
+        return best_take_sets
+
     def _refresh_right_table(self):
         files = self._list_audio_in_current_dir()
         self.table.blockSignals(True); self.table.setRowCount(len(files))
         for row, p in enumerate(files):
             item_file = QTableWidgetItem(p.name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
             
-            # Best Take checkbox
-            item_best_take = QTableWidgetItem()
-            item_best_take.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsUserCheckable)
-            is_best_take = self.file_best_takes.get(p.name, False)
-            item_best_take.setCheckState(Qt.CheckState.Checked if is_best_take else Qt.CheckState.Unchecked)
+            # Get all best takes for this file from all visible annotation sets
+            best_take_sets = self._get_all_best_takes_for_file(p.name)
+            
+            # Create best take indicator widget
+            best_take_widget = BestTakeIndicatorWidget(best_take_sets, self.current_set_id, self.table)
+            best_take_widget.on_best_take_clicked = lambda row=row: self._on_best_take_widget_clicked(row)
             
             item_name = QTableWidgetItem(self.provided_names.get(p.name, "")); item_name.setToolTip("Double-click to edit your Provided Name")
             
-            # Set green background for best takes
-            if is_best_take:
-                green_color = QColor(200, 255, 200)  # Light green
-                item_file.setBackground(green_color)
-                item_best_take.setBackground(green_color)
-                item_name.setBackground(green_color)
+            # Set light background for files with any best takes
+            if best_take_sets:
+                light_color = QColor(245, 255, 245)  # Very light green
+                item_file.setBackground(light_color)
+                item_name.setBackground(light_color)
             
             self.table.setItem(row, 0, item_file)
-            self.table.setItem(row, 1, item_best_take)
+            self.table.setCellWidget(row, 1, best_take_widget)  # Use setCellWidget for custom widget
             self.table.setItem(row, 2, item_name)
         self.table.blockSignals(False)
+
+    def _on_best_take_widget_clicked(self, row: int):
+        """Handle clicks on the best take indicator widget to toggle best take for current set."""
+        file_item = self.table.item(row, 0)
+        if not file_item:
+            return
+        filename = file_item.text()
+        
+        # Toggle best take for current set
+        is_currently_best = self.file_best_takes.get(filename, False)
+        self.file_best_takes[filename] = not is_currently_best
+        self._save_notes()
+        
+        # Refresh the entire table to update the display
+        self._refresh_right_table()
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
         row = item.row(); file_item = self.table.item(row, 0)
         if not file_item: return
         filename = file_item.text()
         
-        if item.column() == 1:  # Best Take checkbox
-            is_checked = item.checkState() == Qt.CheckState.Checked
-            self.file_best_takes[filename] = is_checked
-            self._save_notes()  # Save the annotation data including best_take
-            
-            # Update background colors for the entire row
-            green_color = QColor(200, 255, 200) if is_checked else QColor(255, 255, 255)
-            for col in range(self.table.columnCount()):
-                cell_item = self.table.item(row, col)
-                if cell_item:
-                    cell_item.setBackground(green_color)
-                    
-        elif item.column() == 2:  # Provided Name (editable)
+        if item.column() == 2:  # Provided Name (editable)
             self.provided_names[filename] = sanitize(item.text())
             self._save_names()
 
