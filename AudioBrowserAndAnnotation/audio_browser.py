@@ -1281,6 +1281,7 @@ class AudioBrowser(QMainWindow):
 
         self.settings = QSettings(APP_ORG, APP_NAME)
         self.root_path: Path = self._load_or_ask_root()
+        self.current_practice_folder: Path = self.root_path  # Initially same as root
         self.current_audio_file: Optional[Path] = None
         self.pending_note_start_ms: Optional[int] = None
         self.clip_sel_start_ms: Optional[int] = None
@@ -1406,6 +1407,7 @@ class AudioBrowser(QMainWindow):
 
     def _save_root(self, p: Path):
         self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
+        self.current_practice_folder = p  # Reset to root when changing root
         self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         self.fs_model.setRootPath(str(self.root_path))
         self._programmatic_selection = True
@@ -1431,24 +1433,29 @@ class AudioBrowser(QMainWindow):
         # When an audio file is selected, use its directory for provided names
         if self.current_audio_file:
             return self.current_audio_file.parent / NAMES_JSON
-        return self.root_path / NAMES_JSON
+        return self.current_practice_folder / NAMES_JSON
     def _notes_json_path(self) -> Path: 
         # When an audio file is selected, use its directory for annotations
         user_notes_filename = self._user_notes_filename()
         if self.current_audio_file:
             return self.current_audio_file.parent / user_notes_filename
-        return self.root_path / user_notes_filename
+        return self.current_practice_folder / user_notes_filename
     def _dur_json_path(self) -> Path: 
         # When an audio file is selected, use its directory for duration cache
         if self.current_audio_file:
             return self.current_audio_file.parent / DURATIONS_JSON
-        return self.root_path / DURATIONS_JSON
+        return self.current_practice_folder / DURATIONS_JSON
     
     def _get_audio_file_dir(self) -> Path:
-        """Return the directory containing the current audio file, or root_path if no file selected."""
+        """Return the directory containing the current audio file, or current_practice_folder if no file selected."""
         if self.current_audio_file:
             return self.current_audio_file.parent
-        return self.root_path
+        return self.current_practice_folder
+    
+    def _set_current_practice_folder(self, folder: Path):
+        """Update the current practice folder (distinct from root band practice folder)."""
+        if folder.exists() and folder.is_dir():
+            self.current_practice_folder = folder
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
         """Return the notes JSON path for the current audio file's directory."""
@@ -1482,7 +1489,7 @@ class AudioBrowser(QMainWindow):
         
         # Check for migration from legacy file
         user_notes_path = self._notes_json_path()
-        legacy_notes_path = (self.current_audio_file.parent if self.current_audio_file else self.root_path) / NOTES_JSON
+        legacy_notes_path = (self.current_audio_file.parent if self.current_audio_file else self.current_practice_folder) / NOTES_JSON
         
         # If user-specific file doesn't exist but legacy file does, migrate it
         if not user_notes_path.exists() and legacy_notes_path.exists():
@@ -2250,10 +2257,15 @@ class AudioBrowser(QMainWindow):
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
         fi = self._fi(idx)
         if fi.isDir():
+            # Update current practice folder when folder is selected
+            folder_path = Path(fi.absoluteFilePath())
+            self._set_current_practice_folder(folder_path)
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
+            # Update current practice folder when audio file is selected (to its parent directory)
+            self._set_current_practice_folder(path.parent)
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
             if self.current_audio_file and self.current_audio_file.resolve() == path.resolve():
@@ -2451,8 +2463,8 @@ class AudioBrowser(QMainWindow):
         return [p for p in sorted(self.root_path.iterdir()) if p.is_file() and p.suffix.lower() in {".wav",".wave"}]
 
     def _list_audio_in_current_dir(self) -> List[Path]:
-        """List audio files in the directory containing the currently selected song, or root if no song selected."""
-        target_dir = self.current_audio_file.parent if self.current_audio_file else self.root_path
+        """List audio files in the directory containing the currently selected song, or current practice folder if no song selected."""
+        target_dir = self.current_audio_file.parent if self.current_audio_file else self.current_practice_folder
         if not target_dir.exists(): return []
         return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
 
@@ -2522,7 +2534,7 @@ class AudioBrowser(QMainWindow):
             if not fname:
                 return
             from pathlib import Path as _P
-            path = (self.root_path / fname) if hasattr(self, 'root_path') else _P(fname)
+            path = (self.current_practice_folder / fname) if hasattr(self, 'current_practice_folder') else _P(fname)
             if not path.exists():
                 try:
                     from PyQt6.QtWidgets import QMessageBox
@@ -3066,13 +3078,13 @@ class AudioBrowser(QMainWindow):
         self.folder_notes_edit.blockSignals(True)
         aset = self._get_current_set()
         set_name = aset.get("name", "Unknown Set") if aset else "No Set"
-        # Show the current audio file's directory name, or root_path if no file selected
+        # Show the current audio file's directory name, or current practice folder if no file selected
         current_dir = self._get_audio_file_dir()
         self.folder_label.setText(f"Notes for current folder ({set_name}): {current_dir.name}")
         
         if self.show_all_folder_notes:
             # Show all folder notes from visible sets
-            self.folder_label.setText(f"Notes for current folder: {self.root_path.name} (All visible sets)")
+            self.folder_label.setText(f"Notes for current folder: {current_dir.name} (All visible sets)")
             
             # Collect folder notes from all visible sets
             notes_by_set = []
@@ -3103,7 +3115,7 @@ class AudioBrowser(QMainWindow):
             # Show only current set folder notes (original behavior)
             aset = self._get_current_set()
             set_name = aset.get("name", "Unknown Set") if aset else "No Set"
-            self.folder_label.setText(f"Notes for current folder ({set_name}): {self.root_path.name}")
+            self.folder_label.setText(f"Notes for current folder ({set_name}): {current_dir.name}")
             folder_notes = aset.get("folder_notes", "") if aset else ""
             self.folder_notes_edit.setPlainText(folder_notes or "")
             
@@ -3224,7 +3236,7 @@ class AudioBrowser(QMainWindow):
         if not aset:
             QMessageBox.information(self, "No Set", "No current annotation set selected."); return
         clips: list[tuple[Path, dict]] = []
-        base = self.root_path
+        base = self.current_practice_folder
         files = aset.get("files", {})
         for fname, meta in files.items():
             for e in (meta.get("notes") or []):
@@ -3236,7 +3248,7 @@ class AudioBrowser(QMainWindow):
 
         # Prepare destination folder
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = self.root_path / f"Clips_{ts}"
+        out_dir = self.current_practice_folder / f"Clips_{ts}"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Check pydub/ffmpeg
@@ -3263,7 +3275,7 @@ class AudioBrowser(QMainWindow):
             # load once
             ext = p.suffix.lower()
             try:
-                seg = AudioSegment.from_file(str((self.root_path / fname)))
+                seg = AudioSegment.from_file(str((self.current_practice_folder / fname)))
             except Exception as ex:
                 report_lines.append(f"Error loading {fname}: {ex}"); report_lines.append("\r\n"); continue
             # export entries
@@ -3296,7 +3308,7 @@ class AudioBrowser(QMainWindow):
     # ----- Important annotations (Folder tab) -----
     def _refresh_important_table(self):
         rows = []
-        parent_name = self.root_path.name
+        parent_name = self.current_practice_folder.name
         for s in self.annotation_sets:
             if not bool(s.get("visible", True)): continue
             set_name = s.get("name","Set"); sid = s.get("id")
@@ -3322,7 +3334,7 @@ class AudioBrowser(QMainWindow):
         fname = str(f_item.data(Qt.ItemDataRole.UserRole) or "")
         ms = int(t_item.data(Qt.ItemDataRole.UserRole) or 0)
         if not fname: return
-        target = self.root_path / fname
+        target = self.current_practice_folder / fname
         if not target.exists(): return
         for i in range(self.set_combo.count()):
             if str(self.set_combo.itemData(i)) == sid:
@@ -3343,7 +3355,7 @@ class AudioBrowser(QMainWindow):
 
     # ----- Export annotations (CRLF) -----
     def _export_annotations(self):
-        default_path = str((self.root_path / "annotations_export.txt").resolve())
+        default_path = str((self.current_practice_folder / "annotations_export.txt").resolve())
         save_path, _ = QFileDialog.getSaveFileName(self, "Export Annotations", default_path, "Text Files (*.txt);;All Files (*)")
         if not save_path: return
         lines: List[str] = []
@@ -3354,11 +3366,11 @@ class AudioBrowser(QMainWindow):
             folder_notes = (s.get("folder_notes", "") or "").strip()
             if folder_notes:
                 set_name = s.get("name", "Unknown Set")
-                lines.append(f"[Folder - {set_name}] {self.root_path}")
+                lines.append(f"[Folder - {set_name}] {self.current_practice_folder}")
                 for ln in folder_notes.replace("\r\n", "\n").split("\n"):
                     lines.append(ln.rstrip())
                 lines.append("")
-        parent_name = self.root_path.name
+        parent_name = self.current_practice_folder.name
         all_files = set()
         for s in self.annotation_sets:
             if not bool(s.get("visible", True)): continue
