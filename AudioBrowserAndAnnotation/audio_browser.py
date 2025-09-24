@@ -5012,6 +5012,9 @@ class AudioBrowser(QMainWindow):
         self._fingerprint_progress.setMinimumDuration(0)
         self._fingerprint_progress.setValue(0)
 
+        # Disable fingerprinting button to prevent concurrent operations  
+        self.generate_fingerprints_btn.setEnabled(False)
+
         # Create and setup the worker thread
         self._fingerprint_thread = QThread(self)
         self._fingerprint_worker = FingerprintWorker([str(f) for f in audio_files], str(current_dir), force_regenerate)
@@ -5050,11 +5053,13 @@ class AudioBrowser(QMainWindow):
                                             f"Total fingerprints in folder: {total_fingerprints}")
             
             # Update UI and cleanup
+            self.generate_fingerprints_btn.setEnabled(True)
             self._update_fingerprint_ui()
             self._cleanup_fingerprint_thread()
 
         def on_error():
             self._fingerprint_progress.hide()
+            self.generate_fingerprints_btn.setEnabled(True)
             QMessageBox.critical(self, "Fingerprinting Error", "An error occurred during fingerprint generation.")
             self._cleanup_fingerprint_thread()
 
@@ -5067,22 +5072,19 @@ class AudioBrowser(QMainWindow):
 
         # Start the thread
         self._fingerprint_thread.start()
-        self._fingerprint_progress.exec()
+        self._fingerprint_progress.show()  # Show non-blocking, unlike exec()
 
     def _cleanup_fingerprint_thread(self):
         """Clean up fingerprint worker thread and related objects."""
-        if hasattr(self, '_fingerprint_worker'):
+        if hasattr(self, '_fingerprint_worker') and self._fingerprint_worker:
             self._fingerprint_worker.deleteLater()
-            delattr(self, '_fingerprint_worker')
+            self._fingerprint_worker = None
         
-        if hasattr(self, '_fingerprint_thread'):
+        if hasattr(self, '_fingerprint_thread') and self._fingerprint_thread:
             self._fingerprint_thread.quit()
             self._fingerprint_thread.wait()
             self._fingerprint_thread.deleteLater()
-            delattr(self, '_fingerprint_thread')
-            
-        if hasattr(self, '_fingerprint_progress'):
-            delattr(self, '_fingerprint_progress')
+            self._fingerprint_thread = None
 
     def _auto_label_with_fingerprints(self):
         """Auto-label files in current folder based on fingerprint matches from practice folders."""
