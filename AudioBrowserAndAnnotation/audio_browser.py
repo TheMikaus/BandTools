@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time, getpass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -3516,13 +3516,8 @@ class AudioBrowser(QMainWindow):
 
     def _copy_subsections_from_matched_file(self, target_filename: str, source_folder: Path, source_filename: str) -> int:
         """Copy sub-sections from a matched file in another folder to the current file."""
-        try:
-            import getpass
-        except ImportError:
-            getpass = None
-            
         # Load notes from the source folder
-        user = getpass.getuser() if getpass else "default"
+        user = getpass.getuser()
         source_notes_path = source_folder / f".audio_notes_{user}.json"
         if not source_notes_path.exists():
             source_notes_path = source_folder / NOTES_JSON  # Fallback to legacy
@@ -4298,6 +4293,11 @@ class AudioBrowser(QMainWindow):
                 # Use the provided name from the matched fingerprint's folder
                 self.provided_names[audio_file.name] = provided_name
                 matches_found += 1
+                
+                # Also copy sub-sections from the matched file
+                subsections_copied = self._copy_subsections_from_matched_file(audio_file.name, source_folder, matched_filename)
+                if subsections_copied > 0:
+                    print(f"Copied {subsections_copied} sub-sections for {audio_file.name}")
                 
                 # Check if this was a unique match (song appears in only one folder)
                 folder_count = len(fingerprint_map[matched_filename])
