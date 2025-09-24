@@ -3368,7 +3368,7 @@ class AudioBrowser(QMainWindow):
 
     # ----- Batch rename (##_<ProvidedName>) -----
     def _batch_rename(self):
-        files = self._list_audio_in_root()
+        files = self._list_audio_in_current_dir()
         if not files:
             QMessageBox.information(self, "Nothing to Rename", "No WAV/MP3 files in this folder."); return
         def ctime(p: Path) -> float:
@@ -3762,7 +3762,7 @@ class AudioBrowser(QMainWindow):
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
         current_dir = self._get_audio_file_dir()
-        audio_files = self._list_audio_in_root()
+        audio_files = self._list_audio_in_current_dir()
         
         if not audio_files:
             QMessageBox.information(self, "No Audio Files", "No audio files found in current folder.")
@@ -3849,7 +3849,7 @@ class AudioBrowser(QMainWindow):
         current_fingerprints = current_cache.get("files", {})
         
         # Get files to process (unlabeled files)
-        audio_files = self._list_audio_in_root()
+        audio_files = self._list_audio_in_current_dir()
         unlabeled_files = [f for f in audio_files if not self.provided_names.get(f.name, "").strip()]
         
         if not unlabeled_files:
