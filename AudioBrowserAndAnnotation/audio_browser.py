@@ -1288,6 +1288,11 @@ class AudioBrowser(QMainWindow):
         self.clip_sel_end_ms: Optional[int] = None
         self._clip_play_end_ms: Optional[int] = None
         self._clip_playing: bool = False
+        # Sub-section playback state
+        self._subsection_start_ms: Optional[int] = None
+        self._subsection_end_ms: Optional[int] = None
+        self._subsection_loops: bool = False
+        self._subsection_playing: bool = False
         self.annotation_filter: str = 'all'
         self._programmatic_selection = False
         self._uid_counter: int = 1
@@ -1965,11 +1970,28 @@ class AudioBrowser(QMainWindow):
         clip_row.addWidget(self.clip_cancel_btn)
         ann_layout.addLayout(clip_row)
 
+        # --- Sub-section controls ---
+        subsec_row = QHBoxLayout()
+        subsec_row.addWidget(QLabel("Sub-section Name:"))
+        self.subsec_name_edit = QLineEdit(); self.subsec_name_edit.setPlaceholderText("e.g. Chorus, Verse 1, Solo")
+        self.subsec_name_edit.setMaximumWidth(150)
+        subsec_row.addWidget(self.subsec_name_edit)
+        self.subsec_loops_cb = QCheckBox("Loops")
+        subsec_row.addWidget(self.subsec_loops_cb)
+        self.subsec_label_btn = QPushButton("Label Subsection")
+        self.subsec_clear_all_btn = QPushButton("Clear All")
+        self.subsec_relabel_all_btn = QPushButton("Re-label All")
+        subsec_row.addWidget(self.subsec_label_btn)
+        subsec_row.addWidget(self.subsec_clear_all_btn)
+        subsec_row.addWidget(self.subsec_relabel_all_btn)
+        subsec_row.addStretch(1)
+        ann_layout.addLayout(subsec_row)
+
         # Filter combo for annotations
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("Show:"))
         self.ann_filter_combo = QComboBox()
-        self.ann_filter_combo.addItems(["All", "Points", "Clips"])
+        self.ann_filter_combo.addItems(["All", "Points", "Clips", "Sub-sections"])
         filter_row.addWidget(self.ann_filter_combo); filter_row.addStretch(1)
         ann_layout.addLayout(filter_row)
 
@@ -1999,6 +2021,10 @@ class AudioBrowser(QMainWindow):
         self.clip_save_btn.clicked.connect(self._on_clip_save_clicked)
         self.clip_cancel_btn.clicked.connect(self._on_clip_cancel_clicked)
         self.ann_filter_combo.currentIndexChanged.connect(self._on_ann_filter_changed)
+        # Sub-section connections
+        self.subsec_label_btn.clicked.connect(self._on_subsection_label_clicked)
+        self.subsec_clear_all_btn.clicked.connect(self._on_subsection_clear_all_clicked)
+        self.subsec_relabel_all_btn.clicked.connect(self._on_subsection_relabel_all_clicked)
         # also stop clip at end
         self.player.positionChanged.connect(self._on_player_pos_for_clip)
 
@@ -2638,6 +2664,7 @@ class AudioBrowser(QMainWindow):
             # Issue #4 filter
             if self.annotation_filter == 'points' and entry.get('end_ms') is not None: continue
             if self.annotation_filter == 'clips' and entry.get('end_ms') is None: continue
+            if self.annotation_filter == 'sub-sections' and not entry.get('subsection'): continue
             self._append_annotation_row(entry, set_id=set_id, set_name=set_name, editable=editable)
 
         self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
@@ -2684,14 +2711,29 @@ class AudioBrowser(QMainWindow):
 
     
         # Issue #4: display clip ranges as start - end and lock time cell editing for clips
+        # Also handle sub-sections with special formatting
         try:
             end_ms = entry.get("end_ms")
+            is_subsection = entry.get("subsection", False)
+            loops = entry.get("loops", False)
             if end_ms is not None:
                 # time item is at self._c_time
                 titem = self.annotation_table.item(r, self._c_time)
                 if titem:
-                    titem.setText(f"{human_time_ms(int(ms))} - {human_time_ms(int(end_ms))}")
+                    time_text = f"{human_time_ms(int(ms))} - {human_time_ms(int(end_ms))}"
+                    if is_subsection:
+                        time_text += " [SUB]"
+                        if loops:
+                            time_text += " [LOOP]"
+                    titem.setText(time_text)
                     titem.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                    
+                # Also update note text for sub-sections to show it's a sub-section
+                if is_subsection:
+                    note_item = self.annotation_table.item(r, self._c_note)
+                    if note_item:
+                        original_text = note_item.text()
+                        note_item.setText(f"[SUBSECTION] {original_text}")
         except Exception:
             pass
 
@@ -2774,8 +2816,64 @@ class AudioBrowser(QMainWindow):
                 if str(self.set_combo.itemData(i)) == str(set_id):
                     if self.set_combo.currentIndex() != i: self.set_combo.setCurrentIndex(i)
                     break
-        self.player.setPosition(int(ms))
-        self.waveform.set_selected_uid(set_id, uid)
+                    
+        # Find the annotation entry to check if it's a sub-section
+        entry = self._find_annotation_entry(set_id, uid)
+        if entry and entry.get("subsection") and entry.get("end_ms"):
+            # Handle sub-section playback
+            self._play_subsection(entry)
+        else:
+            # Regular annotation playback
+            self.player.setPosition(int(ms))
+            self.waveform.set_selected_uid(set_id, uid)
+            self.player.play()
+            self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+
+    def _find_annotation_entry(self, set_id: str, uid: int) -> Optional[Dict]:
+        """Find an annotation entry by set_id and uid."""
+        if not self.current_audio_file:
+            return None
+            
+        fname = self.current_audio_file.name
+        
+        # Find the annotation set
+        annotation_set = None
+        for s in self.annotation_sets:
+            if s.get("id") == set_id:
+                annotation_set = s
+                break
+                
+        if not annotation_set:
+            return None
+            
+        # Find the entry
+        files = annotation_set.get("files", {})
+        file_data = files.get(fname, {})
+        notes = file_data.get("notes", [])
+        
+        for entry in notes:
+            if entry.get("uid") == uid:
+                return entry
+                
+        return None
+
+    def _play_subsection(self, entry: Dict):
+        """Play a sub-section with optional looping."""
+        start_ms = int(entry.get("ms", 0))
+        end_ms = int(entry.get("end_ms", 0))
+        loops = entry.get("loops", False)
+        
+        if end_ms <= start_ms:
+            return
+            
+        # Set up sub-section playback
+        self._subsection_start_ms = start_ms
+        self._subsection_end_ms = end_ms
+        self._subsection_loops = loops
+        self._subsection_playing = True
+        
+        # Start playback
+        self.player.setPosition(start_ms)
         self.player.play()
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
@@ -3194,16 +3292,37 @@ class AudioBrowser(QMainWindow):
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _on_player_pos_for_clip(self, pos_ms: int):
+        # Handle clip playback ending
         if self._clip_playing and self._clip_play_end_ms is not None:
             if int(pos_ms) >= int(self._clip_play_end_ms):
                 self.player.pause()
                 self._clip_playing = False
                 self._clip_play_end_ms = None
                 self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+                
+        # Handle sub-section playback and looping
+        if self._subsection_playing and self._subsection_end_ms is not None:
+            if int(pos_ms) >= int(self._subsection_end_ms):
+                if self._subsection_loops and self._subsection_start_ms is not None:
+                    # Loop back to start
+                    self.player.setPosition(int(self._subsection_start_ms))
+                else:
+                    # Stop playing
+                    self.player.pause()
+                    self._subsection_playing = False
+                    self._subsection_start_ms = None
+                    self._subsection_end_ms = None
+                    self._subsection_loops = False
+                    self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
 
     def _on_clip_cancel_clicked(self):
         self.clip_sel_start_ms = None; self.clip_sel_end_ms = None
         self._clip_play_end_ms = None; self._clip_playing = False
+        # Also reset sub-section playback
+        self._subsection_playing = False
+        self._subsection_start_ms = None
+        self._subsection_end_ms = None
+        self._subsection_loops = False
         self._update_clip_edits_from_selection()
 
     def _on_clip_save_clicked(self):
@@ -3228,8 +3347,232 @@ class AudioBrowser(QMainWindow):
         txt = (self.ann_filter_combo.currentText() or "All").lower()
         if "point" in txt: self.annotation_filter = "points"
         elif "clip" in txt: self.annotation_filter = "clips"
+        elif "sub-section" in txt: self.annotation_filter = "sub-sections"
         else: self.annotation_filter = "all"
         self._load_annotations_for_current()
+
+    def _on_subsection_label_clicked(self):
+        """Label a sub-section using clip start/end and name."""
+        if not self.current_audio_file: return
+        if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None: 
+            QMessageBox.information(self, "Select Range", "Please select a clip start and end time first.")
+            return
+        if int(self.clip_sel_start_ms) >= int(self.clip_sel_end_ms): return
+        
+        name = self.subsec_name_edit.text().strip()
+        if not name:
+            QMessageBox.information(self, "Add Name", "Please enter a sub-section name (e.g., 'Chorus', 'Verse 1').")
+            return
+            
+        fname = self.current_audio_file.name
+        uid = self._uid_counter; self._uid_counter += 1
+        loops = self.subsec_loops_cb.isChecked()
+        
+        entry = {
+            "uid": int(uid), 
+            "ms": int(self.clip_sel_start_ms), 
+            "end_ms": int(self.clip_sel_end_ms), 
+            "text": name, 
+            "important": False,
+            "subsection": True,
+            "loops": loops
+        }
+        
+        self.notes_by_file.setdefault(fname, []).append(entry)
+        self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
+        self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
+        self.subsec_name_edit.clear()
+        self.subsec_loops_cb.setChecked(False)
+        self._on_clip_cancel_clicked()
+        self._schedule_save_notes()
+
+    def _on_subsection_clear_all_clicked(self):
+        """Clear all sub-sections for the current file."""
+        if not self.current_audio_file: return
+        
+        reply = QMessageBox.question(self, "Clear All Sub-sections", 
+                                   "Remove all sub-sections for this song?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+            
+        fname = self.current_audio_file.name
+        notes = self.notes_by_file.get(fname, [])
+        
+        # Collect subsections for undo
+        removed_subsections = [entry for entry in notes if entry.get("subsection")]
+        if not removed_subsections:
+            QMessageBox.information(self, "No Sub-sections", "No sub-sections found to clear.")
+            return
+            
+        # Remove subsections
+        self.notes_by_file[fname] = [entry for entry in notes if not entry.get("subsection")]
+        
+        # Push undo for each removed subsection
+        for entry in removed_subsections:
+            self._push_undo({"type":"remove","set":self.current_set_id,"file":fname,"entry":entry})
+            
+        self._resort_and_rebuild_table_preserving_selection()
+        self._schedule_save_notes()
+        QMessageBox.information(self, "Cleared", f"Removed {len(removed_subsections)} sub-sections.")
+
+    def _on_subsection_relabel_all_clicked(self):
+        """Re-run fingerprinting to label all sub-sections in current folder."""
+        if not self.current_audio_file:
+            QMessageBox.information(self, "No File", "Please select an audio file first.")
+            return
+        
+        reply = QMessageBox.question(self, "Re-label Sub-sections", 
+                                   "This will attempt to find and copy sub-sections from other practice folders based on fingerprinting matches. Continue?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+            
+        # Run the subsection fingerprinting logic
+        self._auto_label_subsections_with_fingerprints()
+
+    def _auto_label_subsections_with_fingerprints(self):
+        """Auto-label sub-sections in current folder based on fingerprint matches from practice folders."""
+        current_dir = self._get_audio_file_dir()
+        
+        # Discover practice folders with fingerprints
+        practice_folders = discover_practice_folders_with_fingerprints(self.root_path)
+        if not practice_folders:
+            QMessageBox.warning(self, "No Practice Folders", 
+                              "No practice folders with fingerprints found.")
+            return
+        
+        # If current folder is the only one with fingerprints, nothing to match against
+        if len(practice_folders) == 1 and practice_folders[0].resolve() == current_dir.resolve():
+            QMessageBox.information(self, "No Other Practice Folders", 
+                                  "Current folder is the only one with fingerprints. Need other practice folders to match against.")
+            return
+            
+        # Collect fingerprints from all practice folders (excluding current)
+        fingerprint_map = collect_fingerprints_from_folders(practice_folders, exclude_dir=current_dir)
+        
+        if not fingerprint_map:
+            QMessageBox.warning(self, "No Reference Fingerprints", 
+                              "No fingerprints found in other practice folders.")
+            return
+            
+        # Process each audio file in current folder
+        current_cache = load_fingerprint_cache(current_dir)
+        matches_found = 0
+        subsections_added = 0
+        
+        progress = QProgressDialog("Finding sub-section matches...", "Cancel", 0, 100, self)
+        progress.setWindowTitle("Sub-section Fingerprinting")
+        progress.show()
+        
+        audio_files = [f for f in current_dir.iterdir() if f.is_file() and f.suffix.lower() in AUDIO_EXTS]
+        
+        for i, audio_file in enumerate(audio_files):
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Matching {audio_file.name}...")
+            progress.setValue(int((i / len(audio_files)) * 100))
+            QApplication.processEvents()
+            
+            # Get or generate fingerprint for current file
+            current_fp = current_cache.get("files", {}).get(audio_file.name, {}).get("fingerprint")
+            if not current_fp:
+                try:
+                    samples, sr, dur_ms = decode_audio_samples(audio_file)
+                    current_fp = compute_audio_fingerprint(samples, sr)
+                    # Update cache
+                    size, mtime = file_signature(audio_file)
+                    current_cache.setdefault("files", {})[audio_file.name] = {
+                        "fingerprint": current_fp,
+                        "size": size,
+                        "mtime": mtime,
+                        "duration_ms": dur_ms
+                    }
+                except Exception as e:
+                    print(f"Error processing {audio_file.name}: {e}")
+                    continue
+            
+            # Find best match across all practice folders
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold)
+            
+            if match_result:
+                matched_filename, score, source_folder, provided_name = match_result
+                matches_found += 1
+                
+                # Load sub-sections from the matched file
+                subsections_copied = self._copy_subsections_from_matched_file(audio_file.name, source_folder, matched_filename)
+                subsections_added += subsections_copied
+                
+        progress.setValue(100)
+        save_fingerprint_cache(current_dir, current_cache)
+        
+        if matches_found > 0:
+            QMessageBox.information(self, "Sub-section Matching Complete", 
+                                  f"Found {matches_found} matches.\nCopied {subsections_added} sub-sections.")
+            self._load_annotations_for_current()
+        else:
+            QMessageBox.information(self, "No Matches", "No matching songs found for sub-section copying.")
+
+    def _copy_subsections_from_matched_file(self, target_filename: str, source_folder: Path, source_filename: str) -> int:
+        """Copy sub-sections from a matched file in another folder to the current file."""
+        try:
+            import getpass
+        except ImportError:
+            getpass = None
+            
+        # Load notes from the source folder
+        user = getpass.getuser() if getpass else "default"
+        source_notes_path = source_folder / f".audio_notes_{user}.json"
+        if not source_notes_path.exists():
+            source_notes_path = source_folder / NOTES_JSON  # Fallback to legacy
+        
+        source_data = load_json(source_notes_path, {})
+        if not isinstance(source_data, dict) or "sets" not in source_data:
+            return 0
+            
+        # Find sub-sections in any visible set from the source file
+        subsections_to_copy = []
+        for annotation_set in source_data.get("sets", []):
+            if not annotation_set.get("visible", True):
+                continue
+            files = annotation_set.get("files", {})
+            source_file_data = files.get(source_filename, {})
+            notes = source_file_data.get("notes", [])
+            
+            for note in notes:
+                if note.get("subsection"):
+                    subsections_to_copy.append(note)
+        
+        if not subsections_to_copy:
+            return 0
+            
+        # Clear existing sub-sections for the target file
+        fname = target_filename
+        existing_notes = self.notes_by_file.get(fname, [])
+        self.notes_by_file[fname] = [entry for entry in existing_notes if not entry.get("subsection")]
+        
+        # Add copied sub-sections with new UIDs
+        copied_count = 0
+        for subsection in subsections_to_copy:
+            uid = self._uid_counter; self._uid_counter += 1
+            entry = {
+                "uid": int(uid),
+                "ms": int(subsection.get("ms", 0)),
+                "end_ms": int(subsection.get("end_ms", 0)),
+                "text": str(subsection.get("text", "")),
+                "important": False,
+                "subsection": True,
+                "loops": subsection.get("loops", False)
+            }
+            self.notes_by_file[fname].append(entry)
+            copied_count += 1
+            
+        if copied_count > 0:
+            self._schedule_save_notes()
+            
+        return copied_count
+        
     def _on_export_clips_clicked(self):
         # Collect all clips across current annotation set and folder
         aset = self._get_current_set()
