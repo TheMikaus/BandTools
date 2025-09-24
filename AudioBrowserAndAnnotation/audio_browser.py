@@ -1940,26 +1940,21 @@ class AudioBrowser(QMainWindow):
         self.waveform.clear()
 
     def _names_json_path(self) -> Path: 
-        # When an audio file is selected, use its directory for provided names
-        if self.current_audio_file:
-            return self.current_audio_file.parent / NAMES_JSON
+        # Always use current_practice_folder for provided names to ensure consistency
+        # whether a folder or audio file is selected
         return self.current_practice_folder / NAMES_JSON
     def _notes_json_path(self) -> Path: 
-        # When an audio file is selected, use its directory for annotations
+        # Always use current_practice_folder for annotations to ensure consistency
+        # whether a folder or audio file is selected
         user_notes_filename = self._user_notes_filename()
-        if self.current_audio_file:
-            return self.current_audio_file.parent / user_notes_filename
         return self.current_practice_folder / user_notes_filename
     def _dur_json_path(self) -> Path: 
-        # When an audio file is selected, use its directory for duration cache
-        if self.current_audio_file:
-            return self.current_audio_file.parent / DURATIONS_JSON
+        # Always use current_practice_folder for duration cache to ensure consistency
+        # whether a folder or audio file is selected
         return self.current_practice_folder / DURATIONS_JSON
     
     def _get_audio_file_dir(self) -> Path:
-        """Return the directory containing the current audio file, or current_practice_folder if no file selected."""
-        if self.current_audio_file:
-            return self.current_audio_file.parent
+        """Return the current practice folder for consistency."""
         return self.current_practice_folder
     
     def _set_current_practice_folder(self, folder: Path):
@@ -3114,7 +3109,7 @@ class AudioBrowser(QMainWindow):
 
     def _list_audio_in_current_dir(self) -> List[Path]:
         """List audio files in the directory containing the currently selected song, or current practice folder if no song selected."""
-        target_dir = self.current_audio_file.parent if self.current_audio_file else self.current_practice_folder
+        target_dir = self.current_practice_folder
         if not target_dir.exists(): return []
         return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
 
@@ -4086,12 +4081,6 @@ class AudioBrowser(QMainWindow):
         
         # Save the empty provided names to the JSON file
         self._save_names()
-        
-        # Also save to the root practice folder to ensure persistence across app restarts
-        # This handles the case where names might be loaded from a different path at startup
-        root_names_path = self.current_practice_folder / NAMES_JSON
-        if root_names_path != self._names_json_path():
-            save_json(root_names_path, {})
         
         # Refresh the library table to show the cleared names
         self._refresh_right_table()
