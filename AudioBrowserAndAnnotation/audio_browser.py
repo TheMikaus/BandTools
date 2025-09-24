@@ -4087,6 +4087,12 @@ class AudioBrowser(QMainWindow):
         # Save the empty provided names to the JSON file
         self._save_names()
         
+        # Also save to the root practice folder to ensure persistence across app restarts
+        # This handles the case where names might be loaded from a different path at startup
+        root_names_path = self.current_practice_folder / NAMES_JSON
+        if root_names_path != self._names_json_path():
+            save_json(root_names_path, {})
+        
         # Refresh the library table to show the cleared names
         self._refresh_right_table()
         
