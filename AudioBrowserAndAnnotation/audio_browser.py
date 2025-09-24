@@ -1397,7 +1397,7 @@ class AudioBrowser(QMainWindow):
     def _load_or_ask_root(self) -> Path:
         stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
         if stored and Path(stored).exists(): return Path(stored)
-        dlg = QFileDialog(self, "Select your audio folder")
+        dlg = QFileDialog(self, "Select your root band practice folder")
         dlg.setFileMode(QFileDialog.FileMode.Directory)
         dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
         if dlg.exec():
@@ -1406,7 +1406,7 @@ class AudioBrowser(QMainWindow):
 
     def _save_root(self, p: Path):
         self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
-        self.path_label.setText(f"Current Directory: {self.root_path}")
+        self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         self.fs_model.setRootPath(str(self.root_path))
         self._programmatic_selection = True
         try:
@@ -1661,7 +1661,7 @@ class AudioBrowser(QMainWindow):
         tb.addWidget(self.undo_spin)
         tb.addSeparator()
 
-        act_change_root = QAction("Change Folder…", self); act_change_root.triggered.connect(self._change_root_clicked); tb.addAction(act_change_root)
+        act_change_root = QAction("Change Band Practice Folder…", self); act_change_root.triggered.connect(self._change_root_clicked); tb.addAction(act_change_root)
         act_up = QAction("Up", self); act_up.setShortcut(QKeySequence("Alt+Up")); act_up.triggered.connect(self._go_up); tb.addAction(act_up)
         tb.addSeparator()
         self.rename_action = QAction("Batch Rename (##_ProvidedName)", self); self.rename_action.triggered.connect(self._batch_rename); tb.addAction(self.rename_action)
@@ -1681,7 +1681,7 @@ class AudioBrowser(QMainWindow):
         # Add path label at the top
         self.path_label = QLabel()
         self.path_label.setStyleSheet("QLabel { background-color: #f0f0f0; padding: 8px; border-bottom: 1px solid #ccc; font-weight: bold; }")
-        self.path_label.setText(f"Current Directory: {self.root_path}")
+        self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         main_layout.addWidget(self.path_label)
 
         splitter = QSplitter(self); main_layout.addWidget(splitter)
@@ -2268,7 +2268,7 @@ class AudioBrowser(QMainWindow):
         if parent.exists() and parent != self.root_path: self._save_root(parent)
 
     def _change_root_clicked(self):
-        d = QFileDialog.getExistingDirectory(self, "Choose Audio Folder", str(self.root_path))
+        d = QFileDialog.getExistingDirectory(self, "Choose Root Band Practice Folder", str(self.root_path))
         if d: self._save_root(Path(d))
 
     # ----- Playback -----
