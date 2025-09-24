@@ -4084,6 +4084,26 @@ class AudioBrowser(QMainWindow):
                                 f"Generated {generated} new fingerprints in reference folder.")
 
     def closeEvent(self, ev):
+        # Check if auto-labeling is in progress
+        if self.auto_label_in_progress:
+            reply = QMessageBox.question(self, "Auto-labeling in progress", 
+                                       "Auto-labeling is in progress. Do you want to apply the changes before closing?",
+                                       QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            
+            if reply == QMessageBox.StandardButton.Apply:
+                # Apply changes before closing
+                self._save_names()
+                self.auto_label_in_progress = False
+                self.auto_label_backup_names.clear()
+            elif reply == QMessageBox.StandardButton.Discard:
+                # Discard changes before closing  
+                self.provided_names = self.auto_label_backup_names.copy()
+                self.auto_label_in_progress = False
+                self.auto_label_backup_names.clear()
+            else:  # Cancel
+                ev.ignore()
+                return
+        
         self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
 
 # ========== Entrypoint ==========
