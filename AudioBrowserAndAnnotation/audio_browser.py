@@ -1419,6 +1419,8 @@ class AudioBrowser(QMainWindow):
         try:
             src = self.fs_model.index(str(self.root_path))
             self.tree.setRootIndex(self.file_proxy.mapFromSource(src))
+            # Restore folder selection after changing root
+            QTimer.singleShot(100, self._restore_folder_selection)
         finally:
             QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
         # Reload per-folder state
@@ -2399,6 +2401,44 @@ class AudioBrowser(QMainWindow):
         except Exception as e:
             # Log the error but don't crash - tree highlighting is not critical for playback
             print(f"Warning: Failed to highlight {path} in tree view: {e}")
+
+    def _restore_folder_selection(self):
+        """Restore the folder selection in the tree view to match current_practice_folder.
+        
+        This is called after tree refresh operations to maintain visual consistency
+        when the user has selected a folder but the tree model has been reset.
+        """
+        try:
+            if not hasattr(self, 'current_practice_folder') or self.current_practice_folder == self.root_path:
+                return
+            
+            # Get the source index for the folder from the filesystem model
+            src_idx = self.fs_model.index(str(self.current_practice_folder))
+            if not src_idx.isValid():
+                return
+                
+            # Map from source model to proxy model
+            proxy_idx = self.file_proxy.mapFromSource(src_idx)
+            if not proxy_idx.isValid():
+                return
+            
+            # Set the programmatic selection flag to prevent triggering selection change events
+            self._programmatic_selection = True
+            
+            try:
+                # Select and highlight the folder in the tree view
+                self.tree.setCurrentIndex(proxy_idx)
+                
+                # Ensure the selected item is visible (scroll to it if necessary)
+                self.tree.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.EnsureVisible)
+                
+            finally:
+                # Reset the programmatic selection flag after a short delay
+                QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+                
+        except Exception as e:
+            # Log the error but don't crash - folder selection restoration is not critical
+            print(f"Warning: Failed to restore folder selection for {self.current_practice_folder}: {e}")
 
     def _stop_playback(self):
         if self.player.playbackState() != QMediaPlayer.PlaybackState.StoppedState: self.player.stop()
@@ -3838,6 +3878,8 @@ class AudioBrowser(QMainWindow):
         self._refresh_right_table()
         self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
         self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+        # Restore folder selection after tree refresh
+        QTimer.singleShot(100, self._restore_folder_selection)
         if self.current_audio_file:
             cur = self.current_audio_file.name
             for s, d in plan:
@@ -3928,6 +3970,8 @@ class AudioBrowser(QMainWindow):
             self._refresh_right_table()
             self.fs_model.setRootPath(""); self.fs_model.setRootPath(str(self.root_path))
             self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            # Restore folder selection after tree refresh
+            QTimer.singleShot(100, self._restore_folder_selection)
             self._load_annotations_for_current()
             self._refresh_important_table()
 
