@@ -3665,12 +3665,17 @@ class AudioBrowser(QMainWindow):
         total_available_songs = len(fingerprint_map)
         unique_songs = sum(1 for song_entries in fingerprint_map.values() if len(song_entries) == 1)
         
-        # Enable auto-label if we have practice folders with fingerprints
-        can_auto_label = bool(practice_folders) and (len(practice_folders) > 1 or 
-                             (len(practice_folders) == 1 and practice_folders[0].resolve() != current_dir.resolve()))
+        # Enable auto-label if we have practice folders with fingerprints OR a reference folder
+        can_auto_label = (bool(practice_folders) and (len(practice_folders) > 1 or 
+                         (len(practice_folders) == 1 and practice_folders[0].resolve() != current_dir.resolve()))) or \
+                        bool(self.fingerprint_reference_dir)
         
-        if practice_folders:
-            # Show practice folder information
+        # Prioritize manually selected reference folder, then show practice folder info
+        if self.fingerprint_reference_dir:
+            self.fingerprint_ref_label.setText(f"Reference: {self.fingerprint_reference_dir.name}")
+            self.fingerprint_ref_label.setStyleSheet("color: #333;")
+        elif practice_folders:
+            # Show practice folder information when no reference folder is selected
             if len(practice_folders) == 1:
                 if practice_folders[0].resolve() == current_dir.resolve():
                     folder_text = f"Current folder only ({practice_folders[0].name})"
@@ -3686,13 +3691,8 @@ class AudioBrowser(QMainWindow):
             self.fingerprint_ref_label.setText(folder_text)
             self.fingerprint_ref_label.setStyleSheet("color: #333;")
         else:
-            # Fall back to reference folder display if no practice folders found
-            if self.fingerprint_reference_dir:
-                self.fingerprint_ref_label.setText(f"Reference: {self.fingerprint_reference_dir.name}")
-                self.fingerprint_ref_label.setStyleSheet("color: #333;")
-            else:
-                self.fingerprint_ref_label.setText("(No fingerprints found)")
-                self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+            self.fingerprint_ref_label.setText("(No fingerprints found)")
+            self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
         
         self.auto_label_btn.setEnabled(can_auto_label)
         
