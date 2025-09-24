@@ -2276,8 +2276,8 @@ class AudioBrowser(QMainWindow):
             path = Path(fi.absoluteFilePath()); parent = path.parent
             if parent.resolve() != self.root_path.resolve():
                 self._save_root(parent)
-            if not (self.current_audio_file and self.current_audio_file.resolve() == path.resolve()):
-                self._play_file(path)
+            # Always play on double-click for consistency with single-click behavior
+            self._play_file(path)
             self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
 
     def _on_tree_activated(self, idx: QModelIndex):
