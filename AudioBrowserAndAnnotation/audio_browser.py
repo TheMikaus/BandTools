@@ -340,6 +340,23 @@ def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
         return samples, sr, dur_ms
     raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
 
+def get_audio_channel_count(path: Path) -> int:
+    """Return the number of channels in an audio file (1 for mono, 2+ for stereo/multichannel)."""
+    suf = path.suffix.lower()
+    if suf in (".wav", ".wave"):
+        try:
+            with wave.open(str(path), "rb") as wf:
+                return wf.getnchannels()
+        except Exception:
+            pass
+    if HAVE_PYDUB:
+        try:
+            seg = AudioSegment.from_file(str(path))
+            return seg.channels
+        except Exception:
+            pass
+    return 1  # Default to mono if we can't determine
+
 def compute_peaks_progressive(samples: List[float], columns: int, chunk: int):
     n = len(samples)
     if n == 0 or columns <= 0:
@@ -1169,6 +1186,70 @@ class ConvertWorker(QObject):
                 self.file_done.emit(src.name, "", False, str(e))
             done += 1
             self.progress.emit(done, total, src.name)
+        self.finished.emit(False)
+
+# ========== Mono convert worker ==========
+class MonoConvertWorker(QObject):
+    progress = pyqtSignal(int, int, str)  # done, total, filename
+    file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
+    finished = pyqtSignal(bool)  # canceled?
+
+    def __init__(self, audio_path: str):
+        super().__init__()
+        self._path = str(audio_path)
+        self._cancel = False
+
+    def cancel(self): 
+        self._cancel = True
+
+    def run(self):
+        if self._cancel: 
+            self.finished.emit(True)
+            return
+            
+        src = Path(self._path)
+        self.progress.emit(0, 1, src.name)
+        
+        try:
+            # Load the audio file
+            audio = AudioSegment.from_file(str(src))
+            
+            # Check if already mono
+            if audio.channels == 1:
+                self.file_done.emit(src.name, False, "File is already mono")
+                self.finished.emit(False)
+                return
+            
+            # Convert to mono
+            mono_audio = audio.set_channels(1)
+            
+            # Create backup filename
+            base = src.stem
+            backup_name = f"{base}_stereo{src.suffix}"
+            backup_path = src.with_name(backup_name)
+            
+            # Make sure backup doesn't already exist
+            n = 1
+            while backup_path.exists():
+                backup_name = f"{base}_stereo({n}){src.suffix}"
+                backup_path = src.with_name(backup_name)
+                n += 1
+            
+            # Rename original to backup
+            src.rename(backup_path)
+            
+            # Export mono version with original filename
+            if src.suffix.lower() in ('.mp3',):
+                mono_audio.export(str(src), format="mp3", bitrate="128k")
+            else:
+                mono_audio.export(str(src), format="wav")
+            
+            self.file_done.emit(src.name, True, f"Converted to mono (stereo backup: {backup_name})")
+            
+        except Exception as e:
+            self.file_done.emit(src.name, False, str(e))
+        
+        self.progress.emit(1, 1, src.name)
         self.finished.emit(False)
 
 # ========== Fingerprint worker ==========
@@ -2017,6 +2098,7 @@ class AudioBrowser(QMainWindow):
         # Toggles
         self._restore_toggles()
         self._update_undo_actions_enabled()
+        self._update_mono_button_state()  # Initialize mono button state
 
     # ----- Icon -----
     def _apply_app_icon(self):
@@ -2314,6 +2396,7 @@ class AudioBrowser(QMainWindow):
         self.rename_action = QAction("Batch Rename (##_ProvidedName)", self); self.rename_action.triggered.connect(self._batch_rename); tb.addAction(self.rename_action)
         self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
         self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self); self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded); tb.addAction(self.convert_action)
+        self.mono_action = QAction("Convert to Mono", self); self.mono_action.triggered.connect(self._convert_to_mono); tb.addAction(self.mono_action)
         tb.addSeparator()
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
@@ -3001,14 +3084,18 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            self._update_mono_button_state()
+            return
         fi = self._fi(idx)
         if fi.isDir():
             # Update current practice folder when folder is selected
             folder_path = Path(fi.absoluteFilePath())
             self._set_current_practice_folder(folder_path)
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table(); return
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            self._update_mono_button_state()
+            return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
             path = Path(fi.absoluteFilePath())
             # Update current practice folder when audio file is selected (to its parent directory)
@@ -3021,6 +3108,9 @@ class AudioBrowser(QMainWindow):
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+        
+        # Update mono button state
+        self._update_mono_button_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -3209,6 +3299,37 @@ class AudioBrowser(QMainWindow):
         self._update_waveform_annotations()
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
+
+    def _update_mono_button_state(self):
+        """Update the mono conversion button enabled/disabled state based on current selection."""
+        if not hasattr(self, 'mono_action'):
+            return  # Button not created yet
+            
+        # Disable if no file is selected
+        if not self.current_audio_file or not self.current_audio_file.exists():
+            self.mono_action.setEnabled(False)
+            self.mono_action.setText("Convert to Mono")
+            return
+        
+        # Check if pydub is available
+        if not HAVE_PYDUB:
+            self.mono_action.setEnabled(False)
+            self.mono_action.setText("Convert to Mono (pydub required)")
+            return
+        
+        # Check channel count
+        try:
+            channels = get_audio_channel_count(self.current_audio_file)
+            if channels == 1:
+                self.mono_action.setEnabled(False)
+                self.mono_action.setText("Convert to Mono (already mono)")
+            else:
+                self.mono_action.setEnabled(True)
+                self.mono_action.setText("Convert to Mono")
+        except Exception:
+            # If we can't determine channel count, disable the button
+            self.mono_action.setEnabled(False)
+            self.mono_action.setText("Convert to Mono (unable to read file)")
 
     def _toggle_play_pause(self):
         st = self.player.playbackState()
@@ -4720,6 +4841,95 @@ class AudioBrowser(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             _open_path_default(self.root_path)
+
+    # ----- Mono conversion -----
+    def _convert_to_mono(self):
+        if not HAVE_PYDUB:
+            QMessageBox.warning(self, "Missing dependency",
+                                "This feature requires the 'pydub' package and FFmpeg installed on your system.")
+            return
+        if not pydub_which("ffmpeg"):
+            QMessageBox.warning(self, "FFmpeg not found",
+                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+            return
+        
+        # Check if we have a currently selected audio file
+        if not self.current_audio_file or not self.current_audio_file.exists():
+            QMessageBox.information(self, "No File Selected", "Please select an audio file to convert to mono.")
+            return
+        
+        # Check if the file is already mono
+        channels = get_audio_channel_count(self.current_audio_file)
+        if channels == 1:
+            QMessageBox.information(self, "Already Mono", "The selected file is already mono.")
+            return
+        
+        # Confirm conversion
+        msg = (f"Convert '{self.current_audio_file.name}' to mono?\n\n"
+               "• The original stereo file will be renamed with '_stereo' suffix\n"
+               "• A new mono version will replace the original filename")
+        if QMessageBox.question(self, "Convert to Mono", msg,
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+
+        self._stop_playback()
+
+        # Create progress dialog
+        dlg = QProgressDialog("Converting to mono…", "Cancel", 0, 1, self)
+        dlg.setWindowTitle("Mono Conversion")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        dlg.setMinimumDuration(0)
+        dlg.setValue(0)
+
+        # Create worker thread
+        self._mono_thread = QThread(self)
+        self._mono_worker = MonoConvertWorker(str(self.current_audio_file))
+        self._mono_worker.moveToThread(self._mono_thread)
+
+        def on_progress(done: int, total: int, name: str):
+            dlg.setLabelText(f"Converting {name}")
+            dlg.setRange(0, total)
+            dlg.setValue(done)
+
+        def on_file_done(filename: str, success: bool, msg: str):
+            if success:
+                # Refresh the file system model and reload annotations
+                self.fs_model.setRootPath("")
+                self.fs_model.setRootPath(str(self.root_path))
+                self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+                # Restore folder selection after tree refresh
+                QTimer.singleShot(100, self._restore_folder_selection)
+                self._load_annotations_for_current()
+
+        def on_finished(canceled: bool):
+            dlg.close()
+            if not canceled:
+                QMessageBox.information(self, "Conversion Complete", 
+                                        f"Successfully converted '{self.current_audio_file.name}' to mono.")
+                # Reload the current file to update waveform display
+                if self.current_audio_file and self.current_audio_file.exists():
+                    self._play_file(self.current_audio_file)
+            
+            # Clean up
+            self._mono_worker.deleteLater()
+            self._mono_thread.quit()
+            self._mono_thread.wait()
+            self._mono_thread.deleteLater()
+            self._mono_worker = None
+            self._mono_thread = None
+
+        # Connect signals
+        self._mono_thread.started.connect(self._mono_worker.run)
+        self._mono_worker.progress.connect(on_progress)
+        self._mono_worker.file_done.connect(on_file_done)
+        self._mono_worker.finished.connect(on_finished)
+        dlg.canceled.connect(self._mono_worker.cancel)
+
+        # Start the conversion
+        self._mono_thread.start()
+        dlg.exec()
 
     # ----- WAV→MP3 conversion (threaded with progress) -----
     def _convert_wav_to_mp3_threaded(self):
