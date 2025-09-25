@@ -2169,7 +2169,8 @@ class AudioBrowser(QMainWindow):
                                 "text": str(n.get("text", "")),
                                 "important": bool(n.get("important", False)),
                                 **({"end_ms": int(n["end_ms"])} if n.get("end_ms") is not None else {}),
-                                **({"subsection": bool(n["subsection"])} if n.get("subsection") else {})
+                                **({"subsection": bool(n["subsection"])} if n.get("subsection") else {}),
+                                **({"subsection_note": str(n["subsection_note"])} if n.get("subsection_note") else {})
                             } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                         }
                     cleaned.append({"id": sid, "name": name, "color": color, "visible": visible, "folder_notes": folder_notes, "files": files})
@@ -2644,6 +2645,10 @@ class AudioBrowser(QMainWindow):
         self.subsec_name_edit = QLineEdit(); self.subsec_name_edit.setPlaceholderText("e.g. Chorus, Verse 1, Solo")
         self.subsec_name_edit.setMaximumWidth(150)
         subsec_row.addWidget(self.subsec_name_edit)
+        subsec_row.addWidget(QLabel("Note:"))
+        self.subsec_note_edit = QLineEdit(); self.subsec_note_edit.setPlaceholderText("Optional note for this subsection")
+        self.subsec_note_edit.setMaximumWidth(200)
+        subsec_row.addWidget(self.subsec_note_edit)
         self.subsec_label_btn = QPushButton("Label Subsection")
         self.subsec_clear_all_btn = QPushButton("Clear All")
         self.subsec_relabel_all_btn = QPushButton("Re-label All")
@@ -3579,7 +3584,11 @@ class AudioBrowser(QMainWindow):
                     note_item = self.annotation_table.item(r, self._c_note)
                     if note_item:
                         original_text = note_item.text()
-                        note_item.setText(f"[SUBSECTION] {original_text}")
+                        subsection_note = entry.get("subsection_note", "")
+                        if subsection_note:
+                            note_item.setText(f"[SUBSECTION] {original_text} | {subsection_note}")
+                        else:
+                            note_item.setText(f"[SUBSECTION] {original_text}")
         except Exception:
             pass
 
@@ -4217,6 +4226,7 @@ class AudioBrowser(QMainWindow):
             QMessageBox.information(self, "Add Name", "Please enter a sub-section name (e.g., 'Chorus', 'Verse 1').")
             return
             
+        note = self.subsec_note_edit.text().strip()  # Get the note text
         fname = self.current_audio_file.name
         uid = self._uid_counter; self._uid_counter += 1
         
@@ -4229,10 +4239,15 @@ class AudioBrowser(QMainWindow):
             "subsection": True
         }
         
+        # Add the note field if a note was provided
+        if note:
+            entry["subsection_note"] = note
+        
         self.notes_by_file.setdefault(fname, []).append(entry)
         self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
         self.subsec_name_edit.clear()
+        self.subsec_note_edit.clear()
         self._on_clip_cancel_clicked()
         self._schedule_save_notes()
 
