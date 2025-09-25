@@ -2133,6 +2133,36 @@ class FileInfoProxyModel(QIdentityProxyModel):
             self._exclusion_cache.pop(str(dirpath), None)
         else:
             self._exclusion_cache.clear()
+    
+    def _is_file_best_take(self, filename: str) -> bool:
+        """Check if a file is marked as best take in any visible annotation set."""
+        try:
+            if not hasattr(self.audio_browser, 'annotation_sets'):
+                return False
+            for aset in self.audio_browser.annotation_sets:
+                if not aset.get("visible", True):
+                    continue  # Skip invisible sets
+                file_meta = aset.get("files", {}).get(filename, {})
+                if file_meta.get("best_take", False):
+                    return True
+            return False
+        except Exception:
+            return False
+    
+    def _is_file_partial_take(self, filename: str) -> bool:
+        """Check if a file is marked as partial take in any visible annotation set."""
+        try:
+            if not hasattr(self.audio_browser, 'annotation_sets'):
+                return False
+            for aset in self.audio_browser.annotation_sets:
+                if not aset.get("visible", True):
+                    continue  # Skip invisible sets
+                file_meta = aset.get("files", {}).get(filename, {})
+                if file_meta.get("partial_take", False):
+                    return True
+            return False
+        except Exception:
+            return False
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
@@ -2154,6 +2184,19 @@ class FileInfoProxyModel(QIdentityProxyModel):
                 if self._is_file_excluded_cached(dirpath, filename):
                     return QColor(128, 128, 128)  # Gray out excluded files
         
+        # Handle bold font for best take files
+        if role == Qt.ItemDataRole.FontRole and index.column() == 0:
+            src = self.mapToSource(index)
+            fi = self.sourceModel().fileInfo(src)  # type: ignore
+            if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
+                filename = fi.fileName()
+                # Check if this file is marked as best take in any visible annotation set
+                if self._is_file_best_take(filename):
+                    from PyQt6.QtGui import QFont
+                    font = QFont()
+                    font.setBold(True)
+                    return font
+        
         # Handle tooltip for excluded files
         if role == Qt.ItemDataRole.ToolTipRole and index.column() == 0:
             src = self.mapToSource(index)
@@ -2163,6 +2206,16 @@ class FileInfoProxyModel(QIdentityProxyModel):
                 dirpath = Path(fi.absoluteFilePath()).parent
                 if self._is_file_excluded_cached(dirpath, filename):
                     return f"{filename}\n(Excluded from fingerprinting)"
+        
+        # Handle display text - add asterisk for partial takes
+        if role == Qt.ItemDataRole.DisplayRole and index.column() == 0:
+            src = self.mapToSource(index)
+            fi = self.sourceModel().fileInfo(src)  # type: ignore
+            if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
+                filename = fi.fileName()
+                # Check if this file is marked as partial take in any visible annotation set
+                if self._is_file_partial_take(filename):
+                    return f"{filename} *"
         
         if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
             src = self.mapToSource(index)
@@ -2500,6 +2553,9 @@ class AudioBrowser(QMainWindow):
         self._refresh_right_table()
         self._refresh_annotation_legend()
         self._load_annotations_for_current()
+        
+        # Refresh tree display to show any best take/partial take formatting
+        self._refresh_tree_display()
         self._update_folder_notes_ui()
         self._refresh_important_table()
         self._update_fingerprint_ui()
@@ -3323,6 +3379,9 @@ class AudioBrowser(QMainWindow):
         self._refresh_important_table()
         self._update_folder_notes_ui()  # Update folder notes UI when set changes
         self._refresh_right_table()  # Refresh table to show current set's best takes with border
+        
+        # Refresh tree display to show best take/partial take formatting for the new set
+        self._refresh_tree_display()
 
     def _on_set_visible_toggled(self, _state):
         aset = self._get_current_set()
@@ -3334,6 +3393,9 @@ class AudioBrowser(QMainWindow):
         self._refresh_annotation_legend()
         self._refresh_right_table()
         self._load_annotations_for_current()
+        
+        # Refresh tree display when visibility is toggled
+        self._refresh_tree_display()
 
     def _on_set_pick_color(self):
         aset = self._get_current_set()
@@ -3613,7 +3675,13 @@ class AudioBrowser(QMainWindow):
             row_count = self.file_proxy.rowCount(root_index)
             if row_count > 0:
                 bottom_right = self.file_proxy.index(row_count - 1, 0, root_index)
-                self.file_proxy.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.ToolTipRole])
+                # Include FontRole and DisplayRole for best take and partial take indicators
+                self.file_proxy.dataChanged.emit(top_left, bottom_right, [
+                    Qt.ItemDataRole.ForegroundRole, 
+                    Qt.ItemDataRole.ToolTipRole,
+                    Qt.ItemDataRole.FontRole,
+                    Qt.ItemDataRole.DisplayRole
+                ])
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -3992,6 +4060,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the entire table to update the display
         self._refresh_right_table()
+        
+        # Refresh the tree display to show best take formatting
+        self._refresh_tree_display()
 
     def _on_partial_take_widget_clicked(self, row: int):
         """Handle clicks on the partial take indicator widget to toggle partial take for current set."""
@@ -4007,6 +4078,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the entire table to update the display
         self._refresh_right_table()
+        
+        # Refresh the tree display to show partial take formatting
+        self._refresh_tree_display()
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
         row = item.row(); file_item = self.table.item(row, 0)
@@ -4079,6 +4153,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the entire table to update the display
         self._refresh_right_table()
+        
+        # Refresh the tree display to show best/partial take formatting
+        self._refresh_tree_display()
 
     def _configure_annotation_table(self):
         self.annotation_table.clear()
@@ -4638,6 +4715,9 @@ class AudioBrowser(QMainWindow):
         self.file_best_takes[fname] = is_checked
         self._save_notes()  # Save the annotation data including best_take
         self._refresh_right_table()  # Update the library table to show the green highlighting
+        
+        # Refresh the tree display to show best take formatting
+        self._refresh_tree_display()
 
     def _refresh_provided_name_field(self):
         if not self.current_audio_file:
