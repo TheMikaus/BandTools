@@ -2562,6 +2562,7 @@ class AudioBrowser(QMainWindow):
         self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
 
         self.table.cellClicked.connect(self._on_library_cell_clicked)
+        self.table.cellDoubleClicked.connect(self._on_library_cell_double_clicked)
         
         # Add legend for annotation set colors
         self.legend_widget = self._create_annotation_legend()
@@ -3398,6 +3399,29 @@ class AudioBrowser(QMainWindow):
         except Exception as _e:
             # Be defensive; do not break UI if something is slightly different locally
             print("Issue#1 handler error:", _e)
+
+    def _on_library_cell_double_clicked(self, row: int, column: int):
+        """Handle double-clicks on the library table cells."""
+        # Only handle double-clicks on the Best Take column (column 1)
+        if column != 1:
+            return
+            
+        # Toggle best take for the current user/set on the clicked file
+        file_item = self.table.item(row, 0)
+        if not file_item:
+            return
+            
+        filename = file_item.text().strip()
+        if not filename:
+            return
+            
+        # Toggle best take for current set (same logic as _on_best_take_widget_clicked)
+        is_currently_best = self.file_best_takes.get(filename, False)
+        self.file_best_takes[filename] = not is_currently_best
+        self._save_notes()
+        
+        # Refresh the entire table to update the display
+        self._refresh_right_table()
 
     def _configure_annotation_table(self):
         self.annotation_table.clear()
