@@ -286,7 +286,19 @@ class SeekSlider(QSlider):
 if HAVE_NUMPY:
     import numpy as np
 
-def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
+def decode_audio_samples(path: Path, stereo: bool = False) -> Tuple[List[float], int, int, Optional[List[float]]]:
+    """
+    Decode audio samples from file.
+    
+    Args:
+        path: Audio file path
+        stereo: If True, return both mono and stereo channel data
+        
+    Returns:
+        Tuple of (mono_samples, sample_rate, duration_ms, stereo_samples)
+        where stereo_samples is None if stereo=False or file is mono,
+        otherwise it's [left_ch, right_ch, left_ch, right_ch, ...]
+    """
     suf = path.suffix.lower()
     if suf in (".wav", ".wave"):
         with wave.open(str(path), "rb") as wf:
@@ -301,6 +313,8 @@ def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
             except Exception:
                 pass
         data = array("h"); data.frombytes(raw[: (len(raw)//2)*2 ])
+        
+        stereo_samples = None
         if nch > 1:
             total = len(data) // nch
             mono = array("h", [0]) * total
@@ -308,27 +322,49 @@ def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
                 s = 0; base = i * nch
                 for c in range(nch): s += data[base + c]
                 mono[i] = int(s / nch)
+            
+            # Store stereo data if requested and it's stereo
+            if stereo and nch >= 2:
+                if HAVE_NUMPY:
+                    stereo_arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                    stereo_samples = stereo_arr.tolist()
+                else:
+                    stereo_samples = [s / 32768.0 for s in data]
+            
             data = mono
+        
         if HAVE_NUMPY:
             arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
             samples = arr.tolist()
         else:
             samples = [s / 32768.0 for s in data]
         dur_ms = int((len(samples) / sr) * 1000)
-        return samples, sr, dur_ms
+        return samples, sr, dur_ms, stereo_samples
+        
     if HAVE_PYDUB:
         seg = AudioSegment.from_file(str(path))
         sr = seg.frame_rate
         dur_ms = len(seg)
         ch = seg.channels
         raw = seg.get_array_of_samples()
+        
+        stereo_samples = None
         if HAVE_NUMPY:
             arr = np.array(raw, dtype=np.int16).astype(np.float32)
+            
+            # Store stereo data if requested and it's stereo
+            if stereo and ch >= 2:
+                stereo_samples = (arr / 32768.0).tolist()
+            
             if ch > 1: arr = arr.reshape((-1, ch)).mean(axis=1)
             samples = (arr / 32768.0).tolist()
         else:
             ints = list(raw)
             if ch > 1:
+                # Store stereo data if requested
+                if stereo and ch >= 2:
+                    stereo_samples = [v / 32768.0 for v in ints]
+                
                 mono = []
                 for i in range(0, len(ints), ch):
                     s = 0
@@ -337,58 +373,176 @@ def decode_audio_samples(path: Path) -> Tuple[List[float], int, int]:
                 samples = [v / 32768.0 for v in mono]
             else:
                 samples = [v / 32768.0 for v in ints]
-        return samples, sr, dur_ms
+        return samples, sr, dur_ms, stereo_samples
+        
     raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
 
-def compute_peaks_progressive(samples: List[float], columns: int, chunk: int):
+def compute_peaks_progressive(samples: List[float], columns: int, chunk: int, stereo_samples: Optional[List[float]] = None):
+    """
+    Compute peaks progressively for mono or stereo audio.
+    
+    Args:
+        samples: Mono audio samples
+        columns: Number of columns to generate
+        chunk: Chunk size for progressive generation
+        stereo_samples: Optional stereo samples [L, R, L, R, ...] for stereo mode
+        
+    Yields:
+        (start_index, peaks_data)
+        For mono: peaks_data = [[min, max], [min, max], ...]
+        For stereo: peaks_data = [[[L_min, L_max], [R_min, R_max]], ...]
+    """
     n = len(samples)
     if n == 0 or columns <= 0:
-        yield 0, [[0.0, 0.0] for _ in range(max(1, columns))]
+        if stereo_samples:
+            yield 0, [[[0.0, 0.0], [0.0, 0.0]] for _ in range(max(1, columns))]
+        else:
+            yield 0, [[0.0, 0.0] for _ in range(max(1, columns))]
         return
-    if HAVE_NUMPY:
-        arr = np.asarray(samples, dtype=np.float32)
-        idx = np.linspace(0, n, num=columns+1, dtype=np.int64)
-        for start in range(0, columns, chunk):
-            end = min(columns, start + chunk)
-            out = []
-            for i in range(start, end):
-                a, b = idx[i], idx[i+1]
-                if b > a:
-                    seg = arr[a:b]
-                    out.append([float(seg.min()), float(seg.max())])
-                else:
-                    v = float(arr[min(a, n-1)]); out.append([v, v])
-            yield start, out
+    
+    if stereo_samples and len(stereo_samples) >= 2:
+        # Stereo mode - process left and right channels separately
+        n_stereo = len(stereo_samples)
+        n_samples = n_stereo // 2  # Number of sample pairs
+        
+        if HAVE_NUMPY:
+            arr = np.asarray(stereo_samples, dtype=np.float32)
+            left_ch = arr[::2]  # Every even index
+            right_ch = arr[1::2]  # Every odd index
+            idx = np.linspace(0, n_samples, num=columns+1, dtype=np.int64)
+            
+            for start in range(0, columns, chunk):
+                end = min(columns, start + chunk)
+                out = []
+                for i in range(start, end):
+                    a, b = idx[i], idx[i+1]
+                    if b > a:
+                        left_seg = left_ch[a:b]
+                        right_seg = right_ch[a:b]
+                        out.append([
+                            [float(left_seg.min()), float(left_seg.max())],
+                            [float(right_seg.min()), float(right_seg.max())]
+                        ])
+                    else:
+                        left_val = float(left_ch[min(a, len(left_ch)-1)])
+                        right_val = float(right_ch[min(a, len(right_ch)-1)])
+                        out.append([[left_val, left_val], [right_val, right_val]])
+                yield start, out
+        else:
+            # Non-numpy stereo processing
+            for start in range(0, columns, chunk):
+                end = min(columns, start + chunk)
+                out = []
+                for i in range(start, end):
+                    a = int(i * n_samples / columns) * 2  # Convert to stereo index
+                    b = int((i+1) * n_samples / columns) * 2
+                    if b <= a: b = a + 2
+                    
+                    left_min, left_max = 1.0, -1.0
+                    right_min, right_max = 1.0, -1.0
+                    
+                    for j in range(a, min(b, n_stereo-1), 2):
+                        left_val = stereo_samples[j]
+                        right_val = stereo_samples[j+1] if j+1 < n_stereo else left_val
+                        
+                        if left_val < left_min: left_min = left_val
+                        if left_val > left_max: left_max = left_val
+                        if right_val < right_min: right_min = right_val
+                        if right_val > right_max: right_max = right_val
+                    
+                    out.append([
+                        [float(left_min), float(left_max)],
+                        [float(right_min), float(right_max)]
+                    ])
+                yield start, out
     else:
-        for start in range(0, columns, chunk):
-            end = min(columns, start + chunk)
-            out = []
-            for i in range(start, end):
-                a = int(i * n / columns)
-                b = int((i+1) * n / columns)
-                if b <= a: b = a + 1
-                mn, mx = 1.0, -1.0
-                for j in range(a, min(b, n)):
-                    v = samples[j]
-                    if v < mn: mn = v
-                    if v > mx: mx = v
-                out.append([float(mn), float(mx)])
-            yield start, out
+        # Mono mode - existing implementation
+        if HAVE_NUMPY:
+            arr = np.asarray(samples, dtype=np.float32)
+            idx = np.linspace(0, n, num=columns+1, dtype=np.int64)
+            for start in range(0, columns, chunk):
+                end = min(columns, start + chunk)
+                out = []
+                for i in range(start, end):
+                    a, b = idx[i], idx[i+1]
+                    if b > a:
+                        seg = arr[a:b]
+                        out.append([float(seg.min()), float(seg.max())])
+                    else:
+                        v = float(arr[min(a, n-1)]); out.append([v, v])
+                yield start, out
+        else:
+            for start in range(0, columns, chunk):
+                end = min(columns, start + chunk)
+                out = []
+                for i in range(start, end):
+                    a = int(i * n / columns)
+                    b = int((i+1) * n / columns)
+                    if b <= a: b = a + 1
+                    mn, mx = 1.0, -1.0
+                    for j in range(a, min(b, n)):
+                        v = samples[j]
+                        if v < mn: mn = v
+                        if v > mx: mx = v
+                    out.append([float(mn), float(mx)])
+                yield start, out
 
-def resample_peaks(peaks: List[Tuple[float, float]], width: int) -> List[Tuple[float, float]]:
+def resample_peaks(peaks: List, width: int) -> List:
+    """
+    Resample peaks to target width.
+    
+    Args:
+        peaks: For mono: List[Tuple[float, float]]
+               For stereo: List[List[List[float]]] where each item is [[L_min, L_max], [R_min, R_max]]
+        width: Target width
+        
+    Returns:
+        Resampled peaks in same format as input
+    """
     n = len(peaks)
-    if n == 0 or width <= 0: return [(0.0, 0.0)] * max(1, width)
+    if n == 0 or width <= 0: 
+        # Detect format by checking first element if available
+        if n > 0 and isinstance(peaks[0], list) and len(peaks[0]) == 2 and isinstance(peaks[0][0], list):
+            # Stereo format
+            return [[[0.0, 0.0], [0.0, 0.0]] for _ in range(max(1, width))]
+        else:
+            # Mono format
+            return [(0.0, 0.0)] * max(1, width)
+    
     if width == n: return peaks
+    
+    # Check if this is stereo data
+    is_stereo = isinstance(peaks[0], list) and len(peaks[0]) == 2 and isinstance(peaks[0][0], list)
+    
     out = []
     for i in range(width):
         a = int(i * n / width); b = int((i+1) * n / width)
         if b <= a: b = a + 1
-        mn, mx = 1.0, -1.0
-        for j in range(a, min(b, n)):
-            pmn, pmx = peaks[j]
-            if pmn < mn: mn = pmn
-            if pmx > mx: mx = pmx
-        out.append((mn, mx))
+        
+        if is_stereo:
+            # Stereo resampling
+            left_min, left_max = 1.0, -1.0
+            right_min, right_max = 1.0, -1.0
+            
+            for j in range(a, min(b, n)):
+                left_peak = peaks[j][0]  # [L_min, L_max]
+                right_peak = peaks[j][1]  # [R_min, R_max]
+                
+                if left_peak[0] < left_min: left_min = left_peak[0]
+                if left_peak[1] > left_max: left_max = left_peak[1]
+                if right_peak[0] < right_min: right_min = right_peak[0]
+                if right_peak[1] > right_max: right_max = right_peak[1]
+            
+            out.append([[left_min, left_max], [right_min, right_max]])
+        else:
+            # Mono resampling (existing logic)
+            mn, mx = 1.0, -1.0
+            for j in range(a, min(b, n)):
+                pmn, pmx = peaks[j]
+                if pmn < mn: mn = pmn
+                if pmx > mx: mx = pmx
+            out.append((mn, mx))
+    
     return out
 
 # ========== Audio fingerprinting ==========
@@ -1104,30 +1258,45 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
 
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
-    progress = pyqtSignal(int, str, list, int, int)
-    finished = pyqtSignal(int, str, list, int, int, int, int)
+    progress = pyqtSignal(int, str, list, int, int, bool)  # Added bool for stereo mode
+    finished = pyqtSignal(int, str, list, int, int, int, int, bool)  # Added bool for stereo mode
     error = pyqtSignal(int, str, str)
 
-    def __init__(self, gen_id: int, path_str: str, columns: int):
+    def __init__(self, gen_id: int, path_str: str, columns: int, stereo: bool = False):
         super().__init__()
         self._gen_id = int(gen_id)
         self._path_str = path_str
         self._columns = int(columns)
+        self._stereo = stereo
 
     def run(self):
         try:
             p = Path(self._path_str)
-            samples, _sr, dur_ms = decode_audio_samples(p)
-            peaks_all: List[Tuple[float, float]] = []
-            CHUNK = 100
-            for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK):
-                for a, b in chunk_peaks:
-                    peaks_all.append((float(a), float(b)))
-                done = start + len(chunk_peaks)
-                self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns))
+            samples, _sr, dur_ms, stereo_samples = decode_audio_samples(p, stereo=self._stereo)
+            
+            if self._stereo and stereo_samples:
+                # Stereo mode
+                peaks_all: List[List[List[float]]] = []
+                CHUNK = 100
+                for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK, stereo_samples):
+                    for peak_data in chunk_peaks:
+                        # Convert to serializable format: [[L_min, L_max], [R_min, R_max]]
+                        peaks_all.append([[float(peak_data[0][0]), float(peak_data[0][1])], 
+                                        [float(peak_data[1][0]), float(peak_data[1][1])]])
+                    done = start + len(chunk_peaks)
+                    self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns), True)
+            else:
+                # Mono mode
+                peaks_all: List[List[float]] = []
+                CHUNK = 100
+                for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK):
+                    for a, b in chunk_peaks:
+                        peaks_all.append([float(a), float(b)])
+                    done = start + len(chunk_peaks)
+                    self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns), False)
+            
             size, mtime = file_signature(p)
-            peaks_payload = [[float(a), float(b)] for (a, b) in peaks_all]
-            self.finished.emit(self._gen_id, self._path_str, peaks_payload, int(dur_ms), int(self._columns), int(size), int(mtime))
+            self.finished.emit(self._gen_id, self._path_str, peaks_all, int(dur_ms), int(self._columns), int(size), int(mtime), self._stereo)
         except Exception as e:
             self.error.emit(self._gen_id, self._path_str, str(e))
 
@@ -1209,7 +1378,7 @@ class FingerprintWorker(QObject):
                     continue  # Skip if already cached and file unchanged
                 
                 # Generate fingerprints for multiple algorithms
-                samples, sr, dur_ms = decode_audio_samples(audio_file)
+                samples, sr, dur_ms, _ = decode_audio_samples(audio_file)  # Only need mono for fingerprinting
                 
                 # Get existing fingerprints for this file (if any)
                 existing_entry = cache["files"].get(audio_file.name, {})
@@ -1262,16 +1431,24 @@ class WaveformView(QWidget):
         self.setMinimumHeight(140)
         # Enable focus so the widget can receive keyboard events
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self._peaks: Optional[List[Tuple[float, float]]] = None
-        self._peaks_loading: List[Tuple[float, float]] = []
+        self._peaks: Optional[List] = None  # Can be mono or stereo format
+        self._peaks_loading: List = []
         self._duration_ms: int = 0
         self._pixmap: Optional[QPixmap] = None
         self._pixmap_w: int = 0
+        
+        # Stereo mode support
+        self._stereo_mode: bool = False
+        self._has_stereo_data: bool = False
 
         self._bg = QColor("#101114"); self._axis = QColor("#2a2c31")
         self._wave = QColor("#58a6ff"); self._playhead = QColor("#ff5555")
         self._msg_color = QColor("#8a8f98")
         self._selected_color = QColor("#ffa500")
+        
+        # Stereo channel colors
+        self._left_color = QColor("#58a6ff")   # Blue for left channel
+        self._right_color = QColor("#ff6b58")  # Red for right channel
 
         self._state: str = "empty"   # empty|loading|ready|error
         self._msg: str = ""
@@ -1332,7 +1509,31 @@ class WaveformView(QWidget):
         self._multi = {}; self._selected = None; self._hover = None
         self._dragging_marker = False
         self._clip_start_ms = None; self._clip_end_ms = None
+        self._has_stereo_data = False
         self.update()
+
+    def set_stereo_mode(self, enabled: bool):
+        """Toggle between mono and stereo waveform display."""
+        if self._stereo_mode == enabled:
+            return
+        
+        self._stereo_mode = enabled
+        
+        # If we have a file loaded, regenerate waveform
+        if self._path and self._path.exists():
+            self.set_audio_file(self._path)
+        else:
+            # Just update display with current data
+            self._pixmap = None
+            self.update()
+
+    def get_stereo_mode(self) -> bool:
+        """Return current stereo mode status."""
+        return self._stereo_mode
+
+    def has_stereo_data(self) -> bool:
+        """Return whether current file has stereo data available."""
+        return self._has_stereo_data
 
     def _effective_duration(self) -> int:
         if self._duration_ms > 0: return self._duration_ms
@@ -1363,11 +1564,19 @@ class WaveformView(QWidget):
         cache = load_waveform_cache(path.parent)
         entry = cache["files"].get(path.name)
         size, mtime = file_signature(path)
+        
+        # Check if we have cached data for the current mode
+        cache_key = "stereo_peaks" if self._stereo_mode else "peaks"
         if entry and entry.get("columns") == WAVEFORM_COLUMNS and \
            int(entry.get("size", 0)) == size and int(entry.get("mtime", 0)) == mtime and \
-           isinstance(entry.get("peaks"), list) and isinstance(entry.get("duration_ms"), int):
-            self._peaks = [(float(mn), float(mx)) for mn, mx in entry["peaks"]]
+           isinstance(entry.get(cache_key), list) and isinstance(entry.get("duration_ms"), int):
+            
+            self._peaks = entry[cache_key]
             self._duration_ms = int(entry["duration_ms"])
+            
+            # Check if stereo data is available
+            self._has_stereo_data = bool(entry.get("has_stereo_data", False))
+            
             self._state = "ready"; self._msg = ""
             self.update(); return
 
@@ -1380,7 +1589,7 @@ class WaveformView(QWidget):
 
     def _start_worker(self, gen_id: int, path: Path):
         thread = QThread(self)
-        worker = WaveformWorker(gen_id, str(path), WAVEFORM_COLUMNS)
+        worker = WaveformWorker(gen_id, str(path), WAVEFORM_COLUMNS, stereo=self._stereo_mode)
         worker.moveToThread(thread); worker.setObjectName(f"WaveformWorker-{gen_id}")
         self._threads.append(thread); self._workers[gen_id] = worker
 
@@ -1397,13 +1606,23 @@ class WaveformView(QWidget):
         thread.finished.connect(_cleanup); thread.finished.connect(thread.deleteLater)
         thread.start()
 
-    def _on_worker_progress(self, gen_id: int, path_str: str, new_chunk: list, done_cols: int, total_cols: int):
+    def _on_worker_progress(self, gen_id: int, path_str: str, new_chunk: list, done_cols: int, total_cols: int, is_stereo: bool = False):
         if gen_id != self._active_gen_id or not self._path or str(self._path) != path_str:
             return
-        for pair in new_chunk:
-            try: a, b = pair
-            except Exception: continue
-            self._peaks_loading.append((float(a), float(b)))
+        
+        if is_stereo:
+            # Stereo format: each item is [[L_min, L_max], [R_min, R_max]]
+            for item in new_chunk:
+                try: 
+                    self._peaks_loading.append(item)
+                except Exception: continue
+        else:
+            # Mono format: each item is [min, max]
+            for pair in new_chunk:
+                try: a, b = pair
+                except Exception: continue
+                self._peaks_loading.append((float(a), float(b)))
+        
         self._total_cols = max(1, int(total_cols))
         self._done_cols = max(0, min(int(done_cols), self._total_cols))
         if self._done_cols > 0:
@@ -1413,20 +1632,39 @@ class WaveformView(QWidget):
             self._msg = "Analyzing waveform…"
         self._pixmap = None; self.update()
 
-    def _on_worker_finished(self, gen_id: int, path_str: str, peaks: list, duration_ms: int, columns: int, size: int, mtime: int):
+    def _on_worker_finished(self, gen_id: int, path_str: str, peaks: list, duration_ms: int, columns: int, size: int, mtime: int, is_stereo: bool = False):
         if gen_id != self._active_gen_id or not self._path or str(self._path) != path_str:
             return
-        self._peaks = [(float(mn), float(mx)) for mn, mx in peaks]
+        
+        self._peaks = peaks
         self._duration_ms = int(duration_ms)
         self._state = "ready"; self._msg = ""
+        
+        # Check if file has stereo data by attempting to decode it
+        try:
+            _, _, _, stereo_data = decode_audio_samples(self._path, stereo=True)
+            self._has_stereo_data = stereo_data is not None
+        except:
+            self._has_stereo_data = False
+        
+        # Update cache with both mono and stereo data
         cache = load_waveform_cache(self._path.parent)
-        cache["files"][self._path.name] = {
+        file_entry = cache["files"].get(self._path.name, {})
+        
+        file_entry.update({
             "columns": int(columns),
             "size": int(size),
             "mtime": int(mtime),
             "duration_ms": int(duration_ms),
-            "peaks": self._peaks,
-        }
+            "has_stereo_data": self._has_stereo_data
+        })
+        
+        if is_stereo:
+            file_entry["stereo_peaks"] = peaks
+        else:
+            file_entry["peaks"] = peaks
+        
+        cache["files"][self._path.name] = file_entry
         save_waveform_cache(self._path.parent, cache)
         self._pixmap = None; self.update()
 
@@ -1447,34 +1685,109 @@ class WaveformView(QWidget):
         W = max(1, self.width()); H = max(1, self.height())
         pm = QPixmap(W, H); pm.fill(self._bg)
         p = QPainter(pm); p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        mid = H // 2
-        pen_axis = QPen(self._axis); pen_axis.setWidth(1)
-        p.setPen(pen_axis); p.drawLine(0, mid, W, mid)
-
+        
         if self._state == "ready" and self._peaks:
-            pen_wave = QPen(self._wave); pen_wave.setWidth(WAVEFORM_STROKE_WIDTH); p.setPen(pen_wave)
-            draw_peaks = resample_peaks(self._peaks, W)
-            for x, (mn, mx) in enumerate(draw_peaks):
-                y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
-                if y1 > y2: y1, y2 = y2, y1
-                p.drawLine(x, y1, x, y2)
+            self._draw_waveform(p, W, H, self._peaks)
         elif self._state == "loading":
             if self._peaks_loading:
-                pen_wave = QPen(self._wave); pen_wave.setWidth(WAVEFORM_STROKE_WIDTH); p.setPen(pen_wave)
-                partial = resample_peaks(self._peaks_loading, min(W, max(1, self._done_cols)))
-                draw_peaks = resample_peaks(partial, W)
-                for x, (mn, mx) in enumerate(draw_peaks):
-                    y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
-                    if y1 > y2: y1, y2 = y2, y1
-                    p.drawLine(x, y1, x, y2)
+                self._draw_waveform(p, W, H, self._peaks_loading, loading=True)
             p.setPen(self._msg_color)
             p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, self._msg or "Analyzing waveform…")
         else:
+            # Draw axis line for empty state
+            mid = H // 2
+            pen_axis = QPen(self._axis); pen_axis.setWidth(1)
+            p.setPen(pen_axis); p.drawLine(0, mid, W, mid)
             p.setPen(self._msg_color)
             p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, self._msg or "No waveform")
 
         p.end()
         self._pixmap = pm; self._pixmap_w = W
+
+    def _draw_waveform(self, painter: QPainter, W: int, H: int, peaks_data: List, loading: bool = False):
+        """Draw waveform based on current mode (mono/stereo)."""
+        if not peaks_data:
+            return
+        
+        # Check if this is stereo data
+        is_stereo = len(peaks_data) > 0 and isinstance(peaks_data[0], list) and len(peaks_data[0]) == 2 and isinstance(peaks_data[0][0], list)
+        
+        if self._stereo_mode and is_stereo:
+            # Stereo mode - draw left and right channels separately
+            self._draw_stereo_waveform(painter, W, H, peaks_data, loading)
+        else:
+            # Mono mode - draw single waveform
+            self._draw_mono_waveform(painter, W, H, peaks_data, loading)
+
+    def _draw_mono_waveform(self, painter: QPainter, W: int, H: int, peaks_data: List, loading: bool = False):
+        """Draw mono waveform."""
+        mid = H // 2
+        pen_axis = QPen(self._axis); pen_axis.setWidth(1)
+        painter.setPen(pen_axis); painter.drawLine(0, mid, W, mid)
+        
+        pen_wave = QPen(self._wave); pen_wave.setWidth(WAVEFORM_STROKE_WIDTH); painter.setPen(pen_wave)
+        
+        if loading:
+            partial = resample_peaks(peaks_data, min(W, max(1, self._done_cols)))
+            draw_peaks = resample_peaks(partial, W)
+        else:
+            draw_peaks = resample_peaks(peaks_data, W)
+        
+        for x, peak_data in enumerate(draw_peaks):
+            if isinstance(peak_data, (tuple, list)) and len(peak_data) >= 2:
+                mn, mx = peak_data[0], peak_data[1]
+            else:
+                continue
+            y1 = int(mid - mn * (H/2-2)); y2 = int(mid - mx * (H/2-2))
+            if y1 > y2: y1, y2 = y2, y1
+            painter.drawLine(x, y1, x, y2)
+
+    def _draw_stereo_waveform(self, painter: QPainter, W: int, H: int, peaks_data: List, loading: bool = False):
+        """Draw stereo waveform with separate left and right channels."""
+        # Split height for left and right channels
+        quarter = H // 4
+        left_mid = quarter
+        right_mid = 3 * quarter
+        
+        # Draw axis lines for both channels
+        pen_axis = QPen(self._axis); pen_axis.setWidth(1)
+        painter.setPen(pen_axis)
+        painter.drawLine(0, left_mid, W, left_mid)    # Left channel axis
+        painter.drawLine(0, right_mid, W, right_mid)  # Right channel axis
+        painter.drawLine(0, H//2, W, H//2)            # Center divider
+        
+        if loading:
+            partial = resample_peaks(peaks_data, min(W, max(1, self._done_cols)))
+            draw_peaks = resample_peaks(partial, W)
+        else:
+            draw_peaks = resample_peaks(peaks_data, W)
+        
+        for x, peak_data in enumerate(draw_peaks):
+            if not isinstance(peak_data, list) or len(peak_data) != 2:
+                continue
+            
+            left_peak, right_peak = peak_data
+            if not (isinstance(left_peak, list) and isinstance(right_peak, list)):
+                continue
+                
+            if len(left_peak) >= 2 and len(right_peak) >= 2:
+                # Draw left channel (top half)
+                pen_left = QPen(self._left_color); pen_left.setWidth(WAVEFORM_STROKE_WIDTH)
+                painter.setPen(pen_left)
+                left_mn, left_mx = left_peak[0], left_peak[1]
+                y1 = int(left_mid - left_mn * (quarter-2))
+                y2 = int(left_mid - left_mx * (quarter-2))
+                if y1 > y2: y1, y2 = y2, y1
+                painter.drawLine(x, y1, x, y2)
+                
+                # Draw right channel (bottom half)
+                pen_right = QPen(self._right_color); pen_right.setWidth(WAVEFORM_STROKE_WIDTH)
+                painter.setPen(pen_right)
+                right_mn, right_mx = right_peak[0], right_peak[1]
+                y1 = int(right_mid - right_mn * (quarter-2))
+                y2 = int(right_mid - right_mx * (quarter-2))
+                if y1 > y2: y1, y2 = y2, y1
+                painter.drawLine(x, y1, x, y2)
 
     def paintEvent(self, event):
         self._ensure_pixmap()
@@ -2617,6 +2930,18 @@ class AudioBrowser(QMainWindow):
         
         ann_layout.addLayout(pn_row)
 
+        # --- Waveform controls ---
+        waveform_controls = QHBoxLayout()
+        waveform_controls.addWidget(QLabel("Waveform:"))
+        self.stereo_mono_toggle = QPushButton("Mono")
+        self.stereo_mono_toggle.setCheckable(True)
+        self.stereo_mono_toggle.setToolTip("Toggle between mono and stereo waveform view")
+        self.stereo_mono_toggle.clicked.connect(self._on_stereo_toggle_clicked)
+        self.stereo_mono_toggle.setMaximumWidth(80)
+        waveform_controls.addWidget(self.stereo_mono_toggle)
+        waveform_controls.addStretch(1)  # Push to the left
+        ann_layout.addLayout(waveform_controls)
+
         self.waveform = WaveformView(); self.waveform.bind_player(self.player)
         self.waveform.installEventFilter(self)
         ann_layout.addWidget(self.waveform)
@@ -3111,8 +3436,12 @@ class AudioBrowser(QMainWindow):
         self._load_annotations_for_current()
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
-        try: self.waveform.set_audio_file(path)
-        except Exception: self.waveform.clear()
+        try: 
+            self.waveform.set_audio_file(path)
+            self._update_stereo_button_state()  # Update stereo button after waveform is loaded
+        except Exception: 
+            self.waveform.clear()
+            self._update_stereo_button_state()  # Update button state even on error
         self._update_waveform_annotations()
         
         # Ensure the file is highlighted in the tree view (important for auto-progression)
@@ -3286,6 +3615,37 @@ class AudioBrowser(QMainWindow):
                 self.pending_note_start_ms = int(value); self._update_captured_time_label()
         finally:
             self._user_is_scrubbing = was
+
+    def _on_stereo_toggle_clicked(self, checked: bool):
+        """Handle stereo/mono toggle button click."""
+        # Update the waveform mode
+        self.waveform.set_stereo_mode(checked)
+        
+        # Update button text and tooltip
+        if checked:
+            self.stereo_mono_toggle.setText("Stereo")
+            self.stereo_mono_toggle.setToolTip("Currently showing stereo view. Click for mono view.")
+        else:
+            self.stereo_mono_toggle.setText("Mono")
+            self.stereo_mono_toggle.setToolTip("Currently showing mono view. Click for stereo view.")
+        
+        # Enable/disable button based on whether current file has stereo data
+        if self.current_audio_file:
+            self.stereo_mono_toggle.setEnabled(self.waveform.has_stereo_data())
+
+    def _update_stereo_button_state(self):
+        """Update stereo button state based on current file."""
+        if not self.current_audio_file:
+            self.stereo_mono_toggle.setEnabled(False)
+            return
+            
+        has_stereo = self.waveform.has_stereo_data()
+        self.stereo_mono_toggle.setEnabled(has_stereo)
+        
+        if not has_stereo and self.waveform.get_stereo_mode():
+            # File doesn't have stereo data but we're in stereo mode, switch to mono
+            self.stereo_mono_toggle.setChecked(False)
+            self._on_stereo_toggle_clicked(False)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:
@@ -4381,7 +4741,7 @@ class AudioBrowser(QMainWindow):
             current_fp = fingerprints.get(self.fingerprint_algorithm)
             if not current_fp:
                 try:
-                    samples, sr, dur_ms = decode_audio_samples(audio_file)
+                    samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
                     # Generate fingerprint for current algorithm
                     new_fingerprints = compute_multiple_fingerprints(samples, sr, [self.fingerprint_algorithm])
                     current_fp = new_fingerprints.get(self.fingerprint_algorithm)
@@ -5295,7 +5655,7 @@ class AudioBrowser(QMainWindow):
             current_fp = fingerprints.get(self.fingerprint_algorithm)
             if not current_fp:
                 try:
-                    samples, sr, dur_ms = decode_audio_samples(audio_file)
+                    samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
                     # Generate fingerprint for current algorithm
                     new_fingerprints = compute_multiple_fingerprints(samples, sr, [self.fingerprint_algorithm])
                     current_fp = new_fingerprints.get(self.fingerprint_algorithm)
@@ -5469,7 +5829,7 @@ class AudioBrowser(QMainWindow):
                 continue
             
             try:
-                samples, sr, dur_ms = decode_audio_samples(audio_file)
+                samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
                 
                 # Determine which algorithms to generate
                 if not existing or existing.get("size") != size or existing.get("mtime") != mtime:
