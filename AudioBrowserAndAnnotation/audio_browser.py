@@ -1632,6 +1632,44 @@ class FileInfoProxyModel(QIdentityProxyModel):
         self.setSourceModel(parent_model)
         self.duration_cache = duration_cache
         self.audio_browser = audio_browser  # Reference to get current practice folder
+        
+        # Cache for fingerprint exclusion data to avoid repeated disk I/O
+        self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
+
+    def _is_file_excluded_cached(self, dirpath: Path, filename: str) -> bool:
+        """Fast cached check for file exclusion from fingerprinting."""
+        dirpath_str = str(dirpath)
+        fingerprints_file = dirpath / FINGERPRINTS_JSON
+        
+        # Get current modification time of the fingerprints file
+        try:
+            current_mtime = fingerprints_file.stat().st_mtime if fingerprints_file.exists() else 0
+        except OSError:
+            current_mtime = 0
+        
+        # Check if we have valid cached data
+        if dirpath_str in self._exclusion_cache:
+            excluded_files, cached_mtime = self._exclusion_cache[dirpath_str]
+            if cached_mtime == current_mtime:
+                return filename in excluded_files
+        
+        # Cache is stale or missing, reload from disk
+        try:
+            cache = load_fingerprint_cache(dirpath)
+            excluded_files = set(cache.get("excluded_files", []))
+            self._exclusion_cache[dirpath_str] = (excluded_files, current_mtime)
+            return filename in excluded_files
+        except Exception:
+            # On error, assume not excluded and cache empty set
+            self._exclusion_cache[dirpath_str] = (set(), current_mtime)
+            return False
+
+    def invalidate_exclusion_cache(self, dirpath: Optional[Path] = None):
+        """Invalidate exclusion cache for a specific directory or all directories."""
+        if dirpath:
+            self._exclusion_cache.pop(str(dirpath), None)
+        else:
+            self._exclusion_cache.clear()
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
@@ -1650,7 +1688,7 @@ class FileInfoProxyModel(QIdentityProxyModel):
             if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
                 filename = fi.fileName()
                 dirpath = Path(fi.absoluteFilePath()).parent
-                if is_file_excluded_from_fingerprinting(dirpath, filename):
+                if self._is_file_excluded_cached(dirpath, filename):
                     return QColor(128, 128, 128)  # Gray out excluded files
         
         # Handle tooltip for excluded files
@@ -1660,7 +1698,7 @@ class FileInfoProxyModel(QIdentityProxyModel):
             if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
                 filename = fi.fileName()
                 dirpath = Path(fi.absoluteFilePath()).parent
-                if is_file_excluded_from_fingerprinting(dirpath, filename):
+                if self._is_file_excluded_cached(dirpath, filename):
                     return f"{filename}\n(Excluded from fingerprinting)"
         
         if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
@@ -3038,7 +3076,7 @@ class AudioBrowser(QMainWindow):
         dirpath = file_path.parent
         
         # Check if file is currently excluded from fingerprinting
-        is_excluded = is_file_excluded_from_fingerprinting(dirpath, filename)
+        is_excluded = self.file_proxy._is_file_excluded_cached(dirpath, filename)
         
         # Create context menu
         menu = QMenu(self)
@@ -3056,6 +3094,9 @@ class AudioBrowser(QMainWindow):
             # Toggle exclusion status
             new_status = toggle_file_fingerprint_exclusion(dirpath, filename)
             
+            # Invalidate the cache for this directory to force reload
+            self.file_proxy.invalidate_exclusion_cache(dirpath)
+            
             # Update UI to reflect the change
             self._update_fingerprint_ui()
             self._refresh_tree_display()
@@ -3067,10 +3108,18 @@ class AudioBrowser(QMainWindow):
 
     def _refresh_tree_display(self):
         """Force refresh of the tree display to update visual indicators."""
-        # Force the model to update by resetting it
-        current_root_index = self.tree.rootIndex()
-        self.tree.setModel(self.file_proxy)
-        self.tree.setRootIndex(current_root_index)
+        # Invalidate the exclusion cache and emit dataChanged signals to refresh display
+        self.file_proxy.invalidate_exclusion_cache()
+        
+        # Emit dataChanged signals for all visible items to refresh their display
+        root_index = self.tree.rootIndex()
+        if root_index.isValid():
+            # Get the range of visible rows to minimize refresh overhead
+            top_left = self.file_proxy.index(0, 0, root_index)
+            row_count = self.file_proxy.rowCount(root_index)
+            if row_count > 0:
+                bottom_right = self.file_proxy.index(row_count - 1, 0, root_index)
+                self.file_proxy.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.ToolTipRole])
 
     def _go_up(self):
         parent = self.root_path.parent
@@ -5176,6 +5225,9 @@ class AudioBrowser(QMainWindow):
                     QMessageBox.information(self, "Fingerprints Generated", 
                                             f"Generated fingerprints for {generated_count} files.\n"
                                             f"Total fingerprints in folder: {total_fingerprints}")
+            
+            # Invalidate the exclusion cache since fingerprint files may have been modified
+            self.file_proxy.invalidate_exclusion_cache(current_dir)
             
             # Update UI and cleanup
             self.generate_fingerprints_btn.setEnabled(True)
