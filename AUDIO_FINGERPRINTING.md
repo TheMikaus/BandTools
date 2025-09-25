@@ -61,6 +61,8 @@ The system now supports four different fingerprinting algorithms that users can 
 - **Generate Fingerprints Button**: Create fingerprints for current folder (all algorithms)
 - **Auto-Label Button**: Automatically suggest names based on cross-folder matches
 - **Show Practice Folders Button**: Display detailed information about available practice folders
+- **File Exclusion Context Menu**: Right-click audio files to exclude/include them from fingerprinting
+- **Visual Exclusion Indicators**: Excluded files appear grayed out with informative tooltips
 - **Status Display**: Shows current algorithm and fingerprint statistics
 
 ### 5. Cross-Folder Matching System
@@ -68,9 +70,17 @@ The system now supports four different fingerprinting algorithms that users can 
 - **Unique Song Prioritization**: Prioritizes songs that appear in only one folder for reliable identification
 - **Multi-Folder Handling**: Can still match songs that appear in multiple folders
 - **Source Attribution**: Shows which folder each match came from
+- **File Exclusion Support**: Excluded files are automatically skipped during matching
 - **Detailed Results**: Provides comprehensive feedback on matching process
 
-### 6. Caching System
+### 6. File Exclusion System
+- **Per-Directory Configuration**: Each folder maintains its own list of excluded files
+- **Persistent Storage**: Exclusion status stored in `.audio_fingerprints.json` cache files
+- **Easy Toggle Interface**: Right-click context menu for quick exclusion/inclusion
+- **Visual Feedback**: Excluded files displayed in gray with tooltip indicators
+- **Automatic Skipping**: Excluded files ignored during fingerprint matching and auto-labeling
+
+### 7. Caching System
 - **JSON Storage**: Fingerprints stored in `.audio_fingerprints.json` files
 - **Multiple Algorithms**: Each file stores fingerprints for multiple algorithms
 - **New Format**: `"fingerprints": {"algorithm_name": [...], ...}` 
@@ -132,20 +142,29 @@ Loads fingerprint cache from directory with automatic migration.
 #### `save_fingerprint_cache(dirpath: Path, cache: Dict) -> None`
 Saves fingerprint cache to directory.
 
+#### `is_file_excluded_from_fingerprinting(dirpath: Path, filename: str) -> bool`
+**New function** - checks if a specific file is excluded from fingerprinting.
+- **Parameters**: Directory path and filename
+- **Returns**: True if file is excluded, False otherwise
+
+#### `toggle_file_fingerprint_exclusion(dirpath: Path, filename: str) -> bool`
+**New function** - toggles the exclusion status of a file for fingerprinting.
+- **Parameters**: Directory path and filename
+- **Returns**: New exclusion status (True if now excluded, False if now included)
+
 #### `discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]`
 Discovers all subdirectories that contain fingerprint cache files.
 - **Parameters**: Root directory to search
 - **Returns**: List of directories containing `.audio_fingerprints.json` files
 
 #### `collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
-**Updated function** - now requires algorithm parameter.
+**Updated function** - now requires algorithm parameter and automatically skips excluded files.
 Collects fingerprints from multiple folders for a specific algorithm and organizes by filename.
 - **Parameters**: 
   - `folder_paths`: List of directories to scan for fingerprints
   - `algorithm`: Which algorithm's fingerprints to collect
   - `exclude_dir`: Optional directory to exclude from collection
-  - `exclude_dir`: Optional directory to exclude from collection
-- **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information
+- **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information (excluded files are automatically skipped)
 
 #### `find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict, threshold: float) -> Optional[Tuple[str, float, Path]]`
 Finds the best match for a target fingerprint across multiple folders, prioritizing unique songs.
@@ -164,7 +183,11 @@ Opens dialog to select reference folder containing named songs. (Legacy - now op
 Generates fingerprints for all audio files in current folder.
 
 #### `_auto_label_with_fingerprints()`
-Automatically labels unlabeled files based on cross-folder fingerprint matching. Now searches across all practice folders automatically.
+Automatically labels unlabeled files based on cross-folder fingerprint matching. Now searches across all practice folders automatically and respects file exclusions.
+
+#### `_on_tree_context_menu(position: QPoint)`
+**New method** - handles right-click context menu on audio files in the file tree.
+Provides options to exclude/include files from fingerprinting.
 
 #### `_show_practice_folders_info()`
 Shows detailed information about discovered practice folders and available fingerprints for matching.

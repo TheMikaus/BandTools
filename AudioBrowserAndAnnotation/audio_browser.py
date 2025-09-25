@@ -933,7 +933,11 @@ def migrate_fingerprint_cache(cache: Dict) -> Dict:
 def load_fingerprint_cache(dirpath: Path) -> Dict:
     """Load fingerprint cache from directory."""
     data = load_json(dirpath / FINGERPRINTS_JSON, None)
-    cache = data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
+    cache = data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}, "excluded_files": []}
+    
+    # Ensure excluded_files field exists
+    if "excluded_files" not in cache:
+        cache["excluded_files"] = []
     
     # Migrate old format if needed
     cache = migrate_fingerprint_cache(cache)
@@ -943,6 +947,30 @@ def load_fingerprint_cache(dirpath: Path) -> Dict:
 def save_fingerprint_cache(dirpath: Path, cache: Dict) -> None:
     """Save fingerprint cache to directory."""
     save_json(dirpath / FINGERPRINTS_JSON, cache)
+
+def is_file_excluded_from_fingerprinting(dirpath: Path, filename: str) -> bool:
+    """Check if a file is excluded from fingerprinting in a directory."""
+    cache = load_fingerprint_cache(dirpath)
+    excluded_files = cache.get("excluded_files", [])
+    return filename in excluded_files
+
+def toggle_file_fingerprint_exclusion(dirpath: Path, filename: str) -> bool:
+    """Toggle fingerprint exclusion status for a file. Returns new exclusion status."""
+    cache = load_fingerprint_cache(dirpath)
+    excluded_files = cache.get("excluded_files", [])
+    
+    if filename in excluded_files:
+        # Remove from exclusion list
+        excluded_files.remove(filename)
+        is_excluded = False
+    else:
+        # Add to exclusion list
+        excluded_files.append(filename)
+        is_excluded = True
+    
+    cache["excluded_files"] = excluded_files
+    save_fingerprint_cache(dirpath, cache)
+    return is_excluded
 
 def discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]:
     """
@@ -993,12 +1021,17 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
             
         cache = load_fingerprint_cache(folder_path)
         files_data = cache.get("files", {})
+        excluded_files = cache.get("excluded_files", [])
         
         # Load provided names from this folder
         names_json_path = folder_path / NAMES_JSON
         provided_names = load_json(names_json_path, {}) or {}
         
         for filename, file_data in files_data.items():
+            # Skip files that are marked as excluded
+            if filename in excluded_files:
+                continue
+                
             # Get fingerprint for the selected algorithm
             fingerprints = file_data.get("fingerprints", {})
             if not fingerprints and "fingerprint" in file_data:
@@ -1594,10 +1627,11 @@ class WaveformView(QWidget):
 
 # ========== FileInfo proxy to show Size/Time ==========
 class FileInfoProxyModel(QIdentityProxyModel):
-    def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], parent=None):
+    def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], audio_browser, parent=None):
         super().__init__(parent)
         self.setSourceModel(parent_model)
         self.duration_cache = duration_cache
+        self.audio_browser = audio_browser  # Reference to get current practice folder
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
@@ -1608,6 +1642,27 @@ class FileInfoProxyModel(QIdentityProxyModel):
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return super().data(index, role)
+            
+        # Handle text color for excluded files
+        if role == Qt.ItemDataRole.ForegroundRole and index.column() == 0:
+            src = self.mapToSource(index)
+            fi = self.sourceModel().fileInfo(src)  # type: ignore
+            if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
+                filename = fi.fileName()
+                dirpath = Path(fi.absoluteFilePath()).parent
+                if is_file_excluded_from_fingerprinting(dirpath, filename):
+                    return QColor(128, 128, 128)  # Gray out excluded files
+        
+        # Handle tooltip for excluded files
+        if role == Qt.ItemDataRole.ToolTipRole and index.column() == 0:
+            src = self.mapToSource(index)
+            fi = self.sourceModel().fileInfo(src)  # type: ignore
+            if fi.isFile() and f".{fi.suffix().lower()}" in AUDIO_EXTS:
+                filename = fi.fileName()
+                dirpath = Path(fi.absoluteFilePath()).parent
+                if is_file_excluded_from_fingerprinting(dirpath, filename):
+                    return f"{filename}\n(Excluded from fingerprinting)"
+        
         if role == Qt.ItemDataRole.DisplayRole and index.column() == 1:
             src = self.mapToSource(index)
             fi = self.sourceModel().fileInfo(src)  # type: ignore
@@ -2285,7 +2340,7 @@ class AudioBrowser(QMainWindow):
         self.fs_model.setNameFilterDisables(False)
         self.fs_model.setRootPath(str(self.root_path))
 
-        self.file_proxy = FileInfoProxyModel(self.fs_model, self.played_durations, self)
+        self.file_proxy = FileInfoProxyModel(self.fs_model, self.played_durations, self, parent=None)
 
         self.tree = QTreeView()
         self.tree.setModel(self.file_proxy)
@@ -2314,6 +2369,9 @@ class AudioBrowser(QMainWindow):
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.doubleClicked.connect(self._on_tree_double_clicked)
         self.tree.activated.connect(self._on_tree_activated)
+        # Add context menu for fingerprint exclusion
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
         splitter.addWidget(self.tree)
 
         # Right panel
@@ -2961,6 +3019,56 @@ class AudioBrowser(QMainWindow):
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+
+    def _on_tree_context_menu(self, position: QPoint):
+        """Handle right-click context menu on file tree."""
+        idx = self.tree.indexAt(position)
+        if not idx.isValid():
+            return
+            
+        fi = self._fi(idx)
+        # Only show context menu for audio files
+        if not fi.isFile() or f".{fi.suffix().lower()}" not in AUDIO_EXTS:
+            return
+            
+        file_path = Path(fi.absoluteFilePath())
+        filename = file_path.name
+        dirpath = file_path.parent
+        
+        # Check if file is currently excluded from fingerprinting
+        is_excluded = is_file_excluded_from_fingerprinting(dirpath, filename)
+        
+        # Create context menu
+        menu = QMenu(self)
+        
+        if is_excluded:
+            action = menu.addAction("Include in fingerprinting")
+            action.setToolTip("Include this file when matching fingerprints")
+        else:
+            action = menu.addAction("Exclude from fingerprinting")
+            action.setToolTip("Exclude this file when matching fingerprints")
+        
+        # Show menu and handle selection
+        result = menu.exec(self.tree.mapToGlobal(position))
+        if result == action:
+            # Toggle exclusion status
+            new_status = toggle_file_fingerprint_exclusion(dirpath, filename)
+            
+            # Update UI to reflect the change
+            self._update_fingerprint_ui()
+            self._refresh_tree_display()
+            
+            # Show confirmation message
+            status_text = "excluded from" if new_status else "included in"
+            QMessageBox.information(self, "Fingerprint Exclusion", 
+                                  f"File '{filename}' is now {status_text} fingerprinting.")
+
+    def _refresh_tree_display(self):
+        """Force refresh of the tree display to update visual indicators."""
+        # Force the model to update by resetting it
+        current_root_index = self.tree.rootIndex()
+        self.tree.setModel(self.file_proxy)
+        self.tree.setRootIndex(current_root_index)
 
     def _go_up(self):
         parent = self.root_path.parent
