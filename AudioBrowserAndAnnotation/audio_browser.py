@@ -1487,6 +1487,115 @@ def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> 
             pass
         return None
 
+def discover_available_backups(root_path: Path) -> List[Tuple[Path, str]]:
+    """
+    Discover all available backup folders in the .backups directory.
+    
+    Args:
+        root_path: Root band practice directory (where .backups/ is located)
+        
+    Returns:
+        List of tuples (backup_folder_path, formatted_display_name) sorted by date descending
+    """
+    backups_dir = root_path / ".backups"
+    if not backups_dir.exists():
+        return []
+    
+    backups = []
+    for backup_folder in backups_dir.iterdir():
+        if backup_folder.is_dir():
+            # Parse folder name format: YYYY-MM-DD-###
+            try:
+                # Extract timestamp info for display
+                folder_name = backup_folder.name
+                date_part = folder_name.rsplit('-', 1)[0]  # Remove counter
+                date_obj = datetime.strptime(date_part, "%Y-%m-%d")
+                
+                # Create display name with date and time
+                display_name = f"{date_obj.strftime('%A, %B %d, %Y')} ({folder_name})"
+                backups.append((backup_folder, display_name))
+                
+            except (ValueError, IndexError):
+                # If folder doesn't match expected format, include it anyway
+                backups.append((backup_folder, backup_folder.name))
+    
+    # Sort by folder name (which includes timestamp) in descending order
+    backups.sort(key=lambda x: x[0].name, reverse=True)
+    return backups
+
+def get_backup_contents(backup_folder: Path, root_path: Path) -> Dict[Path, List[Path]]:
+    """
+    Get the contents of a backup folder organized by practice folder.
+    
+    Args:
+        backup_folder: Path to specific backup folder
+        root_path: Root band practice directory for relative path resolution
+        
+    Returns:
+        Dictionary mapping practice folder paths to lists of backup files
+    """
+    contents = {}
+    
+    if not backup_folder.exists():
+        return contents
+    
+    # Walk through backup folder to find all backed up files
+    for backup_file in backup_folder.rglob("*.json"):
+        if backup_file.is_file():
+            # Determine which practice folder this backup file belongs to
+            relative_path = backup_file.relative_to(backup_folder)
+            practice_folder_relative = relative_path.parent
+            
+            # Convert back to actual practice folder path
+            if str(practice_folder_relative) == ".":
+                practice_folder = root_path
+            else:
+                practice_folder = root_path / practice_folder_relative
+            
+            if practice_folder not in contents:
+                contents[practice_folder] = []
+            contents[practice_folder].append(backup_file)
+    
+    return contents
+
+def restore_metadata_from_backup(backup_folder: Path, target_practice_folder: Path, root_path: Path) -> int:
+    """
+    Restore metadata files from a backup folder to the target practice folder.
+    
+    Args:
+        backup_folder: Path to the backup folder containing the files
+        target_practice_folder: Practice folder where files should be restored
+        root_path: Root band practice directory for path resolution
+        
+    Returns:
+        Number of files successfully restored
+    """
+    # Determine the backup path for this practice folder
+    try:
+        relative_path = target_practice_folder.relative_to(root_path)
+        if str(relative_path) == ".":
+            backup_source_dir = backup_folder / root_path.name
+        else:
+            backup_source_dir = backup_folder / relative_path
+    except ValueError:
+        backup_source_dir = backup_folder / target_practice_folder.name
+    
+    if not backup_source_dir.exists():
+        return 0
+    
+    restored_count = 0
+    # Copy all JSON files from backup to target folder
+    for backup_file in backup_source_dir.glob("*.json"):
+        try:
+            target_file = target_practice_folder / backup_file.name
+            target_file.write_bytes(backup_file.read_bytes())
+            restored_count += 1
+            print(f"Restored: {backup_file.name}")
+        except Exception as e:
+            print(f"Warning: Failed to restore {backup_file.name}: {e}")
+    
+    return restored_count
+
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
     progress = pyqtSignal(int, str, list, int, int, bool)  # Added bool for stereo mode
@@ -2373,6 +2482,106 @@ class FileInfoProxyModel(QIdentityProxyModel):
             return bytes_to_human(size)
         return super().data(index, role)
 
+# ========== Backup Selection Dialog ==========
+class BackupSelectionDialog(QMessageBox):
+    """Dialog for selecting which backup to restore and where to restore it."""
+    
+    def __init__(self, available_backups: List[Tuple[Path, str]], current_folder: Path, root_path: Path, parent=None):
+        super().__init__(parent)
+        self.available_backups = available_backups
+        self.current_folder = current_folder
+        self.root_path = root_path
+        self.selected_backup = None
+        self.selected_folder = None
+        
+        self.setWindowTitle("Restore from Backup")
+        self.setText("Select a backup to restore:")
+        self.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        
+        # Create custom widget for backup selection
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Backup selection
+        layout.addWidget(QLabel("Available backups:"))
+        self.backup_combo = QComboBox()
+        for backup_path, display_name in available_backups:
+            self.backup_combo.addItem(display_name, backup_path)
+        layout.addWidget(self.backup_combo)
+        
+        # Folder selection
+        layout.addWidget(QLabel("Restore to folder:"))
+        self.folder_combo = QComboBox()
+        
+        # Populate folder options
+        self.folder_combo.addItem(f"Current folder: {current_folder.relative_to(root_path) if current_folder != root_path else current_folder.name}", current_folder)
+        
+        # Add other practice folders that have backups
+        try:
+            selected_backup_path = available_backups[0][0] if available_backups else None
+            if selected_backup_path:
+                backup_contents = get_backup_contents(selected_backup_path, root_path)
+                for folder_path in sorted(backup_contents.keys()):
+                    if folder_path != current_folder:
+                        folder_display = folder_path.relative_to(root_path) if folder_path != root_path else folder_path.name
+                        self.folder_combo.addItem(f"Other folder: {folder_display}", folder_path)
+        except Exception:
+            pass  # If error getting backup contents, just show current folder
+        
+        layout.addWidget(self.folder_combo)
+        
+        # Add info label
+        self.info_label = QLabel()
+        self.info_label.setWordWrap(True)
+        layout.addWidget(self.info_label)
+        
+        # Connect backup selection change to update folder options
+        self.backup_combo.currentIndexChanged.connect(self._update_folder_options)
+        self._update_folder_options()  # Initial update
+        
+        # Add the widget to the dialog
+        self.layout().addWidget(widget, 1, 1)
+    
+    def _update_folder_options(self):
+        """Update available folder options based on selected backup."""
+        try:
+            selected_backup = self.backup_combo.currentData()
+            if not selected_backup:
+                return
+                
+            # Clear current folder options except current folder (keep first item)
+            while self.folder_combo.count() > 1:
+                self.folder_combo.removeItem(1)
+            
+            # Get backup contents and add folders
+            backup_contents = get_backup_contents(selected_backup, self.root_path)
+            for folder_path in sorted(backup_contents.keys()):
+                if folder_path != self.current_folder:
+                    folder_display = folder_path.relative_to(self.root_path) if folder_path != self.root_path else folder_path.name
+                    file_count = len(backup_contents[folder_path])
+                    self.folder_combo.addItem(f"Other folder: {folder_display} ({file_count} files)", folder_path)
+            
+            # Update info label
+            current_backup_contents = backup_contents.get(self.current_folder, [])
+            if current_backup_contents:
+                file_list = [f.name for f in current_backup_contents]
+                self.info_label.setText(f"Files in backup for current folder:\n" + "\n".join(file_list))
+            else:
+                self.info_label.setText("No files found in backup for current folder.")
+                
+        except Exception as e:
+            self.info_label.setText(f"Error reading backup contents: {str(e)}")
+    
+    def get_selection(self):
+        """Return the selected backup path and target folder path."""
+        return self.selected_backup, self.selected_folder
+    
+    def accept(self):
+        """Handle OK button click."""
+        self.selected_backup = self.backup_combo.currentData()
+        self.selected_folder = self.folder_combo.currentData()
+        super().accept()
+
 # ========== Main window ==========
 class AudioBrowser(QMainWindow):
 
@@ -3067,6 +3276,7 @@ class AudioBrowser(QMainWindow):
         self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
         self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self); self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded); tb.addAction(self.convert_action)
         self.mono_action = QAction("Convert to Mono", self); self.mono_action.triggered.connect(self._convert_to_mono); tb.addAction(self.mono_action)
+        self.restore_backup_action = QAction("Restore from Backup…", self); self.restore_backup_action.triggered.connect(self._restore_from_backup); tb.addAction(self.restore_backup_action)
         tb.addSeparator()
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
@@ -3879,6 +4089,65 @@ class AudioBrowser(QMainWindow):
     def _change_root_clicked(self):
         d = QFileDialog.getExistingDirectory(self, "Choose Root Band Practice Folder", str(self.root_path))
         if d: self._save_root(Path(d))
+
+    def _restore_from_backup(self):
+        """Show backup selection dialog and restore selected backup."""
+        try:
+            # Discover available backups
+            available_backups = discover_available_backups(self.root_path)
+            
+            if not available_backups:
+                QMessageBox.information(
+                    self, "No Backups Found", 
+                    "No backup folders were found in the .backups directory.\n\n"
+                    "Backups are automatically created when you make changes to metadata files."
+                )
+                return
+            
+            # Create backup selection dialog
+            dialog = BackupSelectionDialog(available_backups, self.current_practice_folder, self.root_path, self)
+            if dialog.exec():
+                selected_backup, selected_folder = dialog.get_selection()
+                if selected_backup and selected_folder:
+                    # Confirm restoration
+                    reply = QMessageBox.question(
+                        self, "Confirm Restore",
+                        f"Are you sure you want to restore metadata files from:\n\n"
+                        f"Backup: {selected_backup.name}\n"
+                        f"To folder: {selected_folder.relative_to(self.root_path) if selected_folder != self.root_path else selected_folder.name}\n\n"
+                        f"This will overwrite existing metadata files!",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        # Perform restoration
+                        restored_count = restore_metadata_from_backup(selected_backup, selected_folder, self.root_path)
+                        
+                        if restored_count > 0:
+                            # Refresh UI to reflect restored data
+                            self._load_annotations_for_current()
+                            self._refresh_set_combo()
+                            self._refresh_right_table()
+                            self._update_folder_notes_ui()
+                            self._refresh_important_table()
+                            self._refresh_tree_display()
+                            
+                            QMessageBox.information(
+                                self, "Restore Complete",
+                                f"Successfully restored {restored_count} metadata file(s) from backup."
+                            )
+                        else:
+                            QMessageBox.warning(
+                                self, "No Files Restored",
+                                "No compatible metadata files were found in the selected backup."
+                            )
+                    
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Restore Error",
+                f"An error occurred while restoring from backup:\n\n{str(e)}"
+            )
 
     # ----- Playback -----
     def _play_file(self, path: Path):
