@@ -4958,7 +4958,7 @@ class AudioBrowser(QMainWindow):
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
         # Check if a fingerprinting operation is already in progress
-        if hasattr(self, '_fingerprint_thread') and self._fingerprint_thread.isRunning():
+        if hasattr(self, '_fingerprint_thread') and self._fingerprint_thread is not None and self._fingerprint_thread.isRunning():
             QMessageBox.warning(self, "Fingerprinting In Progress", 
                               "Fingerprinting is already in progress. Please wait for it to complete.")
             return
