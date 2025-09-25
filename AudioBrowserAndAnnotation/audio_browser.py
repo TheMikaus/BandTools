@@ -182,6 +182,74 @@ class BestTakeIndicatorWidget(QWidget):
             # Emit a custom signal or call parent method
             self.parent().on_best_take_clicked()
 
+
+class PartialTakeIndicatorWidget(QWidget):
+    """Custom widget that shows colored circles for each annotation set that marked a file as partial take."""
+    
+    def __init__(self, partial_take_sets: List[Dict[str, Any]], current_set_id: str = "", parent=None):
+        super().__init__(parent)
+        self.partial_take_sets = partial_take_sets
+        self.current_set_id = current_set_id
+        self.setMinimumHeight(20)
+        self.setMaximumHeight(20)
+        # Make it checkable-like behavior for the current set
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw background
+        painter.fillRect(self.rect(), QColor(255, 255, 255))
+        
+        if not self.partial_take_sets:
+            return
+            
+        # Calculate circle size and spacing
+        circle_size = min(16, self.height() - 4)
+        spacing = 2
+        total_width = len(self.partial_take_sets) * circle_size + (len(self.partial_take_sets) - 1) * spacing
+        start_x = max(2, (self.width() - total_width) // 2)
+        start_y = (self.height() - circle_size) // 2
+        
+        # Draw colored circles for each annotation set
+        for i, partial_take_set in enumerate(self.partial_take_sets):
+            x = start_x + i * (circle_size + spacing)
+            color = QColor(partial_take_set["color"])
+            
+            # Draw the circle
+            painter.setBrush(color)
+            painter.drawEllipse(x, start_y, circle_size, circle_size)
+            
+            # Draw border (thicker for current set)
+            pen_width = 3 if partial_take_set["id"] == self.current_set_id else 1
+            painter.setPen(QPen(QColor(0, 0, 0), pen_width))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(x, start_y, circle_size, circle_size)
+    
+    def update_partial_takes(self, partial_take_sets: List[Dict[str, Any]], current_set_id: str = ""):
+        self.partial_take_sets = partial_take_sets
+        self.current_set_id = current_set_id
+        self.update()
+
+    def mousePressEvent(self, event):
+        """Handle clicks to toggle partial take for current set."""
+        # Calculate which circle was clicked (if any)
+        if not self.partial_take_sets:
+            return
+            
+        circle_size = min(16, self.height() - 4)
+        spacing = 2
+        total_width = len(self.partial_take_sets) * circle_size + (len(self.partial_take_sets) - 1) * spacing
+        start_x = max(2, (self.width() - total_width) // 2)
+        
+        click_x = event.pos().x()
+        
+        # Check if click is within the circles area
+        if click_x >= start_x and click_x <= start_x + total_width:
+            # Emit a custom signal or call parent method
+            self.parent().on_partial_take_clicked()
+
 # ========== Helpers ==========
 def human_time_ms(ms: int) -> str:
     if ms < 0: return "0:00"
@@ -2391,6 +2459,7 @@ class AudioBrowser(QMainWindow):
         self.notes_by_file: Dict[str, List[Dict]] = {}
         self.file_general: Dict[str, str] = {}
         self.file_best_takes: Dict[str, bool] = {}  # Track best takes per file in current set
+        self.file_partial_takes: Dict[str, bool] = {}  # Track partial takes per file in current set
         self.folder_notes: str = ""
 
         # Show-all toggle
@@ -2557,7 +2626,7 @@ class AudioBrowser(QMainWindow):
 
     def _load_notes(self):
         self.annotation_sets = []
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.folder_notes = ""
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.folder_notes = ""
 
         
         # Check for migration from legacy file
@@ -2597,6 +2666,7 @@ class AudioBrowser(QMainWindow):
                         files[str(fname)] = {
                             "general": str(meta.get("general", "") or ""),
                             "best_take": bool(meta.get("best_take", False)),
+                            "partial_take": bool(meta.get("partial_take", False)),
                             "notes": [{
                                 "uid": int(n.get("uid", 0) or 0),
                                 "ms": int(n.get("ms", 0)),
@@ -2666,25 +2736,27 @@ class AudioBrowser(QMainWindow):
 
     def _load_current_set_into_fields(self):
         aset = self._get_current_set()
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}
         if aset:
             for fname, meta in aset.get("files", {}).items():
                 self.file_general[fname] = str(meta.get("general", "") or "")
                 self.file_best_takes[fname] = bool(meta.get("best_take", False))
+                self.file_partial_takes[fname] = bool(meta.get("partial_take", False))
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
-            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}
+            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}
         self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
         if not aset: return
         files = {}
-        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys())
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys())
         for fname in all_files:
             files[fname] = {
                 "general": self.file_general.get(fname, ""),
                 "best_take": self.file_best_takes.get(fname, False),
+                "partial_take": self.file_partial_takes.get(fname, False),
                 "notes": self.notes_by_file.get(fname, []),
             }
         aset["files"] = files
@@ -2987,11 +3059,12 @@ class AudioBrowser(QMainWindow):
         
         lib_layout.addWidget(fp_group)
         
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["File", "Best Take", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
         self.table.itemChanged.connect(self._on_table_item_changed)
@@ -3853,6 +3926,21 @@ class AudioBrowser(QMainWindow):
                 })
         return best_take_sets
 
+    def _get_all_partial_takes_for_file(self, filename: str) -> List[Dict[str, Any]]:
+        """Get all annotation sets that have marked this file as a partial take, along with their colors."""
+        partial_take_sets = []
+        for aset in self.annotation_sets:
+            if not aset.get("visible", True):
+                continue  # Skip invisible sets
+            file_meta = aset.get("files", {}).get(filename, {})
+            if file_meta.get("partial_take", False):
+                partial_take_sets.append({
+                    "id": aset.get("id"),
+                    "name": aset.get("name", "Unknown"),
+                    "color": aset.get("color", "#00cc66")
+                })
+        return partial_take_sets
+
     def _refresh_right_table(self):
         files = self._list_audio_in_current_dir()
         self.table.blockSignals(True); self.table.setRowCount(len(files))
@@ -3862,21 +3950,32 @@ class AudioBrowser(QMainWindow):
             # Get all best takes for this file from all visible annotation sets
             best_take_sets = self._get_all_best_takes_for_file(p.name)
             
+            # Get all partial takes for this file from all visible annotation sets
+            partial_take_sets = self._get_all_partial_takes_for_file(p.name)
+            
             # Create best take indicator widget
             best_take_widget = BestTakeIndicatorWidget(best_take_sets, self.current_set_id, self.table)
             best_take_widget.on_best_take_clicked = lambda row=row: self._on_best_take_widget_clicked(row)
             
+            # Create partial take indicator widget
+            partial_take_widget = PartialTakeIndicatorWidget(partial_take_sets, self.current_set_id, self.table)
+            partial_take_widget.on_partial_take_clicked = lambda row=row: self._on_partial_take_widget_clicked(row)
+            
             item_name = QTableWidgetItem(self.provided_names.get(p.name, "")); item_name.setToolTip("Double-click to edit your Provided Name")
             
-            # Set light background for files with any best takes
-            if best_take_sets:
-                light_color = QColor(245, 255, 245)  # Very light green
+            # Set light background for files with any best takes or partial takes
+            if best_take_sets or partial_take_sets:
+                if best_take_sets:
+                    light_color = QColor(245, 255, 245)  # Very light green for best takes
+                else:
+                    light_color = QColor(255, 248, 220)  # Very light yellow for partial takes
                 item_file.setBackground(light_color)
                 item_name.setBackground(light_color)
             
             self.table.setItem(row, 0, item_file)
             self.table.setCellWidget(row, 1, best_take_widget)  # Use setCellWidget for custom widget
-            self.table.setItem(row, 2, item_name)
+            self.table.setCellWidget(row, 2, partial_take_widget)  # Use setCellWidget for custom widget  
+            self.table.setItem(row, 3, item_name)
         self.table.blockSignals(False)
 
     def _on_best_take_widget_clicked(self, row: int):
@@ -3894,12 +3993,27 @@ class AudioBrowser(QMainWindow):
         # Refresh the entire table to update the display
         self._refresh_right_table()
 
+    def _on_partial_take_widget_clicked(self, row: int):
+        """Handle clicks on the partial take indicator widget to toggle partial take for current set."""
+        file_item = self.table.item(row, 0)
+        if not file_item:
+            return
+        filename = file_item.text()
+        
+        # Toggle partial take for current set
+        is_currently_partial = self.file_partial_takes.get(filename, False)
+        self.file_partial_takes[filename] = not is_currently_partial
+        self._save_notes()
+        
+        # Refresh the entire table to update the display
+        self._refresh_right_table()
+
     def _on_table_item_changed(self, item: QTableWidgetItem):
         row = item.row(); file_item = self.table.item(row, 0)
         if not file_item: return
         filename = file_item.text()
         
-        if item.column() == 2:  # Provided Name (editable)
+        if item.column() == 3:  # Provided Name (editable) - now column 3
             self.provided_names[filename] = sanitize(item.text())
             self._save_names()
 
@@ -3939,11 +4053,11 @@ class AudioBrowser(QMainWindow):
 
     def _on_library_cell_double_clicked(self, row: int, column: int):
         """Handle double-clicks on the library table cells."""
-        # Only handle double-clicks on the Best Take column (column 1)
-        if column != 1:
+        # Handle double-clicks on the Best Take column (column 1) or Partial Take column (column 2)
+        if column not in [1, 2]:
             return
             
-        # Toggle best take for the current user/set on the clicked file
+        # Toggle best take or partial take for the current user/set on the clicked file
         file_item = self.table.item(row, 0)
         if not file_item:
             return
@@ -3952,9 +4066,15 @@ class AudioBrowser(QMainWindow):
         if not filename:
             return
             
-        # Toggle best take for current set (same logic as _on_best_take_widget_clicked)
-        is_currently_best = self.file_best_takes.get(filename, False)
-        self.file_best_takes[filename] = not is_currently_best
+        if column == 1:  # Best Take column
+            # Toggle best take for current set (same logic as _on_best_take_widget_clicked)
+            is_currently_best = self.file_best_takes.get(filename, False)
+            self.file_best_takes[filename] = not is_currently_best
+        elif column == 2:  # Partial Take column
+            # Toggle partial take for current set (same logic as _on_partial_take_widget_clicked)
+            is_currently_partial = self.file_partial_takes.get(filename, False)
+            self.file_partial_takes[filename] = not is_currently_partial
+            
         self._save_notes()
         
         # Refresh the entire table to update the display
