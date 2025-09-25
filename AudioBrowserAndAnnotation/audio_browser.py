@@ -1344,7 +1344,19 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
 
 # ========== Backup System ==========
 def create_backup_folder_name(root_path: Path) -> Path:
-    """Create a unique backup folder name with format .backups/YYYY-MM-DD-###"""
+    """
+    Create a unique backup folder name with format .backups/YYYY-MM-DD-###
+    
+    Backups are created in the root practice folder under .backups/ directory.
+    The format ensures chronological ordering and prevents conflicts when
+    multiple backups are created on the same day.
+    
+    Args:
+        root_path: Root band practice directory
+        
+    Returns:
+        Path to the backup folder (not yet created)
+    """
     today = datetime.now()
     date_str = today.strftime("%Y-%m-%d")
     backups_dir = root_path / ".backups"
@@ -1358,7 +1370,22 @@ def create_backup_folder_name(root_path: Path) -> Path:
         counter += 1
 
 def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
-    """Get list of metadata files that exist in the practice folder and might change."""
+    """
+    Get list of metadata files that exist in the practice folder and might change.
+    
+    This includes:
+    - .provided_names.json (file naming data)
+    - .duration_cache.json (playback duration cache)
+    - .waveform_cache.json (waveform visualization cache)
+    - .audio_fingerprints.json (audio fingerprint data)
+    - .audio_notes_<username>.json (user-specific annotation data)
+    
+    Args:
+        practice_folder: Directory to scan for metadata files
+        
+    Returns:
+        List of Path objects for existing metadata files
+    """
     metadata_files = []
     
     # List of all possible metadata files
@@ -1430,7 +1457,19 @@ def should_create_backup(practice_folder: Path) -> bool:
 def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> Optional[Path]:
     """
     Create a backup of metadata files if needed.
-    Returns the backup folder path if backup was created, None otherwise.
+    
+    This function implements the main backup logic:
+    1. Check if there are metadata files that could change
+    2. If yes, create a timestamped backup folder
+    3. Copy all existing metadata files to the backup location
+    4. Preserve the folder structure relative to root_path
+    
+    Args:
+        root_path: Root band practice directory (where .backups/ will be created)
+        practice_folder: Current practice session folder
+        
+    Returns:
+        Path to created backup folder if backup was created, None otherwise
     """
     if not should_create_backup(practice_folder):
         return None
@@ -2649,13 +2688,30 @@ class AudioBrowser(QMainWindow):
 
     # ----- Backup -----
     def _create_startup_backup(self):
-        """Create backup of metadata files at application startup if they exist and might change."""
+        """
+        Create backup of metadata files at application startup if they exist and might change.
+        
+        This method is called once during application initialization, before loading
+        and potentially modifying metadata files. It creates a timestamped backup
+        of any existing metadata files in the current practice folder.
+        
+        Backup behavior:
+        - Only creates backup if metadata files exist in the current folder
+        - Preserves folder structure under .backups/YYYY-MM-DD-###/ 
+        - Increments backup number for multiple backups on same day
+        - Silently skips backup creation if no files exist (no user notification)
+        - Shows backup location in console if backup is created
+        """
         try:
             backup_folder = create_metadata_backup_if_needed(self.root_path, self.current_practice_folder)
             if backup_folder:
-                print(f"Created backup: {backup_folder}")
+                relative_backup = backup_folder.relative_to(self.root_path)
+                print(f"Backup created: {relative_backup}")
+                # Could also show a brief status message in the UI if desired
+                # self.statusBar().showMessage(f"Backup created: {relative_backup}", 3000)
         except Exception as e:
             print(f"Warning: Failed to create backup: {e}")
+            # In a production app, you might want to log this or show a less intrusive warning
 
     # ----- Settings & metadata -----
     def _load_or_ask_root(self) -> Path:
