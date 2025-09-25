@@ -4632,6 +4632,9 @@ class AudioBrowser(QMainWindow):
 
     # ----- Batch rename (##_<ProvidedName>) -----
     def _batch_rename(self):
+        # Clear any selected file to avoid rename conflicts when file is in use
+        self.tree.selectionModel().clearSelection()
+        
         files = self._list_audio_in_current_dir()
         if not files:
             QMessageBox.information(self, "Nothing to Rename", "No WAV/MP3 files in this folder."); return
