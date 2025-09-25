@@ -2114,7 +2114,7 @@ class AudioBrowser(QMainWindow):
                                 "text": str(n.get("text", "")),
                                 "important": bool(n.get("important", False)),
                                 **({"end_ms": int(n["end_ms"])} if n.get("end_ms") is not None else {}),
-                                **({"subsection": bool(n["subsection"])} if n.get("subsection") is not None else {})
+                                **({"subsection": bool(n["subsection"])} if n.get("subsection") else {})
                             } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                         }
                     cleaned.append({"id": sid, "name": name, "color": color, "visible": visible, "folder_notes": folder_notes, "files": files})
