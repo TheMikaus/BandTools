@@ -2571,6 +2571,9 @@ class AudioBrowser(QMainWindow):
         self._uid_counter: int = 1
         self._suspend_ann_change = False
 
+        # Backup tracking - only create backup on first modification
+        self._backup_created_this_session: bool = False
+
         # Undo/Redo
         self._undo_stack: List[dict] = []
         self._undo_index: int = 0
@@ -2635,9 +2638,6 @@ class AudioBrowser(QMainWindow):
         # UI
         self._init_ui()
 
-        # Create backup before loading/potentially modifying metadata
-        self._create_startup_backup()
-
         # Load metadata
         self._load_names()
         self._load_notes()
@@ -2687,31 +2687,39 @@ class AudioBrowser(QMainWindow):
         self.setWindowIcon(QIcon(pm))
 
     # ----- Backup -----
-    def _create_startup_backup(self):
+    def _create_backup_if_needed(self):
         """
-        Create backup of metadata files at application startup if they exist and might change.
+        Create backup of metadata files before first modification in this session.
         
-        This method is called once during application initialization, before loading
-        and potentially modifying metadata files. It creates a timestamped backup
-        of any existing metadata files in the current practice folder.
+        This method ensures that a backup is created only once per session, before
+        the first time any metadata files are modified. It creates a timestamped 
+        backup of existing metadata files in the current practice folder.
         
         Backup behavior:
         - Only creates backup if metadata files exist in the current folder
+        - Only creates backup once per session (tracked via _backup_created_this_session)
         - Preserves folder structure under .backups/YYYY-MM-DD-###/ 
         - Increments backup number for multiple backups on same day
-        - Silently skips backup creation if no files exist (no user notification)
         - Shows backup location in console if backup is created
         """
+        if self._backup_created_this_session:
+            return  # Already created backup for this session
+            
         try:
             backup_folder = create_metadata_backup_if_needed(self.root_path, self.current_practice_folder)
             if backup_folder:
                 relative_backup = backup_folder.relative_to(self.root_path)
-                print(f"Backup created: {relative_backup}")
+                print(f"Backup created before modification: {relative_backup}")
                 # Could also show a brief status message in the UI if desired
                 # self.statusBar().showMessage(f"Backup created: {relative_backup}", 3000)
+            
+            # Mark that we've attempted backup for this session (even if no files existed)
+            self._backup_created_this_session = True
+            
         except Exception as e:
             print(f"Warning: Failed to create backup: {e}")
-            # In a production app, you might want to log this or show a less intrusive warning
+            # Mark as attempted even if failed to avoid repeated attempts
+            self._backup_created_this_session = True
 
     # ----- Settings & metadata -----
     def _load_or_ask_root(self) -> Path:
@@ -2772,6 +2780,9 @@ class AudioBrowser(QMainWindow):
     def _set_current_practice_folder(self, folder: Path):
         """Update the current practice folder (distinct from root band practice folder)."""
         if folder.exists() and folder.is_dir():
+            # Reset backup flag when changing to a different folder
+            if self.current_practice_folder != folder:
+                self._backup_created_this_session = False
             self.current_practice_folder = folder
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
@@ -2782,6 +2793,7 @@ class AudioBrowser(QMainWindow):
         self.provided_names = load_json(self._names_json_path(), {}) or {}
 
     def _save_names(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._names_json_path(), self.provided_names)
 
     # ----- Annotation sets load/save -----
@@ -2889,6 +2901,7 @@ class AudioBrowser(QMainWindow):
         self._append_external_sets()
 
     def _save_notes(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         self._sync_fields_into_current_set()
         try:
             internal_sets = [self._strip_set_for_payload(s) for s in self.annotation_sets if not s.get("source_path")]
@@ -2970,6 +2983,7 @@ class AudioBrowser(QMainWindow):
         return out
 
     def _save_duration_cache(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._dur_json_path(), self.played_durations)
 
     # ----- UI -----
@@ -5161,6 +5175,7 @@ class AudioBrowser(QMainWindow):
 
     def _auto_label_subsections_with_fingerprints(self):
         """Auto-label sub-sections in current folder based on fingerprint matches from all available folders."""
+        self._create_backup_if_needed()  # Create backup before first modification
         current_dir = self._get_audio_file_dir()
         
         # Discover practice folders with fingerprints
@@ -6146,6 +6161,7 @@ class AudioBrowser(QMainWindow):
 
     def _auto_label_with_fingerprints(self):
         """Auto-label files in current folder based on fingerprint matches from practice folders."""
+        self._create_backup_if_needed()  # Create backup before first modification
         # Check if auto-labeling is already in progress
         if self.auto_label_in_progress:
             QMessageBox.warning(self, "Auto-Labeling In Progress", 
