@@ -1342,6 +1342,151 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     best_match = best_matches[0]
     return (best_match[0], best_match[1], best_match[2], best_match[4])
 
+# ========== Backup System ==========
+def create_backup_folder_name(root_path: Path) -> Path:
+    """
+    Create a unique backup folder name with format .backups/YYYY-MM-DD-###
+    
+    Backups are created in the root practice folder under .backups/ directory.
+    The format ensures chronological ordering and prevents conflicts when
+    multiple backups are created on the same day.
+    
+    Args:
+        root_path: Root band practice directory
+        
+    Returns:
+        Path to the backup folder (not yet created)
+    """
+    today = datetime.now()
+    date_str = today.strftime("%Y-%m-%d")
+    backups_dir = root_path / ".backups"
+    
+    # Find the next available number for today
+    counter = 1
+    while True:
+        backup_folder = backups_dir / f"{date_str}-{counter:03d}"
+        if not backup_folder.exists():
+            return backup_folder
+        counter += 1
+
+def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
+    """
+    Get list of metadata files that exist in the practice folder and might change.
+    
+    This includes:
+    - .provided_names.json (file naming data)
+    - .duration_cache.json (playback duration cache)
+    - .waveform_cache.json (waveform visualization cache)
+    - .audio_fingerprints.json (audio fingerprint data)
+    - .audio_notes_<username>.json (user-specific annotation data)
+    
+    Args:
+        practice_folder: Directory to scan for metadata files
+        
+    Returns:
+        List of Path objects for existing metadata files
+    """
+    metadata_files = []
+    
+    # List of all possible metadata files
+    possible_files = [
+        practice_folder / NAMES_JSON,
+        practice_folder / DURATIONS_JSON,
+        practice_folder / WAVEFORM_JSON,
+        practice_folder / FINGERPRINTS_JSON,
+    ]
+    
+    # Add user-specific annotation files
+    username = getpass.getuser()
+    user_notes_file = practice_folder / f".audio_notes_{username}.json"
+    possible_files.append(user_notes_file)
+    
+    # Also check for any other user-specific annotation files
+    for json_file in practice_folder.glob(".audio_notes_*.json"):
+        if json_file not in possible_files:
+            possible_files.append(json_file)
+    
+    # Only include files that actually exist
+    for file_path in possible_files:
+        if file_path.exists() and file_path.is_file():
+            metadata_files.append(file_path)
+    
+    return metadata_files
+
+def backup_metadata_files(practice_folder: Path, backup_base_folder: Path, root_path: Path) -> int:
+    """
+    Backup metadata files from practice_folder to backup_base_folder, preserving structure.
+    Returns the number of files backed up.
+    """
+    metadata_files = get_metadata_files_to_backup(practice_folder)
+    
+    if not metadata_files:
+        return 0  # No files to backup
+    
+    # Create the backup directory structure, preserving the relative path from root
+    try:
+        relative_path = practice_folder.relative_to(root_path)
+        if str(relative_path) == ".":  # If backing up the root folder itself
+            relative_path = Path(root_path.name)
+    except ValueError:
+        # If practice_folder is not under root_path, just use the folder name
+        relative_path = Path(practice_folder.name)
+    
+    backup_target_dir = backup_base_folder / relative_path
+    backup_target_dir.mkdir(parents=True, exist_ok=True)
+    
+    backed_up_count = 0
+    for metadata_file in metadata_files:
+        try:
+            backup_file_path = backup_target_dir / metadata_file.name
+            # Copy the file
+            backup_file_path.write_bytes(metadata_file.read_bytes())
+            backed_up_count += 1
+        except Exception as e:
+            print(f"Warning: Failed to backup {metadata_file}: {e}")
+    
+    return backed_up_count
+
+def should_create_backup(practice_folder: Path) -> bool:
+    """
+    Determine if a backup should be created for this practice folder.
+    Only create backup if there are metadata files that could change.
+    """
+    return len(get_metadata_files_to_backup(practice_folder)) > 0
+
+def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> Optional[Path]:
+    """
+    Create a backup of metadata files if needed.
+    
+    This function implements the main backup logic:
+    1. Check if there are metadata files that could change
+    2. If yes, create a timestamped backup folder
+    3. Copy all existing metadata files to the backup location
+    4. Preserve the folder structure relative to root_path
+    
+    Args:
+        root_path: Root band practice directory (where .backups/ will be created)
+        practice_folder: Current practice session folder
+        
+    Returns:
+        Path to created backup folder if backup was created, None otherwise
+    """
+    if not should_create_backup(practice_folder):
+        return None
+    
+    backup_folder = create_backup_folder_name(root_path)
+    backed_up_count = backup_metadata_files(practice_folder, backup_folder, root_path)
+    
+    if backed_up_count > 0:
+        return backup_folder
+    else:
+        # Clean up empty backup folder
+        try:
+            backup_folder.rmdir()
+        except Exception:
+            pass
+        return None
+
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
     progress = pyqtSignal(int, str, list, int, int, bool)  # Added bool for stereo mode
@@ -2479,6 +2624,9 @@ class AudioBrowser(QMainWindow):
         self._uid_counter: int = 1
         self._suspend_ann_change = False
 
+        # Backup tracking - only create backup on first modification
+        self._backup_created_this_session: bool = False
+
         # Undo/Redo
         self._undo_stack: List[dict] = []
         self._undo_index: int = 0
@@ -2594,6 +2742,41 @@ class AudioBrowser(QMainWindow):
         p.drawPolygon(*[QPoint(x,y) for x,y in pts]); p.end()
         self.setWindowIcon(QIcon(pm))
 
+    # ----- Backup -----
+    def _create_backup_if_needed(self):
+        """
+        Create backup of metadata files before first modification in this session.
+        
+        This method ensures that a backup is created only once per session, before
+        the first time any metadata files are modified. It creates a timestamped 
+        backup of existing metadata files in the current practice folder.
+        
+        Backup behavior:
+        - Only creates backup if metadata files exist in the current folder
+        - Only creates backup once per session (tracked via _backup_created_this_session)
+        - Preserves folder structure under .backups/YYYY-MM-DD-###/ 
+        - Increments backup number for multiple backups on same day
+        - Shows backup location in console if backup is created
+        """
+        if self._backup_created_this_session:
+            return  # Already created backup for this session
+            
+        try:
+            backup_folder = create_metadata_backup_if_needed(self.root_path, self.current_practice_folder)
+            if backup_folder:
+                relative_backup = backup_folder.relative_to(self.root_path)
+                print(f"Backup created before modification: {relative_backup}")
+                # Could also show a brief status message in the UI if desired
+                # self.statusBar().showMessage(f"Backup created: {relative_backup}", 3000)
+            
+            # Mark that we've attempted backup for this session (even if no files existed)
+            self._backup_created_this_session = True
+            
+        except Exception as e:
+            print(f"Warning: Failed to create backup: {e}")
+            # Mark as attempted even if failed to avoid repeated attempts
+            self._backup_created_this_session = True
+
     # ----- Settings & metadata -----
     def _load_or_ask_root(self) -> Path:
         stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
@@ -2653,6 +2836,9 @@ class AudioBrowser(QMainWindow):
     def _set_current_practice_folder(self, folder: Path):
         """Update the current practice folder (distinct from root band practice folder)."""
         if folder.exists() and folder.is_dir():
+            # Reset backup flag when changing to a different folder
+            if self.current_practice_folder != folder:
+                self._backup_created_this_session = False
             self.current_practice_folder = folder
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
@@ -2663,6 +2849,7 @@ class AudioBrowser(QMainWindow):
         self.provided_names = load_json(self._names_json_path(), {}) or {}
 
     def _save_names(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._names_json_path(), self.provided_names)
 
     # ----- Annotation sets load/save -----
@@ -2770,6 +2957,7 @@ class AudioBrowser(QMainWindow):
         self._append_external_sets()
 
     def _save_notes(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         self._sync_fields_into_current_set()
         try:
             internal_sets = [self._strip_set_for_payload(s) for s in self.annotation_sets if not s.get("source_path")]
@@ -2851,6 +3039,7 @@ class AudioBrowser(QMainWindow):
         return out
 
     def _save_duration_cache(self):
+        self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._dur_json_path(), self.played_durations)
 
     # ----- UI -----
@@ -5066,6 +5255,7 @@ class AudioBrowser(QMainWindow):
 
     def _auto_label_subsections_with_fingerprints(self):
         """Auto-label sub-sections in current folder based on fingerprint matches from all available folders."""
+        self._create_backup_if_needed()  # Create backup before first modification
         current_dir = self._get_audio_file_dir()
         
         # Discover practice folders with fingerprints
@@ -6051,6 +6241,7 @@ class AudioBrowser(QMainWindow):
 
     def _auto_label_with_fingerprints(self):
         """Auto-label files in current folder based on fingerprint matches from practice folders."""
+        self._create_backup_if_needed()  # Create backup before first modification
         # Check if auto-labeling is already in progress
         if self.auto_label_in_progress:
             QMessageBox.warning(self, "Auto-Labeling In Progress", 
