@@ -1,0 +1,136 @@
+name: Build AudioBrowser
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'AudioBrowserAndAnnotation/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'AudioBrowserAndAnnotation/**'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a release after build'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version calculation
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Get version information
+      id: version
+      run: |
+        cd AudioBrowserAndAnnotation
+        $version = python version.py
+        echo "Version output: $version"
+        $versionString = python -c "import version; print(version.VERSION_STRING)"
+        echo "version_string=$versionString" >> $env:GITHUB_OUTPUT
+        echo "Version string: $versionString"
+      shell: powershell
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install PyInstaller PyQt6
+    
+    - name: Generate application icon
+      run: |
+        cd AudioBrowserAndAnnotation
+        python make_icon.py
+      shell: powershell
+    
+    - name: Clean previous builds
+      run: |
+        cd AudioBrowserAndAnnotation
+        if (Test-Path "build") { Remove-Item -Recurse -Force build }
+        if (Test-Path "dist") { Remove-Item -Recurse -Force dist }
+      shell: powershell
+    
+    - name: Build executable with PyInstaller
+      run: |
+        cd AudioBrowserAndAnnotation
+        python -m PyInstaller audio_browser.spec
+      shell: powershell
+    
+    - name: Verify build
+      run: |
+        cd AudioBrowserAndAnnotation
+        if (-not (Test-Path "dist/AudioFolderPlayer.exe")) {
+          echo "ERROR: AudioFolderPlayer.exe not found!"
+          exit 1
+        }
+        $fileInfo = Get-Item "dist/AudioFolderPlayer.exe"
+        echo "Build successful! Executable size: $($fileInfo.Length) bytes"
+        echo "Full path: $($fileInfo.FullName)"
+      shell: powershell
+    
+    - name: Create Windows archive
+      run: |
+        cd AudioBrowserAndAnnotation
+        $version = "${{ steps.version.outputs.version_string }}"
+        $archiveName = "AudioFolderPlayer-$version-windows.zip"
+        
+        # Create the archive using PowerShell
+        Compress-Archive -Path "dist/AudioFolderPlayer.exe" -DestinationPath $archiveName -Force
+        
+        echo "Created archive: $archiveName"
+        $archiveInfo = Get-Item $archiveName
+        echo "Archive size: $($archiveInfo.Length) bytes"
+        
+        # Set output for later steps
+        echo "archive_name=$archiveName" >> $env:GITHUB_OUTPUT
+        echo "archive_path=AudioBrowserAndAnnotation/$archiveName" >> $env:GITHUB_OUTPUT
+      id: archive
+      shell: powershell
+    
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AudioFolderPlayer-${{ steps.version.outputs.version_string }}-windows
+        path: AudioBrowserAndAnnotation/dist/AudioFolderPlayer.exe
+        retention-days: 30
+    
+    - name: Create Release (if requested or on main branch)
+      if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: audiobrowser-v${{ steps.version.outputs.version_string }}
+        name: AudioBrowser v${{ steps.version.outputs.version_string }}
+        body: |
+          # AudioBrowser v${{ steps.version.outputs.version_string }}
+          
+          Automated build of AudioBrowser application.
+          
+          ## Downloads
+          - **Windows**: ${{ steps.archive.outputs.archive_name }}
+          
+          ## Version Information
+          - Version: ${{ steps.version.outputs.version_string }}
+          - Build: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          
+          ## Installation
+          1. Download the appropriate archive for your platform
+          2. Extract the archive
+          3. Run `AudioFolderPlayer.exe`
+          
+          No additional installation required - this is a standalone executable.
+        files: |
+          ${{ steps.archive.outputs.archive_path }}
+        draft: false
+        prerelease: false
