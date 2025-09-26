@@ -1,5 +1,11 @@
 name: Build AudioBrowser
 
+# This workflow builds AudioBrowser executable and stores it as GitHub Artifacts and Releases.
+# NOTE: The built executable is NOT committed back to the repository.
+# Built executables are available via:
+# 1. Artifacts section (30 days retention)
+# 2. Releases section (permanent, main branch builds only)
+
 on:
   push:
     branches: [ main, develop ]
