@@ -110,6 +110,10 @@ AudioBrowserAndAnnotation/
 - **PyInstaller**: Latest version installed during build
 - **PyQt6**: GUI framework dependency
 - **Git**: Full history access for version calculation
+- **System Libraries (Linux)**: Updated for Ubuntu 24.04 compatibility
+  - EGL and Mesa libraries for Qt rendering
+  - XCB libraries for X11 integration
+  - PulseAudio and PC/SC Lite libraries for multimedia and NFC support
 
 ## Usage Instructions
 
@@ -131,7 +135,8 @@ AudioBrowserAndAnnotation/
 **Build Failures**:
 - Check Python/dependency installation logs
 - Verify PyInstaller spec file compatibility
-- Check system dependencies (especially Linux Qt libraries)
+- Check system dependencies (especially Linux Qt libraries for Ubuntu 24.04+)
+- Ensure all required XCB and Mesa packages are available
 
 **Version Issues**:
 - Ensure git history is available (`fetch-depth: 0`)
@@ -142,6 +147,12 @@ AudioBrowserAndAnnotation/
 - Check artifact download patterns
 - Verify release asset paths
 - Check GitHub token permissions
+- Ensure archive creation works on all platforms
+
+**Archive Creation Issues**:
+- Windows builds use Python's zipfile module (no external dependencies)
+- Linux/macOS builds use standard tar command
+- Verify executable permissions are preserved in archives
 
 ### Local Testing
 The existing `build_exe.sh` and `build_exe.bat` scripts still work for local testing:
@@ -157,9 +168,10 @@ build_exe.bat         # Windows
 
 ### Updating the Workflow
 1. **Python Version**: Update `python-version` in setup-python steps
-2. **Dependencies**: Modify system package lists as needed
+2. **Dependencies**: Modify system package lists as needed for OS updates
 3. **PyInstaller**: Version specified in pip install commands
-4. **Actions**: Update action versions (checkout@v4, setup-python@v4, etc.)
+4. **Actions**: Update action versions (checkout@v4, setup-python@v5, etc.)
+5. **Release Management**: Uses modern `softprops/action-gh-release@v1` for reliability
 
 ### Monitoring
 - **Actions Tab**: View build status and logs
