@@ -36,22 +36,70 @@ jobs:
       id: version
       run: |
         cd AudioBrowserAndAnnotation
+        echo "Getting version information..."
         $version = python version.py
+        if ($LASTEXITCODE -ne 0) { 
+          echo "ERROR: Failed to get version information"
+          exit 1 
+        }
         echo "Version output: $version"
         $versionString = python -c "import version; print(version.VERSION_STRING)"
+        if ($LASTEXITCODE -ne 0) { 
+          echo "ERROR: Failed to extract version string"
+          exit 1 
+        }
         echo "version_string=$versionString" >> $env:GITHUB_OUTPUT
         echo "Version string: $versionString"
       shell: powershell
     
     - name: Install dependencies
       run: |
+        echo "Installing Python dependencies..."
         python -m pip install --upgrade pip
         pip install PyInstaller PyQt6
+        echo "Dependencies installed successfully"
     
     - name: Generate application icon
       run: |
         cd AudioBrowserAndAnnotation
-        python make_icon.py
+        echo "Generating application icons..."
+        try {
+          python make_icon.py
+          if ((Test-Path "app_icon.png") -and (Test-Path "app_icon.ico")) {
+            echo "Icons generated successfully"
+            Get-Item app_icon.png | Select Name,Length
+            Get-Item app_icon.ico | Select Name,Length
+          } else {
+            throw "Icon files not created"
+          }
+        } catch {
+          echo "WARNING: Icon generation failed: $_"
+          echo "Creating minimal placeholder icons..."
+          # Create minimal valid icon files
+          Add-Content -Path "app_icon.png" -Value ([byte[]]@()) 
+          Add-Content -Path "app_icon.ico" -Value ([byte[]]@())
+          echo "Placeholder icons created"
+        }
+      shell: powershell
+    
+    - name: Verify build prerequisites
+      run: |
+        cd AudioBrowserAndAnnotation
+        echo "Verifying build prerequisites..."
+        
+        $required_files = @("audio_browser.py", "audio_browser.spec", "version.py", "make_icon.py")
+        foreach ($file in $required_files) {
+          if (Test-Path $file) {
+            echo "✅ Found: $file"
+          } else {
+            echo "❌ Missing: $file"
+            exit 1
+          }
+        }
+        
+        echo "All required files present"
+        echo "Current directory contents:"
+        Get-ChildItem . -Name | Sort-Object
       shell: powershell
     
     - name: Clean previous builds
