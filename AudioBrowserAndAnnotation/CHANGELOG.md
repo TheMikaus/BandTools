@@ -4,6 +4,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **GitHub Actions CI/CD Pipeline**: Fixed multiple compatibility and reliability issues
+  - Updated Ubuntu 24.04 system dependencies for Qt library compatibility
+  - Replaced deprecated GitHub Actions with modern alternatives
+  - Fixed Windows archive creation using Python zipfile instead of 7z dependency
+  - Enhanced Linux build dependencies to resolve PyInstaller library warnings
+  - Updated action versions for better security and stability
+
 ### Added
 - **GitHub Actions CI/CD Pipeline**: Automated building and releasing system
   - Multi-platform builds (Windows, Linux, macOS) on every commit
@@ -19,6 +27,7 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 - Automated archive creation (.zip for Windows, .tar.gz for Linux/macOS)
 - Release tagging format: `audiobrowser-v{version}`
 - Manual workflow dispatch option for on-demand releases
+- Modern release management using `softprops/action-gh-release@v1`
 
 ## [1.3] - Version System Implementation
 
