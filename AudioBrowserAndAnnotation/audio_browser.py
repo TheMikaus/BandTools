@@ -18,6 +18,12 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from array import array
 
+# Windows subprocess flag to hide console windows
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = 0x08000000  # Windows CREATE_NO_WINDOW flag
+else:
+    CREATE_NO_WINDOW = 0  # No-op on non-Windows platforms
+
 # Import version information
 try:
     from .version import VERSION_STRING, VERSION_INFO
@@ -36,10 +42,16 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     except ImportError:
         if getattr(sys, "frozen", False): return False
         pkg = pip_name or mod_name
+        
+        # Prepare subprocess arguments to hide console windows
+        subprocess_kwargs = {}
+        if sys.platform == "win32":
+            subprocess_kwargs["creationflags"] = CREATE_NO_WINDOW
+        
         for args in ([sys.executable, "-m", "pip", "install", pkg],
                      [sys.executable, "-m", "pip", "install", "--user", pkg]):
             try:
-                subprocess.check_call(args); break
+                subprocess.check_call(args, **subprocess_kwargs); break
             except subprocess.CalledProcessError:
                 continue
         else:
@@ -2675,9 +2687,14 @@ class AudioBrowser(QMainWindow):
             import subprocess, os, getpass
             # Prefer Git global user.name
             try:
+                # Prepare subprocess arguments to hide console windows
+                subprocess_kwargs = {"stderr": subprocess.DEVNULL, "text": True}
+                if sys.platform == "win32":
+                    subprocess_kwargs["creationflags"] = CREATE_NO_WINDOW
+                    
                 name = subprocess.check_output(
                     ["git", "config", "--global", "user.name"],
-                    stderr=subprocess.DEVNULL, text=True
+                    **subprocess_kwargs
                 ).strip()
                 if name:
                     return name
