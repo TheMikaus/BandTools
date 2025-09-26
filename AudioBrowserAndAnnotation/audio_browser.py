@@ -69,7 +69,10 @@ except ImportError:
     PYQT6_AVAILABLE = False
 
 if not PYQT6_AVAILABLE:
-    if not _ensure_import("PyQt6", "PyQt6"):
+    if getattr(sys, "frozen", False):
+        # In frozen builds, PyQt6 should already be bundled
+        raise RuntimeError("PyQt6 is missing from this build. Please reinstall the application.")
+    elif not _ensure_import("PyQt6", "PyQt6"):
         raise RuntimeError("PyQt6 is required.")
     # Try importing again after installation
     try:

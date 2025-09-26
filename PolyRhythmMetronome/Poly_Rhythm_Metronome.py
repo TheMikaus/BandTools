@@ -25,9 +25,12 @@ def ensure_pkg(pkg_name: str, import_name: str = None):
     try:
         return importlib.import_module(mod_name)
     except ImportError as first_err:
+        if getattr(sys, "frozen", False):
+            # In frozen builds (PyInstaller, etc.), dependencies are already bundled
+            raise first_err
         try:
             print(f"[setup] Installing '{pkg_name}' ...")
-            subprocess.check_call([sys.executable, "-m", "pip", "pip", "install", pkg_name])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pkg_name])
             return importlib.import_module(mod_name)
         except Exception as install_err:
             print(f"[setup] Failed to auto-install '{pkg_name}'. Error:\n{install_err}")
