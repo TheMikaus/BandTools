@@ -101,7 +101,8 @@ NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
 FINGERPRINTS_JSON = ".audio_fingerprints.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON}
+USER_COLORS_JSON = ".user_colors.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -2693,6 +2694,8 @@ class AudioBrowser(QMainWindow):
             # Handle None or non-string names safely
             if isinstance(set_name, str) and set_name.lower() == "default":
                 annotation_set["name"] = user_name
+                # Update color to be consistent for this user
+                annotation_set["color"] = self._get_color_for_set_name(user_name)
                 break
         
         return annotation_sets
@@ -2719,6 +2722,81 @@ class AudioBrowser(QMainWindow):
             user_part = filename[13:-5]  # Remove ".audio_notes_" and ".json"
             return user_part or "Unknown"
         return "Unknown"
+
+    def _user_colors_json_path(self) -> Path:
+        """Return path to the user colors mapping file."""
+        return self.root_path / USER_COLORS_JSON
+
+    def _load_user_colors(self) -> Dict[str, str]:
+        """Load the user-to-color mapping from disk."""
+        return load_json(self._user_colors_json_path(), {}) or {}
+
+    def _save_user_colors(self, user_colors: Dict[str, str]) -> None:
+        """Save the user-to-color mapping to disk."""
+        save_json(self._user_colors_json_path(), user_colors)
+
+    def _get_default_colors(self) -> List[str]:
+        """Return a list of default colors to assign to users."""
+        return [
+            "#00cc66",  # Green (original default)
+            "#ff6b58",  # Red 
+            "#58a6ff",  # Blue
+            "#ffa500",  # Orange
+            "#9966cc",  # Purple
+            "#ff69b4",  # Hot Pink
+            "#00ced1",  # Dark Turquoise
+            "#ffd700",  # Gold
+            "#32cd32",  # Lime Green
+            "#ff4500",  # Orange Red
+            "#4169e1",  # Royal Blue
+            "#dc143c",  # Crimson
+        ]
+
+    def _assign_user_color(self, user_name: str) -> str:
+        """Get or assign a consistent color for a user."""
+        user_colors = self._load_user_colors()
+        
+        # If user already has a color, return it
+        if user_name in user_colors:
+            return user_colors[user_name]
+        
+        # Assign a new color for this user
+        default_colors = self._get_default_colors()
+        used_colors = set(user_colors.values())
+        
+        # Find the first available color from defaults
+        for color in default_colors:
+            if color not in used_colors:
+                user_colors[user_name] = color
+                self._save_user_colors(user_colors)
+                return color
+        
+        # If all default colors are used, generate a new one based on user name hash
+        import hashlib
+        hash_obj = hashlib.sha256(user_name.encode())
+        hash_hex = hash_obj.hexdigest()
+        # Convert first 6 characters to a color
+        color = f"#{hash_hex[:6]}"
+        user_colors[user_name] = color
+        self._save_user_colors(user_colors)
+        return color
+
+    def _get_color_for_set_name(self, set_name: str) -> str:
+        """Get appropriate color for an annotation set name."""
+        current_user = self._default_annotation_set_name()
+        
+        # If this is a user set (matches current user name or has [username] prefix)
+        if set_name == current_user:
+            return self._assign_user_color(current_user)
+        elif set_name.startswith("[") and "]" in set_name:
+            # Extract username from [username] prefix
+            end_bracket = set_name.find("]")
+            if end_bracket > 1:
+                user_part = set_name[1:end_bracket]
+                return self._assign_user_color(user_part)
+        
+        # For non-user sets, use default color (can be customized later)
+        return "#00cc66"
 
     def _scan_external_annotation_sets(self) -> List[dict]:
         ext_sets = []
@@ -2754,7 +2832,7 @@ class AudioBrowser(QMainWindow):
                                 "important": bool(n.get("important", False)),
                             } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                         }
-                    sid = str(data.get("id") or ("ext_" + hashlib.md5(str(jp).encode()).hexdigest()[:8]))
+                    sid = str(data.get("id") or ("ext_" + hashlib.sha256(str(jp).encode()).hexdigest()[:8]))
                     ext_sets.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
                 elif is_user_annotation and not current_user_file and "sets" in data:
                     # Multi-set user annotation file from another user
@@ -2765,7 +2843,8 @@ class AudioBrowser(QMainWindow):
                         sid = str(s.get("id") or uuid.uuid4().hex[:8])
                         # Prefix the name with the user to distinguish
                         name = f"[{user_name}] {str(s.get('name', '') or 'Set')}"
-                        color = str(s.get("color", "#00cc66") or "#00cc66")
+                        # Use consistent color for this user
+                        color = self._get_color_for_set_name(name)
                         visible = bool(s.get("visible", True))
                         files = {}
                         for fname, meta in (s.get("files", {}) or {}).items():
@@ -2781,7 +2860,7 @@ class AudioBrowser(QMainWindow):
                                 } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                             }
                         # Make ID unique by prefixing with file hash to avoid conflicts
-                        unique_sid = f"user_{hashlib.md5(str(jp).encode()).hexdigest()[:8]}_{sid}"
+                        unique_sid = f"user_{hashlib.sha256(str(jp).encode()).hexdigest()[:8]}_{sid}"
                         ext_sets.append({"id": unique_sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
         except Exception:
             pass
@@ -3064,7 +3143,9 @@ class AudioBrowser(QMainWindow):
     # ----- Annotation sets load/save -----
     def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None, carry_folder_notes: str = ""):
         sid = uuid.uuid4().hex[:8]
-        aset = {"id": sid, "name": self._default_annotation_set_name(), "color": "#00cc66", "visible": True, "folder_notes": carry_folder_notes, "files": {}}
+        set_name = self._default_annotation_set_name()
+        color = self._get_color_for_set_name(set_name)
+        aset = {"id": sid, "name": set_name, "color": color, "visible": True, "folder_notes": carry_folder_notes, "files": {}}
         if carry_notes or carry_general:
             all_files = set((carry_notes or {}).keys()) | set((carry_general or {}).keys())
             for fname in all_files:
@@ -3813,8 +3894,17 @@ class AudioBrowser(QMainWindow):
         if not ok:
             return
         name = name.strip() or self._default_annotation_set_name()
-        c = QColorDialog.getColor(hex_to_color("#00cc66"), self, "Pick marker color")
-        color = color_to_hex(c) if c.isValid() else "#00cc66"
+        
+        # Get consistent color for user sets, or allow custom color for non-user sets
+        current_user = self._default_annotation_set_name()
+        if name == current_user:
+            # Use consistent user color
+            color = self._get_color_for_set_name(name)
+        else:
+            # Allow custom color selection for non-user sets
+            c = QColorDialog.getColor(hex_to_color("#00cc66"), self, "Pick marker color")
+            color = color_to_hex(c) if c.isValid() else "#00cc66"
+        
         sid = uuid.uuid4().hex[:8]
         self.annotation_sets.append({"id": sid, "name": name.strip(), "color": color, "visible": True, "files": {}})
         self.current_set_id = sid
