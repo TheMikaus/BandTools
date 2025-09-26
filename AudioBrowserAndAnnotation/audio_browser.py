@@ -18,6 +18,12 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from array import array
 
+# Windows subprocess flag to hide console windows
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = 0x08000000  # Windows CREATE_NO_WINDOW flag
+else:
+    CREATE_NO_WINDOW = 0  # No-op on non-Windows platforms
+
 # Import version information
 try:
     from .version import VERSION_STRING, VERSION_INFO
@@ -36,10 +42,16 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     except ImportError:
         if getattr(sys, "frozen", False): return False
         pkg = pip_name or mod_name
+        
+        # Prepare subprocess arguments to hide console windows
+        subprocess_kwargs = {}
+        if sys.platform == "win32":
+            subprocess_kwargs["creationflags"] = CREATE_NO_WINDOW
+        
         for args in ([sys.executable, "-m", "pip", "install", pkg],
                      [sys.executable, "-m", "pip", "install", "--user", pkg]):
             try:
-                subprocess.check_call(args); break
+                subprocess.check_call(args, **subprocess_kwargs); break
             except subprocess.CalledProcessError:
                 continue
         else:
@@ -59,6 +71,12 @@ except ImportError:
 if not PYQT6_AVAILABLE:
     if not _ensure_import("PyQt6", "PyQt6"):
         raise RuntimeError("PyQt6 is required.")
+    # Try importing again after installation
+    try:
+        import PyQt6
+        PYQT6_AVAILABLE = True
+    except ImportError:
+        raise RuntimeError("PyQt6 installation failed.")
 
 HAVE_NUMPY = _ensure_import("numpy", "numpy")
 HAVE_PYDUB = _ensure_import("pydub", "pydub")
@@ -2669,9 +2687,14 @@ class AudioBrowser(QMainWindow):
             import subprocess, os, getpass
             # Prefer Git global user.name
             try:
+                # Prepare subprocess arguments to hide console windows
+                subprocess_kwargs = {"stderr": subprocess.DEVNULL, "text": True}
+                if sys.platform == "win32":
+                    subprocess_kwargs["creationflags"] = CREATE_NO_WINDOW
+                    
                 name = subprocess.check_output(
                     ["git", "config", "--global", "user.name"],
-                    stderr=subprocess.DEVNULL, text=True
+                    **subprocess_kwargs
                 ).strip()
                 if name:
                     return name
@@ -2920,8 +2943,9 @@ class AudioBrowser(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} - {VERSION_STRING}"); self._apply_app_icon()
 
         self.settings = QSettings(APP_ORG, APP_NAME)
-        self.root_path: Path = self._load_or_ask_root()
+        self.root_path: Path = self._load_root_silently()
         self.current_practice_folder: Path = self.root_path  # Initially same as root
+        self._needs_root_selection: bool = not self._has_stored_root()
         self.current_audio_file: Optional[Path] = None
         self.pending_note_start_ms: Optional[int] = None
         self.clip_sel_start_ms: Optional[int] = None
@@ -3040,6 +3064,10 @@ class AudioBrowser(QMainWindow):
         self._restore_toggles()
         self._update_undo_actions_enabled()
         self._update_mono_button_state()  # Initialize mono button state
+        
+        # Schedule root folder selection dialog if needed (after UI is shown)
+        if self._needs_root_selection:
+            QTimer.singleShot(100, self._show_root_selection_if_needed)
 
     # ----- Icon -----
     def _apply_app_icon(self):
@@ -3094,6 +3122,43 @@ class AudioBrowser(QMainWindow):
             self._backup_created_this_session = True
 
     # ----- Settings & metadata -----
+    def _has_stored_root(self) -> bool:
+        """Check if a root directory is stored in settings and exists."""
+        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        return bool(stored and Path(stored).exists())
+    
+    def _has_valid_root(self) -> bool:
+        """Check if current root_path is valid and exists."""
+        return self.root_path and self.root_path.exists()
+    
+    def _load_root_silently(self) -> Path:
+        """Load root path from settings without showing any dialogs."""
+        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        if stored and Path(stored).exists():
+            return Path(stored)
+        # Return home directory as fallback - don't show dialog yet
+        return Path.home()
+    
+    def _show_root_selection_if_needed(self):
+        """Show root selection dialog if no valid root is configured."""
+        if not self._needs_root_selection:
+            return
+        
+        dlg = QFileDialog(self, "Select your root band practice folder")
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        if dlg.exec():
+            p = Path(dlg.selectedFiles()[0])
+            self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
+            self._save_root(p)  # This will update UI and reload data
+            self._needs_root_selection = False  # Mark as resolved
+        else:
+            # User canceled - keep using home directory but mark as still needing selection
+            home = Path.home()
+            if self.root_path != home:
+                self._save_root(home)
+            # Don't set _needs_root_selection to False so dialog shows again if needed
+
     def _load_or_ask_root(self) -> Path:
         stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
         if stored and Path(stored).exists(): return Path(stored)
