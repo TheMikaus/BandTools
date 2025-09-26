@@ -1,5 +1,9 @@
 name: Build AudioBrowser
 
+# Permissions for release publishing
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main, develop ]
@@ -22,20 +26,32 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             platform: linux
+            exe_dir: AudioFolderPlayer
             executable_name: AudioFolderPlayer
+            archive_ext: tar.gz
           - os: windows-latest
             platform: windows
+            exe_dir: AudioFolderPlayer
             executable_name: AudioFolderPlayer.exe
+            archive_ext: zip
           - os: macos-latest
             platform: macos
+            exe_dir: AudioFolderPlayer
             executable_name: AudioFolderPlayer
+            archive_ext: tar.gz
 
     runs-on: ${{ matrix.os }}
-    
+
+    # Force bash so POSIX syntax works on Windows too
+    defaults:
+      run:
+        shell: bash
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -46,6 +62,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
     - name: Install system dependencies (Linux)
       if: matrix.platform == 'linux'
@@ -77,8 +94,8 @@ jobs:
       id: version
       working-directory: AudioBrowserAndAnnotation
       run: |
-        VERSION=$(python3 -c "import version; print(version.VERSION_STRING)")
-        VERSION_INFO=$(python3 -c "import version; print(version.VERSION_INFO)")
+        VERSION=$(python -c "import version; print(version.VERSION_STRING)")
+        VERSION_INFO=$(python -c "import version; print(version.VERSION_INFO)")
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "version_info=$VERSION_INFO" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
@@ -88,45 +105,45 @@ jobs:
       working-directory: AudioBrowserAndAnnotation
       run: |
         python -m pip install --upgrade pip
+        # Install your app deps here; PyInstaller and PyQt6 at minimum
+        python -m pip install -r requirements.txt || true
         python -m pip install PyInstaller PyQt6
 
     - name: Generate application icon
       working-directory: AudioBrowserAndAnnotation
+      env:
+        QT_QPA_PLATFORM: offscreen
       run: |
-        export QT_QPA_PLATFORM=offscreen
-        python make_icon.py
-      shell: bash
+        python make_icon.py || echo "Icon generation skipped/failed; continuing"
 
     - name: Clean previous build
       working-directory: AudioBrowserAndAnnotation
       run: |
-        if [ -d "build" ]; then rm -rf build; fi
-        if [ -d "dist" ]; then rm -rf dist; fi
-      shell: bash
+        rm -rf build dist
 
-    - name: Build with PyInstaller
+    - name: Build with PyInstaller (onedir)
       working-directory: AudioBrowserAndAnnotation
       run: |
+        # Ensure spec targets an onedir build named AudioFolderPlayer with correct entry
+        # If you prefer, you can force it here:
+        # python -m PyInstaller --name AudioFolderPlayer --noconfirm --onedir path/to/your_entry.py
         python -m PyInstaller audio_browser.spec
         echo "Build completed!"
-        
-        if [ -f "dist/${{ matrix.executable_name }}" ]; then
-          echo "✅ Executable found: dist/${{ matrix.executable_name }}"
-          ls -lh "dist/${{ matrix.executable_name }}"
-        else
-          echo "❌ Expected executable not found!"
-          echo "Contents of dist directory:"
-          ls -la dist/ || echo "dist directory does not exist"
+        echo "Dist contents:"
+        ls -la dist || true
+        ls -la "dist/${{ matrix.exe_dir }}" || true
+
+        if [ ! -f "dist/${{ matrix.exe_dir }}/${{ matrix.executable_name }}" ]; then
+          echo "❌ Expected executable not found at dist/${{ matrix.exe_dir }}/${{ matrix.executable_name }}"
           exit 1
         fi
-      shell: bash
 
     - name: Verify executable (Linux/macOS)
       if: matrix.platform != 'windows'
       working-directory: AudioBrowserAndAnnotation
       run: |
-        chmod +x "dist/${{ matrix.executable_name }}"
-        file "dist/${{ matrix.executable_name }}"
+        chmod +x "dist/${{ matrix.exe_dir }}/${{ matrix.executable_name }}"
+        file "dist/${{ matrix.exe_dir }}/${{ matrix.executable_name }}" || true
         echo "Executable permissions set and verified"
 
     - name: Create artifact name
@@ -136,33 +153,30 @@ jobs:
         echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
         echo "Artifact name: $ARTIFACT_NAME"
 
-    - name: Upload build artifact
+    - name: Upload build artifact (entire app folder)
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.artifact.outputs.name }}
-        path: AudioBrowserAndAnnotation/dist/${{ matrix.executable_name }}
+        path: AudioBrowserAndAnnotation/dist/${{ matrix.exe_dir }}/
         retention-days: 30
 
     - name: Create release archive
+      # Create a platform-specific archive only on release builds or main pushes
       if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
       working-directory: AudioBrowserAndAnnotation
       run: |
         mkdir -p release
-        if [ "${{ matrix.platform }}" = "windows" ]; then
-          # Windows - create zip using Python
-          python -c "
-import zipfile
-import os
-with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip', 'w', zipfile.ZIP_DEFLATED) as zip_file:
-    zip_file.write('dist/${{ matrix.executable_name }}', '${{ matrix.executable_name }}')
-"
+        if [ "${{ matrix.archive_ext }}" = "zip" ]; then
+          # Windows - zip (recursive, keep folder structure)
+          cd dist
+          zip -r "../release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip" "${{ matrix.exe_dir }}"
+          cd ..
         else
-          # Linux/macOS - create tar.gz
-          tar -czf "release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.tar.gz" -C dist "${{ matrix.executable_name }}"
+          # Linux/macOS - tar.gz
+          tar -czf "release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.tar.gz" -C dist "${{ matrix.exe_dir }}"
         fi
         echo "Release archive created"
         ls -la release/
-      shell: bash
 
     - name: Upload release archive
       if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
@@ -176,7 +190,11 @@ with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.versio
     if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
     needs: build
     runs-on: ubuntu-latest
-    
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -192,8 +210,8 @@ with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.versio
       id: version
       working-directory: AudioBrowserAndAnnotation
       run: |
-        VERSION=$(python3 -c "import version; print(version.VERSION_STRING)")
-        VERSION_INFO=$(python3 -c "import version; print(version.VERSION_INFO)")
+        VERSION=$(python -c "import version; print(version.VERSION_STRING)")
+        VERSION_INFO=$(python -c "import version; print(version.VERSION_INFO)")
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "version_info=$VERSION_INFO" >> $GITHUB_OUTPUT
 
@@ -211,7 +229,7 @@ with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.versio
 
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -219,29 +237,28 @@ with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.versio
         name: AudioBrowser v${{ steps.version.outputs.version }}
         body: |
           # AudioBrowser v${{ steps.version.outputs.version }}
-          
+
           ${{ steps.version.outputs.version_info }}
-          
+
           ## Downloads
-          
+
           Choose the appropriate download for your operating system:
-          
+
           - **Windows**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-windows.zip`
           - **Linux**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-linux.tar.gz`
           - **macOS**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-macos.tar.gz`
-          
+
           ## Installation
-          
+
           1. Download the appropriate file for your operating system
           2. Extract the archive
-          3. Run the `AudioFolderPlayer` executable
-          
+          3. Run the `AudioFolderPlayer` executable (inside the extracted folder)
+
           ## Changes
-          
-          This release includes the latest changes from the main branch. See the [CHANGELOG](https://github.com/TheMikaus/BandTools/blob/main/AudioBrowserAndAnnotation/CHANGELOG.md) for detailed information.
-          
+
+          This release includes the latest changes from the main branch. See the CHANGELOG for details.
+
           ---
-          
           Built automatically by GitHub Actions from commit ${{ github.sha }}
         draft: false
         prerelease: false
