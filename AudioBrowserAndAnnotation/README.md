@@ -66,6 +66,8 @@ Pre-built executables are automatically created for Windows, Linux, and macOS on
 
 **Installation**: Extract the downloaded archive and run the `AudioFolderPlayer` executable.
 
+**Note**: GitHub Actions builds do NOT create executables in the repository's `dist/` folder. Built executables are only available through GitHub Artifacts (temporary) or Releases (permanent). See [BUILD.md](BUILD.md) for details.
+
 ## Building from Source
 
 If you prefer to build from source or need to modify the application:

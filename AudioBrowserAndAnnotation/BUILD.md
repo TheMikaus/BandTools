@@ -1,15 +1,37 @@
 # Building AudioBrowser Executable
 
-This directory contains batch files to build a standalone executable for the AudioBrowser annotation software.
+This directory contains scripts to build a standalone executable for the AudioBrowser annotation software.
+
+## Quick Answer: Where is the Built Executable?
+
+**For GitHub Actions builds** (automatic builds when you commit):
+- 🚫 **NOT in the repository** - the `dist/` folder is not committed
+- ✅ **Artifacts section**: Repository → Actions tab → Workflow run → Artifacts section (30 days)
+- ✅ **Releases section**: Repository → Releases section → Download archives (permanent)
+
+**For local manual builds** (when you run `build_exe.bat` or `build_exe.sh`):
+- ✅ **Local `dist/` folder**: `dist/AudioFolderPlayer.exe` (Windows) or `dist/AudioFolderPlayer` (Linux/macOS)
 
 ## Automated Builds (Recommended)
 
 **Pre-built executables are automatically created** for every commit and available in the [Releases section](https://github.com/TheMikaus/BandTools/releases). This is the easiest way to get a working executable without setting up a build environment.
 
-The automated CI/CD system builds for:
-- Windows (`AudioFolderPlayer-{version}-windows.zip`)  
-- Linux (`AudioFolderPlayer-{version}-linux.tar.gz`)
-- macOS (`AudioFolderPlayer-{version}-macos.tar.gz`)
+### Where GitHub Actions Build Outputs Go
+
+**The GitHub Actions workflow does NOT commit executables back to the repository.** Instead, built executables are stored in:
+
+1. **GitHub Artifacts** (temporary, 30 days):
+   - Go to: Repository → Actions tab → Select a workflow run → Artifacts section
+   - Download format: `AudioFolderPlayer-{version}-windows` (raw executable)
+
+2. **GitHub Releases** (permanent, main branch builds):
+   - Go to: Repository → Releases section → Latest release
+   - Download format: 
+     - Windows: `AudioFolderPlayer-{version}-windows.zip`  
+     - Linux: `AudioFolderPlayer-{version}-linux.tar.gz`
+     - macOS: `AudioFolderPlayer-{version}-macos.tar.gz`
+
+**Note**: You will NOT find the executable in the repository's `dist/` folder after GitHub Actions builds. The `dist/` folder is cleaned during the build process and only exists temporarily during the build.
 
 ## Manual Build (Development)
 
@@ -41,13 +63,24 @@ For development or customization, you can build manually using the scripts below
 4. **Build Executable**: Use PyInstaller with the audio_browser.spec configuration to create a standalone executable
 5. **Report Results**: Show the location and size of the built executable
 
-## Output
+## Output Locations
 
-The executable will be created at:
+### For Manual/Local Builds
+
+When you run `build_exe.bat` (Windows) or `build_exe.sh` (Linux/macOS) locally, the executable will be created at:
 - Windows: `dist\AudioFolderPlayer.exe` 
 - Linux/macOS: `dist/AudioFolderPlayer`
 
 The executable is self-contained and can be distributed without requiring Python or other dependencies on the target system.
+
+### For GitHub Actions Builds
+
+When GitHub Actions builds the executable (automatically on commits), the executable is **NOT stored in the repository**. Instead, it's available as:
+
+1. **Artifacts** (temporary): Actions tab → Workflow run → Artifacts section
+2. **Releases** (permanent): Releases section → Download the appropriate archive
+
+The build process creates the executable in `dist/AudioFolderPlayer.exe` during the build, but this directory is not committed back to the repository.
 
 ## Troubleshooting
 

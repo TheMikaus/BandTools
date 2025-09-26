@@ -81,19 +81,33 @@ AudioBrowserAndAnnotation/
 └── ...
 ```
 
-## Artifacts and Releases
+## Where Built Executables Are Stored
 
-### Build Artifacts (per build)
+**Important**: GitHub Actions builds do NOT commit executables back to the repository. The executables are stored in GitHub's artifact and release systems:
+
+### 1. GitHub Artifacts (All Builds)
+- **Location**: Repository → Actions tab → Select workflow run → Artifacts section
 - **Retention**: 30 days
+- **Format**: Raw executable files
 - **Names**: `AudioFolderPlayer-{version}-{platform}`
-- **Content**: Raw executables
+- **Access**: Available for all builds (including pull requests)
 
-### Release Archives (on main branch)
-- **Retention**: 90 days for artifacts, permanent for releases  
-- **Formats**:
+### 2. GitHub Releases (Main Branch Only)
+- **Location**: Repository → Releases section 
+- **Retention**: Permanent
+- **Format**: Compressed archives with executables
+- **Names**: 
   - Windows: `AudioFolderPlayer-{version}-windows.zip`
   - Linux: `AudioFolderPlayer-{version}-linux.tar.gz`
   - macOS: `AudioFolderPlayer-{version}-macos.tar.gz`
+- **Access**: Public downloads for end users
+
+### 3. Build Process (Temporary)
+During the build process, the executable is created at:
+- `AudioBrowserAndAnnotation/dist/AudioFolderPlayer.exe` (Windows)
+- `AudioBrowserAndAnnotation/dist/AudioFolderPlayer` (Linux/macOS)
+
+However, the `dist/` directory is cleaned at the start of each build and never committed to the repository.
 
 ### Release Creation
 - **Automatic**: Every push to main branch
@@ -117,6 +131,37 @@ AudioBrowserAndAnnotation/
   - EGL and Mesa libraries for Qt rendering
   - XCB libraries for X11 integration
   - PulseAudio and PC/SC Lite libraries for multimedia and NFC support
+
+## Frequently Asked Questions
+
+### Q: Where is the executable after GitHub Actions builds?
+
+**A: The executable is NOT in the repository's `dist/` folder.** GitHub Actions builds are designed to produce downloadable artifacts and releases, not to modify the repository.
+
+**To find your built executable:**
+
+1. **For any build** (including pull requests):
+   - Go to: Repository → Actions tab
+   - Click on the workflow run you're interested in
+   - Scroll down to "Artifacts" section
+   - Download `AudioFolderPlayer-{version}-windows` (or other platform)
+
+2. **For main branch builds** (permanent releases):
+   - Go to: Repository → Releases section  
+   - Download the latest release archive
+   - Extract and run the executable
+
+### Q: Why isn't the executable committed to the repository?
+
+**A: By design.** Committing large binary executables (100MB+) to version control is not recommended because:
+- It bloats the repository size significantly
+- Binary files don't diff well in version control
+- It's unnecessary when GitHub provides artifact and release storage
+- Users typically only need the latest executable, not the entire history
+
+### Q: Can I get the executable from the `dist/` folder?
+
+**A: Only for local builds.** When you run `build_exe.bat` or `build_exe.sh` locally, the executable appears in your local `dist/` folder. However, GitHub Actions builds clean this directory and never commit it.
 
 ## Usage Instructions
 
