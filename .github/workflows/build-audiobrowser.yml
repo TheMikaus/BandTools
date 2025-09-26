@@ -5,6 +5,9 @@ name: Build AudioBrowser
 # Built executables are available via:
 # 1. Artifacts section (30 days retention)
 # 2. Releases section (permanent, main branch builds only)
+permissions:
+  contents: write
+  packages: write
 
 on:
   push:
