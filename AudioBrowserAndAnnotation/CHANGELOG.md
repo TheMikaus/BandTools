@@ -4,11 +4,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
-## [1.2] - Version System Implementation
+## [1.3] - Version System Implementation
 
 ### Added
 - Application version number system with automatic minor version increment per commit
-- Version display in application window title (e.g., "Audio Folder Player - 1.2")
+- Version display in application window title (e.g., "Audio Folder Player - 1.3")
 - Help menu with "About" and "Changelog" buttons in toolbar
 - About dialog showing version information and key features
 - Changelog dialog for viewing this changelog file
@@ -23,7 +23,7 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ### Technical Details
 - Version automatically calculated from git commit count: `git rev-list --count HEAD`
-- Version format: MAJOR.MINOR (e.g., 1.2 means major version 1, minor version 2)
+- Version format: MAJOR.MINOR (e.g., 1.3 means major version 1, minor version 3)
 - Fallback version handling if git is not available
 - Version information includes commit hash for build identification
 
