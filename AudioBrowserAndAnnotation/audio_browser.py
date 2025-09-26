@@ -18,6 +18,17 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from array import array
 
+# Import version information
+try:
+    from .version import VERSION_STRING, VERSION_INFO
+except ImportError:
+    try:
+        from version import VERSION_STRING, VERSION_INFO
+    except ImportError:
+        # Fallback if version module is not available
+        VERSION_STRING = "1.0"
+        VERSION_INFO = "Version 1.0"
+
 # ========== Bootstrap: auto-install PyQt6 (if not frozen) ==========
 def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     try:
@@ -77,7 +88,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
-    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu
+    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -2899,7 +2910,7 @@ class AudioBrowser(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(APP_NAME); self._apply_app_icon()
+        self.setWindowTitle(f"{APP_NAME} - {VERSION_STRING}"); self._apply_app_icon()
 
         self.settings = QSettings(APP_ORG, APP_NAME)
         self.root_path: Path = self._load_or_ask_root()
@@ -3371,6 +3382,11 @@ class AudioBrowser(QMainWindow):
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
         wa = QWidgetAction(self); wa.setDefaultWidget(self.auto_switch_cb); tb.addAction(wa)
+        
+        # Add Help menu items
+        tb.addSeparator()
+        help_about_action = QAction("About", self); help_about_action.triggered.connect(self._show_about_dialog); tb.addAction(help_about_action)
+        help_changelog_action = QAction("Changelog", self); help_changelog_action.triggered.connect(self._show_changelog_dialog); tb.addAction(help_changelog_action)
 
         # Create main widget to hold path label and splitter
         main_widget = QWidget()
@@ -6900,6 +6916,68 @@ class AudioBrowser(QMainWindow):
         
         QMessageBox.information(self, "Reference Fingerprints Generated",
                                 f"Generated {generated} new fingerprints in reference folder.")
+
+    def _show_about_dialog(self):
+        """Show About dialog with version information."""
+        about_text = f"""<h2>{APP_NAME}</h2>
+<p><strong>{VERSION_INFO}</strong></p>
+
+<p>Audio file browser and annotation tool for band practice workflow management.</p>
+
+<h3>Key Features:</h3>
+<ul>
+<li>Audio file browser with waveform visualization</li>
+<li>Multi-user annotation system with timestamped notes</li>
+<li>Best take and partial take marking system</li>
+<li>Batch renaming and audio conversion tools</li>
+<li>Audio fingerprinting for automatic song identification</li>
+<li>Backup and restore system for metadata</li>
+</ul>
+
+<p><em>Built with PyQt6 and developed with heavy use of AI assistance (ChatGPT/Copilot).</em></p>"""
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(f"About {APP_NAME}")
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
+        msg_box.setText(about_text)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
+    def _show_changelog_dialog(self):
+        """Show changelog dialog with version history."""
+        try:
+            # Try to read the changelog file
+            changelog_path = Path(__file__).parent / "CHANGELOG.md"
+            if changelog_path.exists():
+                changelog_content = changelog_path.read_text(encoding='utf-8')
+            else:
+                changelog_content = f"# {APP_NAME} Changelog\n\nChangelog file not found.\n\nCurrent version: {VERSION_INFO}"
+        except Exception as e:
+            changelog_content = f"# {APP_NAME} Changelog\n\nError reading changelog: {e}\n\nCurrent version: {VERSION_INFO}"
+        
+        # Create a custom dialog for better changelog viewing
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_NAME} - Changelog")
+        dialog.resize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Add text display area
+        text_edit = QTextEdit()
+        text_edit.setPlainText(changelog_content)
+        text_edit.setReadOnly(True)
+        text_edit.setFont(self.font())  # Use application font
+        layout.addWidget(text_edit)
+        
+        # Add close button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
 
     def closeEvent(self, ev):
         # Check if auto-labeling is in progress
