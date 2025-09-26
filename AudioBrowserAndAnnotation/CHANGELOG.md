@@ -4,6 +4,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **GitHub Actions Build Workflow**: Created automated Windows build system
+  - Windows-only build pipeline for AudioBrowser executable
+  - Triggers on changes to AudioBrowserAndAnnotation directory
+  - Automatic version increment using existing git-based system
+  - Build artifacts stored for 30 days, releases created on main branch
+  - Uses existing build infrastructure (PyInstaller, version.py, audio_browser.spec)
+
 ### Fixed
 - **GitHub Actions CI/CD Pipeline**: Fixed multiple compatibility and reliability issues
   - Updated Ubuntu 24.04 system dependencies for Qt library compatibility
@@ -11,8 +19,6 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Fixed Windows archive creation using Python zipfile instead of 7z dependency
   - Enhanced Linux build dependencies to resolve PyInstaller library warnings
   - Updated action versions for better security and stability
-
-### Added
 - **GitHub Actions CI/CD Pipeline**: Automated building and releasing system
   - Multi-platform builds (Windows, Linux, macOS) on every commit
   - Automatic release creation with downloadable executables

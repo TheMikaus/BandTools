@@ -7,7 +7,7 @@ This document describes the GitHub Actions setup for automatically building and 
 The build system is configured in `.github/workflows/build-audiobrowser.yml` and provides:
 
 1. **Automated Building**: Builds AudioBrowser executable on every commit to main/develop branches
-2. **Multi-Platform Support**: Creates executables for Windows, Linux, and macOS
+2. **Windows-Only Support**: Currently builds Windows executable only (as requested)
 3. **Artifact Storage**: Stores built executables as GitHub artifacts
 4. **Automatic Releases**: Creates releases with downloadable packages
 5. **Version Management**: Uses the existing git-based version system
@@ -25,9 +25,12 @@ The build system is configured in `.github/workflows/build-audiobrowser.yml` and
 
 ## Build Process
 
-### 1. Multi-Platform Matrix
+### 1. Windows Build
 ```yaml
-strategy:
+jobs:
+  build-windows:
+    runs-on: windows-latest
+```
   matrix:
     include:
       - os: ubuntu-latest (Linux)
