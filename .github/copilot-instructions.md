@@ -53,6 +53,7 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
 - Supports both WAV and MP3 formats
 - Multi-user support through separate annotation files
 - Cross-folder fingerprint matching for song identification
+- **Version Management**: Uses automatic versioning system with MAJOR.MINOR format where minor version increments per commit
 
 ### JamStikRecord (`jsrec.py`)
 
@@ -156,12 +157,26 @@ ApplicationName/
 3. Use JSON for any persistent data storage
 4. Implement proper threading for audio/UI operations
 5. Add comprehensive docstrings for complex functions
+6. **Update version system: Update CHANGELOG.md with feature additions and changes**
 
 ### When Fixing Issues
 1. Preserve existing functionality while making minimal changes
 2. Test audio operations thoroughly
 3. Handle edge cases in file operations gracefully
 4. Maintain backwards compatibility with existing data files
+5. **Update version system: Document bug fixes in CHANGELOG.md**
+
+### Version Management Guidelines
+- The application uses automatic version numbering (MAJOR.MINOR format)
+- MAJOR version (1.x) represents significant releases or architectural changes
+- MINOR version (x.N) automatically increments with each commit via `git rev-list --count HEAD`
+- **Always update CHANGELOG.md** when making changes:
+  - Add new features under "### Added"
+  - Document changes under "### Changed"  
+  - List bug fixes under "### Fixed"
+  - Note any breaking changes under "### Breaking Changes"
+- Version information is imported from `version.py` module
+- Version appears in window title and Help > About dialog
 
 ### Code Generation Tips
 - Focus on functional code over elegant architecture
