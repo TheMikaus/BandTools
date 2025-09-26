@@ -52,6 +52,43 @@ The application includes an automatic backup system that protects your metadata:
 - Once I've finished feature creep on the application I plan on trying to refactor it into to more than one file.
 - Maybe have CoPilot add unit test like things
 
+# Downloads and Installation
+
+## Pre-built Releases
+
+Pre-built executables are automatically created for Windows, Linux, and macOS on every commit to the main branch.
+
+**Download from Releases**: Go to the [Releases page](https://github.com/TheMikaus/BandTools/releases) and download the appropriate file for your operating system:
+
+- **Windows**: `AudioFolderPlayer-{version}-windows.zip`
+- **Linux**: `AudioFolderPlayer-{version}-linux.tar.gz` 
+- **macOS**: `AudioFolderPlayer-{version}-macos.tar.gz`
+
+**Installation**: Extract the downloaded archive and run the `AudioFolderPlayer` executable.
+
+## Building from Source
+
+If you prefer to build from source or need to modify the application:
+
+### Windows
+```batch
+cd AudioBrowserAndAnnotation
+build_exe.bat
+```
+
+### Linux/macOS
+```bash
+cd AudioBrowserAndAnnotation
+chmod +x build_exe.sh
+./build_exe.sh
+```
+
+See [BUILD.md](BUILD.md) for detailed build instructions.
+
+## Automatic Updates
+
+The application uses an automatic version numbering system where the version increments with each commit. Check the [Releases page](https://github.com/TheMikaus/BandTools/releases) for the latest version.
+
 # Cloud based storage
 - Initial thoughts were to use Google drive's oAuth, but that seems to require me to register the app, and I dont' really want to do that, nor do I want to others to have to. So I cancelled that out for now.
 - Maybe allow a user to specify an FTP server?
