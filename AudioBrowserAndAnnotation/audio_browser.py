@@ -1595,7 +1595,7 @@ def restore_metadata_from_backup(backup_folder: Path, target_practice_folder: Pa
 # ========== Waveform worker ==========
 class WaveformWorker(QObject):
     progress = pyqtSignal(int, str, list, int, int, bool)  # Added bool for stereo mode
-    finished = pyqtSignal(int, str, list, int, int, int, int, bool)  # Added bool for stereo mode
+    finished = pyqtSignal(int, str, list, int, int, int, int, bool, bool)  # Added bool for has_stereo_data
     error = pyqtSignal(int, str, str)
 
     def __init__(self, gen_id: int, path_str: str, columns: int, stereo: bool = False):
@@ -1608,10 +1608,11 @@ class WaveformWorker(QObject):
     def run(self):
         try:
             p = Path(self._path_str)
-            samples, _sr, dur_ms, stereo_samples = decode_audio_samples(p, stereo=self._stereo)
+            # Always attempt to decode stereo data to detect availability
+            samples, _sr, dur_ms, stereo_samples = decode_audio_samples(p, stereo=True)
             
             if self._stereo and stereo_samples:
-                # Stereo mode
+                # Stereo mode - generate stereo peaks
                 peaks_all: List[List[List[float]]] = []
                 CHUNK = 100
                 for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK, stereo_samples):
@@ -1622,7 +1623,7 @@ class WaveformWorker(QObject):
                     done = start + len(chunk_peaks)
                     self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns), True)
             else:
-                # Mono mode
+                # Mono mode - generate mono peaks
                 peaks_all: List[List[float]] = []
                 CHUNK = 100
                 for start, chunk_peaks in compute_peaks_progressive(samples, self._columns, CHUNK):
@@ -1632,7 +1633,9 @@ class WaveformWorker(QObject):
                     self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns), False)
             
             size, mtime = file_signature(p)
-            self.finished.emit(self._gen_id, self._path_str, peaks_all, int(dur_ms), int(self._columns), int(size), int(mtime), self._stereo)
+            # Always pass whether stereo data is available, regardless of current mode
+            has_stereo_data = stereo_samples is not None
+            self.finished.emit(self._gen_id, self._path_str, peaks_all, int(dur_ms), int(self._columns), int(size), int(mtime), self._stereo, has_stereo_data)
         except Exception as e:
             self.error.emit(self._gen_id, self._path_str, str(e))
 
@@ -1825,6 +1828,7 @@ class WaveformView(QWidget):
     markerReleased = pyqtSignal(str, int, int)  # set_id, uid, ms
     annotationClicked = pyqtSignal(str, int)    # set_id, uid
     seekRequested = pyqtSignal(int)             # ms
+    waveformReady = pyqtSignal()                # Emitted when waveform data is loaded
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1978,7 +1982,11 @@ class WaveformView(QWidget):
             self._has_stereo_data = bool(entry.get("has_stereo_data", False))
             
             self._state = "ready"; self._msg = ""
-            self.update(); return
+            self.update()
+            
+            # Notify that waveform data is ready (from cache)
+            self.waveformReady.emit()
+            return
 
         self._duration_ms = 0
         self._state = "loading"; self._msg = "Analyzing waveform…"
@@ -2032,7 +2040,7 @@ class WaveformView(QWidget):
             self._msg = "Analyzing waveform…"
         self._pixmap = None; self.update()
 
-    def _on_worker_finished(self, gen_id: int, path_str: str, peaks: list, duration_ms: int, columns: int, size: int, mtime: int, is_stereo: bool = False):
+    def _on_worker_finished(self, gen_id: int, path_str: str, peaks: list, duration_ms: int, columns: int, size: int, mtime: int, is_stereo: bool = False, has_stereo_data: bool = False):
         if gen_id != self._active_gen_id or not self._path or str(self._path) != path_str:
             return
         
@@ -2040,12 +2048,8 @@ class WaveformView(QWidget):
         self._duration_ms = int(duration_ms)
         self._state = "ready"; self._msg = ""
         
-        # Check if file has stereo data by attempting to decode it
-        try:
-            _, _, _, stereo_data = decode_audio_samples(self._path, stereo=True)
-            self._has_stereo_data = stereo_data is not None
-        except:
-            self._has_stereo_data = False
+        # Use the stereo data availability passed from the worker
+        self._has_stereo_data = has_stereo_data
         
         # Update cache with both mono and stereo data
         cache = load_waveform_cache(self._path.parent)
@@ -2067,6 +2071,9 @@ class WaveformView(QWidget):
         cache["files"][self._path.name] = file_entry
         save_waveform_cache(self._path.parent, cache)
         self._pixmap = None; self.update()
+        
+        # Notify that waveform data is ready (including stereo availability)
+        self.waveformReady.emit()
 
     def _on_worker_error(self, gen_id: int, path_str: str, message: str):
         if gen_id != self._active_gen_id or not self._path or str(self._path) != path_str:
@@ -3016,6 +3023,7 @@ class AudioBrowser(QMainWindow):
         self.waveform.markerReleased.connect(self._on_marker_released_multi)
         self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
         self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
+        self.waveform.waveformReady.connect(self._update_stereo_button_state)
 
         # Toggles
         self._restore_toggles()
