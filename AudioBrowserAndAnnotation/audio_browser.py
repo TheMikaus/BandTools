@@ -2773,7 +2773,7 @@ class AudioBrowser(QMainWindow):
         
         # If all default colors are used, generate a new one based on user name hash
         import hashlib
-        hash_obj = hashlib.md5(user_name.encode())
+        hash_obj = hashlib.sha256(user_name.encode())
         hash_hex = hash_obj.hexdigest()
         # Convert first 6 characters to a color
         color = f"#{hash_hex[:6]}"
@@ -2832,7 +2832,7 @@ class AudioBrowser(QMainWindow):
                                 "important": bool(n.get("important", False)),
                             } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                         }
-                    sid = str(data.get("id") or ("ext_" + hashlib.md5(str(jp).encode()).hexdigest()[:8]))
+                    sid = str(data.get("id") or ("ext_" + hashlib.sha256(str(jp).encode()).hexdigest()[:8]))
                     ext_sets.append({"id": sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
                 elif is_user_annotation and not current_user_file and "sets" in data:
                     # Multi-set user annotation file from another user
@@ -2860,7 +2860,7 @@ class AudioBrowser(QMainWindow):
                                 } for n in (meta.get("notes", []) or []) if isinstance(n, dict)]
                             }
                         # Make ID unique by prefixing with file hash to avoid conflicts
-                        unique_sid = f"user_{hashlib.md5(str(jp).encode()).hexdigest()[:8]}_{sid}"
+                        unique_sid = f"user_{hashlib.sha256(str(jp).encode()).hexdigest()[:8]}_{sid}"
                         ext_sets.append({"id": unique_sid, "name": name, "color": color, "visible": visible, "files": files, "source_path": str(jp)})
         except Exception:
             pass
