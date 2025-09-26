@@ -1344,23 +1344,23 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     return (best_match[0], best_match[1], best_match[2], best_match[4])
 
 # ========== Backup System ==========
-def create_backup_folder_name(root_path: Path) -> Path:
+def create_backup_folder_name(practice_folder: Path) -> Path:
     """
-    Create a unique backup folder name with format .backups/YYYY-MM-DD-###
+    Create a unique backup folder name with format .backup/YYYY-MM-DD-###
     
-    Backups are created in the root practice folder under .backups/ directory.
+    Backups are created in each practice folder under .backup/ directory.
     The format ensures chronological ordering and prevents conflicts when
     multiple backups are created on the same day.
     
     Args:
-        root_path: Root band practice directory
+        practice_folder: Practice folder where the backup will be created
         
     Returns:
         Path to the backup folder (not yet created)
     """
     today = datetime.now()
     date_str = today.strftime("%Y-%m-%d")
-    backups_dir = root_path / ".backups"
+    backups_dir = practice_folder / ".backup"
     
     # Find the next available number for today
     counter = 1
@@ -1381,12 +1381,18 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     - .audio_fingerprints.json (audio fingerprint data)
     - .audio_notes_<username>.json (user-specific annotation data)
     
+    Excludes any files in .backup or .backups directories.
+    
     Args:
         practice_folder: Directory to scan for metadata files
         
     Returns:
         List of Path objects for existing metadata files
     """
+    # Skip backup directories entirely
+    if practice_folder.name in ['.backup', '.backups']:
+        return []
+    
     metadata_files = []
     
     # List of all possible metadata files
@@ -1407,16 +1413,18 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
         if json_file not in possible_files:
             possible_files.append(json_file)
     
-    # Only include files that actually exist
+    # Only include files that actually exist and are not in backup directories
     for file_path in possible_files:
         if file_path.exists() and file_path.is_file():
-            metadata_files.append(file_path)
+            # Make sure the file is not in a backup directory
+            if not any(part in ['.backup', '.backups'] for part in file_path.parts):
+                metadata_files.append(file_path)
     
     return metadata_files
 
-def backup_metadata_files(practice_folder: Path, backup_base_folder: Path, root_path: Path) -> int:
+def backup_metadata_files(practice_folder: Path, backup_base_folder: Path) -> int:
     """
-    Backup metadata files from practice_folder to backup_base_folder, preserving structure.
+    Backup metadata files from practice_folder to backup_base_folder.
     Returns the number of files backed up.
     """
     metadata_files = get_metadata_files_to_backup(practice_folder)
@@ -1424,22 +1432,13 @@ def backup_metadata_files(practice_folder: Path, backup_base_folder: Path, root_
     if not metadata_files:
         return 0  # No files to backup
     
-    # Create the backup directory structure, preserving the relative path from root
-    try:
-        relative_path = practice_folder.relative_to(root_path)
-        if str(relative_path) == ".":  # If backing up the root folder itself
-            relative_path = Path(root_path.name)
-    except ValueError:
-        # If practice_folder is not under root_path, just use the folder name
-        relative_path = Path(practice_folder.name)
-    
-    backup_target_dir = backup_base_folder / relative_path
-    backup_target_dir.mkdir(parents=True, exist_ok=True)
+    # Create the backup directory
+    backup_base_folder.mkdir(parents=True, exist_ok=True)
     
     backed_up_count = 0
     for metadata_file in metadata_files:
         try:
-            backup_file_path = backup_target_dir / metadata_file.name
+            backup_file_path = backup_base_folder / metadata_file.name
             # Copy the file
             backup_file_path.write_bytes(metadata_file.read_bytes())
             backed_up_count += 1
@@ -1455,19 +1454,17 @@ def should_create_backup(practice_folder: Path) -> bool:
     """
     return len(get_metadata_files_to_backup(practice_folder)) > 0
 
-def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> Optional[Path]:
+def create_metadata_backup_if_needed(practice_folder: Path) -> Optional[Path]:
     """
     Create a backup of metadata files if needed.
     
     This function implements the main backup logic:
     1. Check if there are metadata files that could change
-    2. If yes, create a timestamped backup folder
+    2. If yes, create a timestamped backup folder in the practice folder
     3. Copy all existing metadata files to the backup location
-    4. Preserve the folder structure relative to root_path
     
     Args:
-        root_path: Root band practice directory (where .backups/ will be created)
-        practice_folder: Current practice session folder
+        practice_folder: Current practice session folder where backup will be created
         
     Returns:
         Path to created backup folder if backup was created, None otherwise
@@ -1475,8 +1472,8 @@ def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> 
     if not should_create_backup(practice_folder):
         return None
     
-    backup_folder = create_backup_folder_name(root_path)
-    backed_up_count = backup_metadata_files(practice_folder, backup_folder, root_path)
+    backup_folder = create_backup_folder_name(practice_folder)
+    backed_up_count = backup_metadata_files(practice_folder, backup_folder)
     
     if backed_up_count > 0:
         return backup_folder
@@ -1484,41 +1481,55 @@ def create_metadata_backup_if_needed(root_path: Path, practice_folder: Path) -> 
         # Clean up empty backup folder
         try:
             backup_folder.rmdir()
+            # Also try to remove parent .backup directory if it's empty
+            backup_folder.parent.rmdir()
         except Exception:
             pass
         return None
 
 def discover_available_backups(root_path: Path) -> List[Tuple[Path, str]]:
     """
-    Discover all available backup folders in the .backups directory.
+    Discover all available backup folders in all practice folders.
+    
+    Searches for .backup directories within the root practice directory tree.
     
     Args:
-        root_path: Root band practice directory (where .backups/ is located)
+        root_path: Root band practice directory to search for .backup folders
         
     Returns:
         List of tuples (backup_folder_path, formatted_display_name) sorted by date descending
     """
-    backups_dir = root_path / ".backups"
-    if not backups_dir.exists():
-        return []
-    
     backups = []
-    for backup_folder in backups_dir.iterdir():
-        if backup_folder.is_dir():
-            # Parse folder name format: YYYY-MM-DD-###
-            try:
-                # Extract timestamp info for display
-                folder_name = backup_folder.name
-                date_part = folder_name.rsplit('-', 1)[0]  # Remove counter
-                date_obj = datetime.strptime(date_part, "%Y-%m-%d")
-                
-                # Create display name with date and time
-                display_name = f"{date_obj.strftime('%A, %B %d, %Y')} ({folder_name})"
-                backups.append((backup_folder, display_name))
-                
-            except (ValueError, IndexError):
-                # If folder doesn't match expected format, include it anyway
-                backups.append((backup_folder, backup_folder.name))
+    
+    # Search for .backup directories recursively
+    for backup_dir in root_path.rglob(".backup"):
+        if backup_dir.is_dir():
+            # Look for dated backup folders within each .backup directory
+            for backup_folder in backup_dir.iterdir():
+                if backup_folder.is_dir():
+                    # Parse folder name format: YYYY-MM-DD-###
+                    try:
+                        # Extract timestamp info for display
+                        folder_name = backup_folder.name
+                        date_part = folder_name.rsplit('-', 1)[0]  # Remove counter
+                        date_obj = datetime.strptime(date_part, "%Y-%m-%d")
+                        
+                        # Get relative path from root for display
+                        practice_folder = backup_dir.parent
+                        rel_practice = practice_folder.relative_to(root_path)
+                        practice_name = str(rel_practice) if str(rel_practice) != "." else "Root"
+                        
+                        # Create display name with date and practice folder
+                        display_name = f"{date_obj.strftime('%A, %B %d, %Y')} ({folder_name}) - {practice_name}"
+                        backups.append((backup_folder, display_name))
+                        
+                    except (ValueError, IndexError):
+                        # If folder doesn't match expected format, include it anyway
+                        practice_folder = backup_dir.parent
+                        rel_practice = practice_folder.relative_to(root_path)
+                        practice_name = str(rel_practice) if str(rel_practice) != "." else "Root"
+                        display_name = f"{backup_folder.name} - {practice_name}"
+                        backups.append((backup_folder, display_name))
     
     # Sort by folder name (which includes timestamp) in descending order
     backups.sort(key=lambda x: x[0].name, reverse=True)
@@ -1540,19 +1551,13 @@ def get_backup_contents(backup_folder: Path, root_path: Path) -> Dict[Path, List
     if not backup_folder.exists():
         return contents
     
+    # The backup folder is in a practice folder's .backup directory
+    # So the practice folder is backup_folder.parent.parent
+    practice_folder = backup_folder.parent.parent
+    
     # Walk through backup folder to find all backed up files
-    for backup_file in backup_folder.rglob("*.json"):
+    for backup_file in backup_folder.glob("*.json"):
         if backup_file.is_file():
-            # Determine which practice folder this backup file belongs to
-            relative_path = backup_file.relative_to(backup_folder)
-            practice_folder_relative = relative_path.parent
-            
-            # Convert back to actual practice folder path
-            if str(practice_folder_relative) == ".":
-                practice_folder = root_path
-            else:
-                practice_folder = root_path / practice_folder_relative
-            
             if practice_folder not in contents:
                 contents[practice_folder] = []
             contents[practice_folder].append(backup_file)
@@ -1571,22 +1576,12 @@ def restore_metadata_from_backup(backup_folder: Path, target_practice_folder: Pa
     Returns:
         Number of files successfully restored
     """
-    # Determine the backup path for this practice folder
-    try:
-        relative_path = target_practice_folder.relative_to(root_path)
-        if str(relative_path) == ".":
-            backup_source_dir = backup_folder / root_path.name
-        else:
-            backup_source_dir = backup_folder / relative_path
-    except ValueError:
-        backup_source_dir = backup_folder / target_practice_folder.name
-    
-    if not backup_source_dir.exists():
+    if not backup_folder.exists():
         return 0
     
     restored_count = 0
     # Copy all JSON files from backup to target folder
-    for backup_file in backup_source_dir.glob("*.json"):
+    for backup_file in backup_folder.glob("*.json"):
         try:
             target_file = target_practice_folder / backup_file.name
             target_file.write_bytes(backup_file.read_bytes())
@@ -3056,7 +3051,7 @@ class AudioBrowser(QMainWindow):
         Backup behavior:
         - Only creates backup if metadata files exist in the current folder
         - Only creates backup once per session (tracked via _backup_created_this_session)
-        - Preserves folder structure under .backups/YYYY-MM-DD-###/ 
+        - Creates .backup/YYYY-MM-DD-###/ folder in the current practice directory
         - Increments backup number for multiple backups on same day
         - Shows backup location in console if backup is created
         """
@@ -3064,9 +3059,9 @@ class AudioBrowser(QMainWindow):
             return  # Already created backup for this session
             
         try:
-            backup_folder = create_metadata_backup_if_needed(self.root_path, self.current_practice_folder)
+            backup_folder = create_metadata_backup_if_needed(self.current_practice_folder)
             if backup_folder:
-                relative_backup = backup_folder.relative_to(self.root_path)
+                relative_backup = backup_folder.relative_to(self.current_practice_folder)
                 print(f"Backup created before modification: {relative_backup}")
                 # Could also show a brief status message in the UI if desired
                 # self.statusBar().showMessage(f"Backup created: {relative_backup}", 3000)

@@ -36,8 +36,8 @@ The application includes an automatic backup system that protects your metadata:
 ## Automatic Backups
 - **When**: Backups are created automatically before the first modification in each session
 - **What**: All metadata files including annotations, song names, duration cache, waveform cache, and fingerprints
-- **Where**: Stored in `.backups/YYYY-MM-DD-###/` folders within your root practice directory
-- **Structure**: Preserves your folder hierarchy so backups are organized the same way as your practice sessions
+- **Where**: Stored in `.backup/YYYY-MM-DD-###/` folders within each practice folder where modifications occur
+- **Structure**: Each practice folder maintains its own local backup history
 
 ## Restore from Backup
 - **Access**: Click "Restore from Backup..." in the toolbar
