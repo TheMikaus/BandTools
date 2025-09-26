@@ -2928,7 +2928,7 @@ class AudioBrowser(QMainWindow):
         self.settings = QSettings(APP_ORG, APP_NAME)
         self.root_path: Path = self._load_root_silently()
         self.current_practice_folder: Path = self.root_path  # Initially same as root
-        self._needs_root_selection: bool = not self._has_valid_root()
+        self._needs_root_selection: bool = not self._has_stored_root()
         self.current_audio_file: Optional[Path] = None
         self.pending_note_start_ms: Optional[int] = None
         self.clip_sel_start_ms: Optional[int] = None
@@ -3105,6 +3105,11 @@ class AudioBrowser(QMainWindow):
             self._backup_created_this_session = True
 
     # ----- Settings & metadata -----
+    def _has_stored_root(self) -> bool:
+        """Check if a root directory is stored in settings and exists."""
+        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        return bool(stored and Path(stored).exists())
+    
     def _has_valid_root(self) -> bool:
         """Check if current root_path is valid and exists."""
         return self.root_path and self.root_path.exists()
@@ -3129,12 +3134,13 @@ class AudioBrowser(QMainWindow):
             p = Path(dlg.selectedFiles()[0])
             self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
             self._save_root(p)  # This will update UI and reload data
+            self._needs_root_selection = False  # Mark as resolved
         else:
-            # User canceled - keep using home directory but mark as needing selection
+            # User canceled - keep using home directory but mark as still needing selection
             home = Path.home()
-            self.settings.setValue(SETTINGS_KEY_ROOT, str(home))
             if self.root_path != home:
                 self._save_root(home)
+            # Don't set _needs_root_selection to False so dialog shows again if needed
 
     def _load_or_ask_root(self) -> Path:
         stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
