@@ -61,7 +61,7 @@ if HAVE_PYDUB:
 # ========== Qt imports ==========
 from PyQt6.QtCore import (
     QItemSelection, QModelIndex, QSettings, QTimer, Qt, QUrl, QPoint, QSize,
-    pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel
+    pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel, QSortFilterProxyModel
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor
@@ -2344,7 +2344,7 @@ class WaveformView(QWidget):
         super().keyPressEvent(event)
 
 # ========== FileInfo proxy to show Size/Time ==========
-class FileInfoProxyModel(QIdentityProxyModel):
+class FileInfoProxyModel(QSortFilterProxyModel):
     def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], audio_browser, parent=None):
         super().__init__(parent)
         self.setSourceModel(parent_model)
@@ -2353,6 +2353,20 @@ class FileInfoProxyModel(QIdentityProxyModel):
         
         # Cache for fingerprint exclusion data to avoid repeated disk I/O
         self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
+        """Filter out .backup and .backups folders from the file tree."""
+        model = self.sourceModel()
+        index = model.index(source_row, 0, source_parent)
+        file_info = model.fileInfo(index)
+        
+        # Hide directories that start with .backup
+        if file_info.isDir():
+            folder_name = file_info.fileName()
+            if folder_name.startswith('.backup'):
+                return False
+        
+        return True
 
     def _is_file_excluded_cached(self, dirpath: Path, filename: str) -> bool:
         """Fast cached check for file exclusion from fingerprinting."""
