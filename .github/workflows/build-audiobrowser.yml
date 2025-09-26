@@ -151,11 +151,11 @@ jobs:
         if [ "${{ matrix.platform }}" = "windows" ]; then
           # Windows - create zip using Python
           python -c "
-import zipfile
-import os
-with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip', 'w', zipfile.ZIP_DEFLATED) as zip_file:
-    zip_file.write('dist/${{ matrix.executable_name }}', '${{ matrix.executable_name }}')
-"
+          import zipfile
+          import os
+          with zipfile.ZipFile('release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip', 'w', zipfile.ZIP_DEFLATED) as zip_file:
+              zip_file.write('dist/${{ matrix.executable_name }}', '${{ matrix.executable_name }}')
+          "
         else
           # Linux/macOS - create tar.gz
           tar -czf "release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.tar.gz" -C dist "${{ matrix.executable_name }}"
