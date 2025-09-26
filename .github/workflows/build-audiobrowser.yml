@@ -1,0 +1,266 @@
+name: Build AudioBrowser
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: 
+      - 'AudioBrowserAndAnnotation/**'
+      - '.github/workflows/build-audiobrowser.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths: 
+      - 'AudioBrowserAndAnnotation/**'
+      - '.github/workflows/build-audiobrowser.yml'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a release after build'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            executable_name: AudioFolderPlayer
+          - os: windows-latest
+            platform: windows
+            executable_name: AudioFolderPlayer.exe
+          - os: macos-latest
+            platform: macos
+            executable_name: AudioFolderPlayer
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version calculation
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install system dependencies (Linux)
+      if: matrix.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgl1-mesa-glx \
+          libglib2.0-0 \
+          libxkbcommon-x11-0 \
+          libxcb-icccm4 \
+          libxcb-image0 \
+          libxcb-keysyms1 \
+          libxcb-randr0 \
+          libxcb-render-util0 \
+          libxcb-shape0 \
+          libxcb-xfixes0 \
+          libxcb-xinerama0 \
+          libegl1-mesa \
+          libfontconfig1 \
+          libxcb-cursor0
+
+    - name: Get version info
+      id: version
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        VERSION=$(python3 -c "import version; print(version.VERSION_STRING)")
+        VERSION_INFO=$(python3 -c "import version; print(version.VERSION_INFO)")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_info=$VERSION_INFO" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        echo "Version Info: $VERSION_INFO"
+
+    - name: Install Python dependencies
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install PyInstaller PyQt6
+
+    - name: Generate application icon
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        export QT_QPA_PLATFORM=offscreen
+        python make_icon.py
+      shell: bash
+
+    - name: Clean previous build
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        if [ -d "build" ]; then rm -rf build; fi
+        if [ -d "dist" ]; then rm -rf dist; fi
+      shell: bash
+
+    - name: Build with PyInstaller
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        python -m PyInstaller audio_browser.spec
+        echo "Build completed!"
+        
+        if [ -f "dist/${{ matrix.executable_name }}" ]; then
+          echo "✅ Executable found: dist/${{ matrix.executable_name }}"
+          ls -lh "dist/${{ matrix.executable_name }}"
+        else
+          echo "❌ Expected executable not found!"
+          echo "Contents of dist directory:"
+          ls -la dist/ || echo "dist directory does not exist"
+          exit 1
+        fi
+      shell: bash
+
+    - name: Verify executable (Linux/macOS)
+      if: matrix.platform != 'windows'
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        chmod +x "dist/${{ matrix.executable_name }}"
+        file "dist/${{ matrix.executable_name }}"
+        echo "Executable permissions set and verified"
+
+    - name: Create artifact name
+      id: artifact
+      run: |
+        ARTIFACT_NAME="AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}"
+        echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+        echo "Artifact name: $ARTIFACT_NAME"
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.artifact.outputs.name }}
+        path: AudioBrowserAndAnnotation/dist/${{ matrix.executable_name }}
+        retention-days: 30
+
+    - name: Create release archive
+      if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        mkdir -p release
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          # Windows - create zip
+          7z a "release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip" "dist/${{ matrix.executable_name }}"
+        else
+          # Linux/macOS - create tar.gz
+          tar -czf "release/AudioFolderPlayer-${{ steps.version.outputs.version }}-${{ matrix.platform }}.tar.gz" -C dist "${{ matrix.executable_name }}"
+        fi
+        echo "Release archive created"
+        ls -la release/
+      shell: bash
+
+    - name: Upload release archive
+      if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ steps.artifact.outputs.name }}
+        path: AudioBrowserAndAnnotation/release/*
+        retention-days: 90
+
+  create-release:
+    if: github.event.inputs.create_release == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Get version info
+      id: version
+      working-directory: AudioBrowserAndAnnotation
+      run: |
+        VERSION=$(python3 -c "import version; print(version.VERSION_STRING)")
+        VERSION_INFO=$(python3 -c "import version; print(version.VERSION_INFO)")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_info=$VERSION_INFO" >> $GITHUB_OUTPUT
+
+    - name: Download all release archives
+      uses: actions/download-artifact@v4
+      with:
+        pattern: release-*
+        path: release-artifacts
+        merge-multiple: true
+
+    - name: List downloaded artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find release-artifacts -type f -ls
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: audiobrowser-v${{ steps.version.outputs.version }}
+        release_name: AudioBrowser v${{ steps.version.outputs.version }}
+        body: |
+          # AudioBrowser v${{ steps.version.outputs.version }}
+          
+          ${{ steps.version.outputs.version_info }}
+          
+          ## Downloads
+          
+          Choose the appropriate download for your operating system:
+          
+          - **Windows**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-windows.zip`
+          - **Linux**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-linux.tar.gz`
+          - **macOS**: `AudioFolderPlayer-${{ steps.version.outputs.version }}-macos.tar.gz`
+          
+          ## Installation
+          
+          1. Download the appropriate file for your operating system
+          2. Extract the archive
+          3. Run the `AudioFolderPlayer` executable
+          
+          ## Changes
+          
+          This release includes the latest changes from the main branch. See the [CHANGELOG](https://github.com/TheMikaus/BandTools/blob/main/AudioBrowserAndAnnotation/CHANGELOG.md) for detailed information.
+          
+          ---
+          
+          Built automatically by GitHub Actions from commit ${{ github.sha }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-artifacts/AudioFolderPlayer-${{ steps.version.outputs.version }}-windows.zip
+        asset_name: AudioFolderPlayer-${{ steps.version.outputs.version }}-windows.zip
+        asset_content_type: application/zip
+
+    - name: Upload Linux Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-artifacts/AudioFolderPlayer-${{ steps.version.outputs.version }}-linux.tar.gz
+        asset_name: AudioFolderPlayer-${{ steps.version.outputs.version }}-linux.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload macOS Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: release-artifacts/AudioFolderPlayer-${{ steps.version.outputs.version }}-macos.tar.gz
+        asset_name: AudioFolderPlayer-${{ steps.version.outputs.version }}-macos.tar.gz
+        asset_content_type: application/gzip

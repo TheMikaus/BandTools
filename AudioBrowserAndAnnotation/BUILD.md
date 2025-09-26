@@ -2,6 +2,19 @@
 
 This directory contains batch files to build a standalone executable for the AudioBrowser annotation software.
 
+## Automated Builds (Recommended)
+
+**Pre-built executables are automatically created** for every commit and available in the [Releases section](https://github.com/TheMikaus/BandTools/releases). This is the easiest way to get a working executable without setting up a build environment.
+
+The automated CI/CD system builds for:
+- Windows (`AudioFolderPlayer-{version}-windows.zip`)  
+- Linux (`AudioFolderPlayer-{version}-linux.tar.gz`)
+- macOS (`AudioFolderPlayer-{version}-macos.tar.gz`)
+
+## Manual Build (Development)
+
+For development or customization, you can build manually using the scripts below:
+
 ## Quick Start
 
 ### Windows
@@ -65,3 +78,16 @@ AudioBrowserAndAnnotation/
 - First build may take several minutes to download and install dependencies
 - Subsequent builds are faster as dependencies are cached
 - The build scripts work on Windows, Linux, and macOS
+
+## Automated CI/CD System
+
+This repository includes a GitHub Actions workflow that automatically builds executables on every commit to main/develop branches. The workflow:
+
+- **Builds for multiple platforms**: Windows, Linux, and macOS simultaneously
+- **Creates releases**: Automatically publishes releases with downloadable archives  
+- **Version management**: Uses git commit count for automatic version numbering
+- **Artifact storage**: Keeps build artifacts for 30 days, release archives permanently
+
+See [../.github/CI_CD_SETUP.md](../.github/CI_CD_SETUP.md) for detailed information about the automated build system.
+
+**For end users**: Download pre-built executables from the [Releases page](https://github.com/TheMikaus/BandTools/releases) instead of building manually.

@@ -4,6 +4,22 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **GitHub Actions CI/CD Pipeline**: Automated building and releasing system
+  - Multi-platform builds (Windows, Linux, macOS) on every commit
+  - Automatic release creation with downloadable executables
+  - Build artifacts stored for 30 days, releases permanent
+  - Integration with existing git-based version system
+- **Documentation**: CI/CD setup documentation and updated README/BUILD guides
+- **Release Distribution**: Pre-built executables available from GitHub Releases page
+
+### Technical Details
+- GitHub Actions workflow triggers on push to main/develop branches
+- Cross-platform builds using PyInstaller in containerized environments
+- Automated archive creation (.zip for Windows, .tar.gz for Linux/macOS)
+- Release tagging format: `audiobrowser-v{version}`
+- Manual workflow dispatch option for on-demand releases
+
 ## [1.3] - Version System Implementation
 
 ### Added
