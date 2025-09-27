@@ -3105,11 +3105,14 @@ class AudioBrowser(QMainWindow):
         self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
         self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
         self.waveform.waveformReady.connect(self._update_stereo_button_state)
+        self.waveform.waveformReady.connect(self._update_channel_combo_state)
 
         # Toggles
         self._restore_toggles()
         self._update_undo_actions_enabled()
         self._update_mono_button_state()  # Initialize mono button state
+        self._update_channel_combo_state()  # Initialize channel combo state
+        self._cleanup_temp_channel_files()  # Clean up old temporary files
         
         # Mark initialization as complete
         self._initialization_complete = True
@@ -3823,6 +3826,16 @@ class AudioBrowser(QMainWindow):
         self.stereo_mono_toggle.clicked.connect(self._on_stereo_toggle_clicked)
         self.stereo_mono_toggle.setMaximumWidth(80)
         waveform_controls.addWidget(self.stereo_mono_toggle)
+        
+        # --- Channel selection controls ---
+        waveform_controls.addWidget(QLabel("Listen:"))
+        self.channel_combo = QComboBox()
+        self.channel_combo.addItems(["As is", "Left Only", "Right Only"])
+        self.channel_combo.setToolTip("Select which audio channels to play")
+        self.channel_combo.setMaximumWidth(100)
+        self.channel_combo.currentIndexChanged.connect(self._on_channel_selection_changed)
+        waveform_controls.addWidget(self.channel_combo)
+        
         waveform_controls.addStretch(1)  # Push to the left
         ann_layout.addLayout(waveform_controls)
 
@@ -4256,6 +4269,7 @@ class AudioBrowser(QMainWindow):
         
         # Update mono button state
         self._update_mono_button_state()
+        self._update_channel_combo_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -4391,20 +4405,133 @@ class AudioBrowser(QMainWindow):
                 f"An error occurred while restoring from backup:\n\n{str(e)}"
             )
 
+    # ----- Channel-specific audio processing -----
+    def _get_channel_specific_file(self, path: Path, channel_mode: int) -> Path:
+        """
+        Get a path to an audio file with the specified channel configuration.
+        
+        Args:
+            path: Original audio file path
+            channel_mode: 0=As is, 1=Left only, 2=Right only
+            
+        Returns:
+            Path to the audio file to play (original or temporary channel-specific file)
+        """
+        if channel_mode == 0:  # As is
+            return path
+            
+        if not HAVE_PYDUB:
+            # Fall back to original file if pydub is not available
+            return path
+            
+        # Check if file is actually stereo
+        channel_count = get_audio_channel_count(path)
+        if channel_count < 2:
+            return path  # File is not stereo, return original
+            
+        # Create temporary directory for channel-specific files
+        temp_dir = Path.home() / ".audiobrowser_temp"
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Generate filename for channel-specific version
+        suffix_map = {1: "_left_only", 2: "_right_only"}
+        suffix = suffix_map.get(channel_mode, "")
+        temp_filename = f"{path.stem}{suffix}{path.suffix}"
+        temp_path = temp_dir / temp_filename
+        
+        # Check if temporary file already exists and is newer than original
+        if temp_path.exists():
+            try:
+                original_mtime = path.stat().st_mtime
+                temp_mtime = temp_path.stat().st_mtime
+                if temp_mtime >= original_mtime:
+                    return temp_path  # Use existing temp file
+            except Exception:
+                pass
+        
+        try:
+            # Create channel-specific audio file
+            audio = AudioSegment.from_file(str(path))
+            
+            if channel_mode == 1:  # Left only
+                # Duplicate left channel to both channels for stereo output
+                if audio.channels >= 2:
+                    left_channel = audio.split_to_mono()[0]
+                    # Create stereo with left channel on both sides
+                    channel_audio = AudioSegment.from_mono_audiosegments(left_channel, left_channel)
+                else:
+                    channel_audio = audio
+            elif channel_mode == 2:  # Right only
+                # Duplicate right channel to both channels for stereo output
+                if audio.channels >= 2:
+                    right_channel = audio.split_to_mono()[1] if len(audio.split_to_mono()) > 1 else audio.split_to_mono()[0]
+                    # Create stereo with right channel on both sides
+                    channel_audio = AudioSegment.from_mono_audiosegments(right_channel, right_channel)
+                else:
+                    channel_audio = audio
+            else:
+                channel_audio = audio
+                
+            # Export temporary file
+            channel_audio.export(str(temp_path), format=path.suffix[1:].lower())
+            return temp_path
+            
+        except Exception as e:
+            print(f"Error creating channel-specific file: {e}")
+            return path  # Fall back to original file
+    
+    def _cleanup_temp_channel_files(self):
+        """Clean up temporary channel-specific audio files."""
+        try:
+            temp_dir = Path.home() / ".audiobrowser_temp"
+            if temp_dir.exists():
+                # Remove old temp files (older than 1 hour)
+                import time
+                current_time = time.time()
+                for temp_file in temp_dir.glob("*"):
+                    try:
+                        if temp_file.is_file() and (current_time - temp_file.stat().st_mtime) > 3600:
+                            temp_file.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            pass  # Don't let cleanup errors affect the application
+
     # ----- Playback -----
-    def _play_file(self, path: Path):
+    def _play_file(self, path: Path, seek_to_ms: Optional[int] = None):
         # Always play the file, even if it's the same as current - this allows restarting
         # Check if we need to reload annotations from a different directory
         prev_audio_dir = self.current_audio_file.parent if self.current_audio_file else None
         new_audio_dir = path.parent
         need_reload_annotations = (prev_audio_dir != new_audio_dir)
         
-        self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(path)))
+        # Get channel-specific file based on current selection
+        channel_mode = self.channel_combo.currentIndex() if hasattr(self, 'channel_combo') else 0
+        playback_file = self._get_channel_specific_file(path, channel_mode)
+        
+        self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
+        
+        # Set position if specified before starting playback
+        if seek_to_ms is not None:
+            # We'll seek after starting playback to ensure media is loaded
+            pass
+        
         self.player.play()
+        
+        # Seek to position after starting playback if requested
+        if seek_to_ms is not None:
+            # Use a small delay to ensure media is loaded before seeking
+            QTimer.singleShot(100, lambda: self.player.setPosition(seek_to_ms))
+        
         self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
-        self.now_playing.setText(f"Playing: {path.name}")
+        
+        # Update UI text to show channel info
+        channel_names = ["", " (Left Only)", " (Right Only)"]
+        channel_suffix = channel_names[channel_mode] if channel_mode < len(channel_names) else ""
+        self.now_playing.setText(f"Playing: {path.name}{channel_suffix}")
+        
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-        self.current_audio_file = path; self.pending_note_start_ms = None
+        self.current_audio_file = path; self.pending_note_start_ms = None  # Store original path, not temp file
         self._update_captured_time_label()
         
         # Reload annotations from the audio file's directory if needed
@@ -4425,9 +4552,11 @@ class AudioBrowser(QMainWindow):
         try: 
             self.waveform.set_audio_file(path)
             self._update_stereo_button_state()  # Update stereo button after waveform is loaded
+            self._update_channel_combo_state()  # Update channel selection state
         except Exception: 
             self.waveform.clear()
             self._update_stereo_button_state()  # Update button state even on error
+            self._update_channel_combo_state()  # Update channel combo state even on error
         self._update_waveform_annotations()
         
         # Ensure the file is highlighted in the tree view (important for auto-progression)
@@ -4663,6 +4792,41 @@ class AudioBrowser(QMainWindow):
             # File doesn't have stereo data but we're in stereo mode, switch to mono
             self.stereo_mono_toggle.setChecked(False)
             self._on_stereo_toggle_clicked(False)
+
+    def _on_channel_selection_changed(self, index: int):
+        """Handle channel selection change (As is=0, Left Only=1, Right Only=2)."""
+        if not self.current_audio_file:
+            return
+            
+        # Update channel combo state based on file
+        self._update_channel_combo_state()
+        
+        # If we're currently playing, restart playback with new channel selection
+        was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        current_position = self.player.position() if was_playing else 0
+        
+        # Reload the current file with new channel settings
+        if self.current_audio_file:
+            self._play_file(self.current_audio_file, seek_to_ms=current_position if was_playing else None)
+            if was_playing:
+                self.player.play()
+
+    def _update_channel_combo_state(self):
+        """Update channel selection combo state based on current file."""
+        if not self.current_audio_file:
+            self.channel_combo.setEnabled(False)
+            return
+            
+        # Enable channel selection only for stereo files
+        has_stereo = self.waveform.has_stereo_data() if hasattr(self, 'waveform') else False
+        channel_count = get_audio_channel_count(self.current_audio_file) if self.current_audio_file else 1
+        
+        # Enable only if file has more than 1 channel
+        self.channel_combo.setEnabled(channel_count > 1)
+        
+        # If file is mono, reset to "As is"
+        if channel_count == 1 and self.channel_combo.currentIndex() != 0:
+            self.channel_combo.setCurrentIndex(0)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:
@@ -7127,7 +7291,9 @@ class AudioBrowser(QMainWindow):
                 ev.ignore()
                 return
         
-        self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
+        self._save_names(); self._save_notes(); self._save_duration_cache(); 
+        self._cleanup_temp_channel_files();
+        super().closeEvent(ev)
 
 # ========== Entrypoint ==========
 def main():
