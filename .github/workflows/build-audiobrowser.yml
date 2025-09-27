@@ -127,11 +127,11 @@ jobs:
     - name: Verify build
       run: |
         cd AudioBrowserAndAnnotation
-        if (-not (Test-Path "dist/AudioFolderPlayer.exe")) {
-          echo "ERROR: AudioFolderPlayer.exe not found!"
+        if (-not (Test-Path "dist/AudioAnnotationBrowser.exe")) {
+          echo "ERROR: AudioAnnotationBrowser.exe not found!"
           exit 1
         }
-        $fileInfo = Get-Item "dist/AudioFolderPlayer.exe"
+        $fileInfo = Get-Item "dist/AudioAnnotationBrowser.exe"
         echo "Build successful! Executable size: $($fileInfo.Length) bytes"
         echo "Full path: $($fileInfo.FullName)"
       shell: powershell
@@ -140,10 +140,10 @@ jobs:
       run: |
         cd AudioBrowserAndAnnotation
         $version = "${{ steps.version.outputs.version_string }}"
-        $archiveName = "AudioFolderPlayer-$version-windows.zip"
+        $archiveName = "AudioAnnotationBrowser-$version-windows.zip"
         
         # Create the archive using PowerShell
-        Compress-Archive -Path "dist/AudioFolderPlayer.exe" -DestinationPath $archiveName -Force
+        Compress-Archive -Path "dist/AudioAnnotationBrowser.exe" -DestinationPath $archiveName -Force
         
         echo "Created archive: $archiveName"
         $archiveInfo = Get-Item $archiveName
@@ -159,7 +159,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: AudioFolderPlayer-${{ steps.version.outputs.version_string }}-windows
-        path: AudioBrowserAndAnnotation/dist/AudioFolderPlayer.exe
+        path: AudioBrowserAndAnnotation/dist/AudioAnnotationBrowser.exe
         retention-days: 30
     
     - name: Create Release (if requested or on main branch)
