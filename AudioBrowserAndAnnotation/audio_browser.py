@@ -3105,11 +3105,14 @@ class AudioBrowser(QMainWindow):
         self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
         self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
         self.waveform.waveformReady.connect(self._update_stereo_button_state)
+        self.waveform.waveformReady.connect(self._update_channel_muting_state)
 
         # Toggles
         self._restore_toggles()
         self._update_undo_actions_enabled()
         self._update_mono_button_state()  # Initialize mono button state
+        self._update_channel_muting_state()  # Initialize channel muting state
+        self._cleanup_temp_channel_files()  # Clean up old temporary files
         
         # Mark initialization as complete
         self._initialization_complete = True
@@ -3865,6 +3868,21 @@ class AudioBrowser(QMainWindow):
         self.stereo_mono_toggle.clicked.connect(self._on_stereo_toggle_clicked)
         self.stereo_mono_toggle.setMaximumWidth(80)
         waveform_controls.addWidget(self.stereo_mono_toggle)
+        
+        # --- Channel muting controls ---
+        waveform_controls.addWidget(QLabel("Channels:"))
+        self.left_channel_cb = QCheckBox("Left")
+        self.left_channel_cb.setChecked(True)  # Default: both channels enabled
+        self.left_channel_cb.setToolTip("Enable/disable left audio channel")
+        self.left_channel_cb.stateChanged.connect(self._on_channel_muting_changed)
+        waveform_controls.addWidget(self.left_channel_cb)
+        
+        self.right_channel_cb = QCheckBox("Right")
+        self.right_channel_cb.setChecked(True)  # Default: both channels enabled
+        self.right_channel_cb.setToolTip("Enable/disable right audio channel")
+        self.right_channel_cb.stateChanged.connect(self._on_channel_muting_changed)
+        waveform_controls.addWidget(self.right_channel_cb)
+        
         waveform_controls.addStretch(1)  # Push to the left
         ann_layout.addLayout(waveform_controls)
 
@@ -4298,6 +4316,7 @@ class AudioBrowser(QMainWindow):
         
         # Update mono button state
         self._update_mono_button_state()
+        self._update_channel_muting_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -4433,20 +4452,141 @@ class AudioBrowser(QMainWindow):
                 f"An error occurred while restoring from backup:\n\n{str(e)}"
             )
 
+    # ----- Channel-specific audio processing -----
+    def _get_channel_muted_file(self, path: Path, left_enabled: bool, right_enabled: bool) -> Path:
+        """
+        Get a path to an audio file with the specified channel muting configuration.
+        
+        Args:
+            path: Original audio file path
+            left_enabled: Whether left channel should be audible
+            right_enabled: Whether right channel should be audible
+            
+        Returns:
+            Path to the audio file to play (original or temporary channel-muted file)
+        """
+        if left_enabled and right_enabled:  # Both channels enabled
+            return path
+            
+        if not HAVE_PYDUB:
+            # Fall back to original file if pydub is not available
+            return path
+            
+        # Check if file is actually stereo
+        channel_count = get_audio_channel_count(path)
+        if channel_count < 2:
+            return path  # File is not stereo, return original
+            
+        # Create temporary directory for channel-muted files
+        temp_dir = Path.home() / ".audiobrowser_temp"
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Generate filename for channel-muted version
+        if not left_enabled and right_enabled:
+            suffix = "_left_muted"
+        elif left_enabled and not right_enabled:
+            suffix = "_right_muted"
+        elif not left_enabled and not right_enabled:
+            suffix = "_both_muted"
+        else:
+            suffix = ""
+            
+        temp_filename = f"{path.stem}{suffix}{path.suffix}"
+        temp_path = temp_dir / temp_filename
+        
+        # Check if temporary file already exists and is newer than original
+        if temp_path.exists():
+            try:
+                original_mtime = path.stat().st_mtime
+                temp_mtime = temp_path.stat().st_mtime
+                if temp_mtime >= original_mtime:
+                    return temp_path  # Use existing temp file
+            except Exception:
+                pass
+        
+        try:
+            # Create channel-muted audio file
+            audio = AudioSegment.from_file(str(path))
+            
+            if audio.channels >= 2:
+                # Split into individual channels
+                channels = audio.split_to_mono()
+                left_channel = channels[0] if left_enabled else AudioSegment.silent(duration=len(channels[0]))
+                right_channel = channels[1] if right_enabled and len(channels) > 1 else AudioSegment.silent(duration=len(channels[0]))
+                
+                # Create stereo audio with muted channels
+                muted_audio = AudioSegment.from_mono_audiosegments(left_channel, right_channel)
+            else:
+                # For mono files, just return original or silence
+                muted_audio = audio if (left_enabled or right_enabled) else AudioSegment.silent(duration=len(audio))
+                
+            # Export temporary file
+            muted_audio.export(str(temp_path), format=path.suffix[1:].lower())
+            return temp_path
+            
+        except Exception as e:
+            print(f"Error creating channel-muted file: {e}")
+            return path  # Fall back to original file
+    
+    def _cleanup_temp_channel_files(self):
+        """Clean up temporary channel-muted audio files."""
+        try:
+            temp_dir = Path.home() / ".audiobrowser_temp"
+            if temp_dir.exists():
+                # Remove old temp files (older than 1 hour)
+                import time
+                current_time = time.time()
+                for temp_file in temp_dir.glob("*"):
+                    try:
+                        if temp_file.is_file() and (current_time - temp_file.stat().st_mtime) > 3600:
+                            temp_file.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            pass  # Don't let cleanup errors affect the application
+
     # ----- Playback -----
-    def _play_file(self, path: Path):
+    def _play_file(self, path: Path, seek_to_ms: Optional[int] = None):
         # Always play the file, even if it's the same as current - this allows restarting
         # Check if we need to reload annotations from a different directory
         prev_audio_dir = self.current_audio_file.parent if self.current_audio_file else None
         new_audio_dir = path.parent
         need_reload_annotations = (prev_audio_dir != new_audio_dir)
         
-        self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(path)))
+        # Get channel-muted file based on current checkbox settings
+        left_enabled = self.left_channel_cb.isChecked() if hasattr(self, 'left_channel_cb') else True
+        right_enabled = self.right_channel_cb.isChecked() if hasattr(self, 'right_channel_cb') else True
+        playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
+        
+        self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
+        
+        # Set position if specified before starting playback
+        if seek_to_ms is not None:
+            # We'll seek after starting playback to ensure media is loaded
+            pass
+        
         self.player.play()
+        
+        # Seek to position after starting playback if requested
+        if seek_to_ms is not None:
+            # Use a small delay to ensure media is loaded before seeking
+            QTimer.singleShot(100, lambda: self.player.setPosition(seek_to_ms))
+        
         self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
-        self.now_playing.setText(f"Playing: {path.name}")
+        
+        # Update UI text to show channel muting info
+        channel_info = ""
+        if not left_enabled and not right_enabled:
+            channel_info = " (Both Muted)"
+        elif not left_enabled:
+            channel_info = " (Left Muted)"
+        elif not right_enabled:
+            channel_info = " (Right Muted)"
+        
+        self.now_playing.setText(f"Playing: {path.name}{channel_info}")
+        
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-        self.current_audio_file = path; self.pending_note_start_ms = None
+        self.current_audio_file = path; self.pending_note_start_ms = None  # Store original path, not temp file
         self._update_captured_time_label()
         
         # Reload annotations from the audio file's directory if needed
@@ -4467,9 +4607,11 @@ class AudioBrowser(QMainWindow):
         try: 
             self.waveform.set_audio_file(path)
             self._update_stereo_button_state()  # Update stereo button after waveform is loaded
+            self._update_channel_muting_state()  # Update channel muting state
         except Exception: 
             self.waveform.clear()
             self._update_stereo_button_state()  # Update button state even on error
+            self._update_channel_muting_state()  # Update channel muting state even on error
         self._update_waveform_annotations()
         
         # Ensure the file is highlighted in the tree view (important for auto-progression)
@@ -4705,6 +4847,44 @@ class AudioBrowser(QMainWindow):
             # File doesn't have stereo data but we're in stereo mode, switch to mono
             self.stereo_mono_toggle.setChecked(False)
             self._on_stereo_toggle_clicked(False)
+
+    def _on_channel_muting_changed(self, _state):
+        """Handle channel muting checkbox changes."""
+        if not self.current_audio_file:
+            return
+            
+        # Update channel checkbox state based on file
+        self._update_channel_muting_state()
+        
+        # If we're currently playing, restart playback with new channel settings
+        was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        current_position = self.player.position() if was_playing else 0
+        
+        # Reload the current file with new channel settings
+        if self.current_audio_file:
+            self._play_file(self.current_audio_file, seek_to_ms=current_position if was_playing else None)
+            if was_playing:
+                self.player.play()
+
+    def _update_channel_muting_state(self):
+        """Update channel muting checkbox state based on current file."""
+        if not self.current_audio_file:
+            self.left_channel_cb.setEnabled(False)
+            self.right_channel_cb.setEnabled(False)
+            return
+            
+        # Enable channel controls only for stereo files
+        channel_count = get_audio_channel_count(self.current_audio_file) if self.current_audio_file else 1
+        
+        # Enable only if file has more than 1 channel
+        is_stereo = channel_count > 1
+        self.left_channel_cb.setEnabled(is_stereo)
+        self.right_channel_cb.setEnabled(is_stereo)
+        
+        # If file is mono, ensure both checkboxes are checked
+        if not is_stereo:
+            self.left_channel_cb.setChecked(True)
+            self.right_channel_cb.setChecked(True)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:
@@ -7169,7 +7349,9 @@ class AudioBrowser(QMainWindow):
                 ev.ignore()
                 return
         
-        self._save_names(); self._save_notes(); self._save_duration_cache(); super().closeEvent(ev)
+        self._save_names(); self._save_notes(); self._save_duration_cache(); 
+        self._cleanup_temp_channel_files();
+        super().closeEvent(ev)
 
 # ========== Entrypoint ==========
 def main():
