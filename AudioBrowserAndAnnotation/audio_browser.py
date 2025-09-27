@@ -36,11 +36,19 @@ except ImportError:
         VERSION_INFO = "Version 1.0"
 
 # ========== Bootstrap: auto-install PyQt6 (if not frozen) ==========
-def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
+def _ensure_import(mod_name: str, pip_name: str | None = None) -> tuple[bool, str]:
+    """Try to import a module, auto-installing if needed.
+    
+    Returns:
+        tuple[bool, str]: (success, error_message)
+    """
     try:
-        importlib.import_module(mod_name); return True
+        importlib.import_module(mod_name)
+        return True, ""
     except ImportError:
-        if getattr(sys, "frozen", False): return False
+        if getattr(sys, "frozen", False):
+            return False, f"{mod_name} is not available in this frozen build"
+        
         pkg = pip_name or mod_name
         
         # Prepare subprocess arguments to hide console windows
@@ -48,19 +56,25 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
         if sys.platform == "win32":
             subprocess_kwargs["creationflags"] = CREATE_NO_WINDOW
         
+        install_errors = []
         for args in ([sys.executable, "-m", "pip", "install", pkg],
                      [sys.executable, "-m", "pip", "install", "--user", pkg]):
             try:
-                subprocess.check_call(args, **subprocess_kwargs); break
-            except subprocess.CalledProcessError:
+                subprocess.check_call(args, **subprocess_kwargs)
+                break
+            except subprocess.CalledProcessError as e:
+                install_errors.append(f"'{' '.join(args)}' failed with exit code {e.returncode}")
                 continue
         else:
-            return False
+            error_msg = f"Failed to install {pkg}. Attempted installations:\n" + "\n".join(f"  - {err}" for err in install_errors)
+            return False, error_msg
+        
         importlib.invalidate_caches()
         try:
-            importlib.import_module(mod_name); return True
-        except ImportError:
-            return False
+            importlib.import_module(mod_name)
+            return True, ""
+        except ImportError as e:
+            return False, f"Successfully installed {pkg} but still cannot import {mod_name}: {e}"
 
 try:
     import PyQt6
@@ -72,17 +86,42 @@ if not PYQT6_AVAILABLE:
     if getattr(sys, "frozen", False):
         # In frozen builds, PyQt6 should already be bundled
         raise RuntimeError("PyQt6 is missing from this build. Please reinstall the application.")
-    elif not _ensure_import("PyQt6", "PyQt6"):
-        raise RuntimeError("PyQt6 is required.")
+    else:
+        success, error_msg = _ensure_import("PyQt6", "PyQt6")
+        if not success:
+            error_details = f"""PyQt6 is required but could not be installed automatically.
+
+Error details:
+{error_msg}
+
+To fix this issue, try one of the following:
+
+1. Install PyQt6 manually:
+   pip install PyQt6
+
+2. If you're behind a corporate firewall or proxy:
+   - Configure pip to use your proxy settings
+   - Or ask your IT administrator for help
+
+3. If you're in a restricted environment:
+   - Use a Python virtual environment with pip access
+   - Or install PyQt6 using your system package manager
+
+4. Alternative manual installation:
+   python -m pip install --user PyQt6
+
+For more help, see: https://pypi.org/project/PyQt6/"""
+            raise RuntimeError(error_details)
+    
     # Try importing again after installation
     try:
         import PyQt6
         PYQT6_AVAILABLE = True
     except ImportError:
-        raise RuntimeError("PyQt6 installation failed.")
+        raise RuntimeError("PyQt6 installation succeeded but import still fails. Please restart the application.")
 
-HAVE_NUMPY = _ensure_import("numpy", "numpy")
-HAVE_PYDUB = _ensure_import("pydub", "pydub")
+HAVE_NUMPY, _ = _ensure_import("numpy", "numpy")
+HAVE_PYDUB, _ = _ensure_import("pydub", "pydub")
 if HAVE_PYDUB:
     try:
         from pydub import AudioSegment
