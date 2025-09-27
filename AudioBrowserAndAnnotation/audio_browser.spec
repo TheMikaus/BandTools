@@ -32,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.zipfiles,
     a.datas,
-    name='AudioFolderPlayer',
+    name='AudioAnnotationBrowser',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
