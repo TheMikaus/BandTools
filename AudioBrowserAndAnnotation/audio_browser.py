@@ -4420,7 +4420,8 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
+            # Note: _refresh_right_table() removed - not needed for selection changes within same directory
             self._update_mono_button_state()
             return
         fi = self._fi(idx)
@@ -4430,6 +4431,7 @@ class AudioBrowser(QMainWindow):
             self._set_current_practice_folder(folder_path)
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            # Note: Keep _refresh_right_table() here since folder selection means directory change
             self._update_mono_button_state()
             return
         if f".{fi.suffix().lower()}" in AUDIO_EXTS:
@@ -4443,7 +4445,8 @@ class AudioBrowser(QMainWindow):
             self._play_file(path)
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
+            # Note: _refresh_right_table() removed - not needed for selection changes within same directory
         
         # Update mono button state
         self._update_mono_button_state()
