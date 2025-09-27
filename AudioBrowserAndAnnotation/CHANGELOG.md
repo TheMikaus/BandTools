@@ -5,6 +5,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Color Consistency System**: Ensures consistent visual appearance across different machines
+  - New ColorManager class for standardized color management across all UI elements
+  - Purpose-based color standardization (selection, waveform, text, UI accent colors)
+  - HSV-based color manipulation with gamma correction for display consistency
+  - Enhanced Qt style selection with fallback support for cross-platform compatibility
+  - Application palette override to ensure consistent highlight colors
+  - Comprehensive documentation in COLOR_CONSISTENCY.md
 - **Channel Muting Controls for Audio Playback**: Allow users to mute left or right channels independently
   - New checkbox controls in waveform section: "Left" and "Right" channel checkboxes
   - Acts like volume controls - unchecking mutes that channel (sets to silence, not duplication)
