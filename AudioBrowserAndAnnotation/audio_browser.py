@@ -3493,11 +3493,6 @@ class AudioBrowser(QMainWindow):
         act_change_root.triggered.connect(self._change_root_clicked)
         file_menu.addAction(act_change_root)
         
-        act_up = QAction("&Up", self)
-        act_up.setShortcut(QKeySequence("Alt+Up"))
-        act_up.triggered.connect(self._go_up)
-        file_menu.addAction(act_up)
-        
         file_menu.addSeparator()
         
         self.rename_action = QAction("&Batch Rename (##_ProvidedName)", self)
@@ -3535,7 +3530,7 @@ class AudioBrowser(QMainWindow):
         help_changelog_action.triggered.connect(self._show_changelog_dialog)
         help_menu.addAction(help_changelog_action)
         
-        # Simplified toolbar - only Undo/Redo, Undo limit, and Auto-switch
+        # Simplified toolbar - Undo/Redo, Up navigation, Undo limit, and Auto-switch
         tb = QToolBar("Main"); self.addToolBar(tb)
 
         # Undo/Redo
@@ -3543,6 +3538,14 @@ class AudioBrowser(QMainWindow):
         self.act_redo = QAction("Redo", self); self.act_redo.setShortcut(QKeySequence.StandardKey.Redo)
         self.act_undo.triggered.connect(self._undo); self.act_redo.triggered.connect(self._redo)
         tb.addAction(self.act_undo); tb.addAction(self.act_redo)
+
+        tb.addSeparator()
+        
+        # Up navigation button
+        act_up = QAction("Up", self)
+        act_up.setShortcut(QKeySequence("Alt+Up"))
+        act_up.triggered.connect(self._go_up)
+        tb.addAction(act_up)
 
         tb.addSeparator()
         tb.addWidget(QLabel("Undo limit:"))
