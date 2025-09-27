@@ -1799,8 +1799,14 @@ class WaveformWorker(QObject):
     def run(self):
         try:
             p = Path(self._path_str)
-            # Always attempt to decode stereo data to detect availability
-            samples, _sr, dur_ms, stereo_samples = decode_audio_samples(p, stereo=True)
+            
+            # First, quickly determine stereo availability without full decode
+            channel_count = get_audio_channel_count(p)
+            has_stereo_data = channel_count >= 2
+            
+            # Only decode stereo if we're actually generating stereo peaks
+            need_stereo_decode = self._stereo and has_stereo_data
+            samples, _sr, dur_ms, stereo_samples = decode_audio_samples(p, stereo=need_stereo_decode)
             
             if self._stereo and stereo_samples:
                 # Stereo mode - generate stereo peaks
@@ -1824,8 +1830,6 @@ class WaveformWorker(QObject):
                     self.progress.emit(self._gen_id, self._path_str, chunk_peaks, int(done), int(self._columns), False)
             
             size, mtime = file_signature(p)
-            # Always pass whether stereo data is available, regardless of current mode
-            has_stereo_data = stereo_samples is not None
             self.finished.emit(self._gen_id, self._path_str, peaks_all, int(dur_ms), int(self._columns), int(size), int(mtime), self._stereo, has_stereo_data)
         except Exception as e:
             self.error.emit(self._gen_id, self._path_str, str(e))
@@ -2118,8 +2122,40 @@ class WaveformView(QWidget):
         
         self._stereo_mode = enabled
         
-        # If we have a file loaded, regenerate waveform
+        # If we have a file loaded, try to use cached data for the new mode
         if self._path and self._path.exists():
+            # Check if we can switch modes without regenerating waveform data
+            cache = load_waveform_cache(self._path.parent)
+            entry = cache["files"].get(self._path.name)
+            size, mtime = file_signature(self._path)
+            
+            # Check if cached data exists for the new mode
+            new_cache_key = "stereo_peaks" if enabled else "peaks"
+            if (entry and entry.get("columns") == WAVEFORM_COLUMNS and 
+                int(entry.get("size", 0)) == size and int(entry.get("mtime", 0)) == mtime and 
+                isinstance(entry.get(new_cache_key), list)):
+                
+                # We have cached data for the new mode, use it directly
+                self._peaks = entry[new_cache_key]
+                self._duration_ms = int(entry.get("duration_ms", 0))
+                
+                # Update stereo availability info
+                if "has_stereo_data" in entry:
+                    self._has_stereo_data = bool(entry.get("has_stereo_data", False))
+                else:
+                    # Detect quickly without full decode
+                    try:
+                        channel_count = get_audio_channel_count(self._path)
+                        self._has_stereo_data = channel_count >= 2
+                    except Exception:
+                        self._has_stereo_data = False
+                
+                self._state = "ready"
+                self._pixmap = None  # Force pixmap regeneration for new mode
+                self.update()
+                return
+            
+            # No cached data for new mode, need to regenerate
             self.set_audio_file(self._path)
         else:
             # Just update display with current data
@@ -2166,18 +2202,28 @@ class WaveformView(QWidget):
         
         # Check if we have cached data for the current mode
         cache_key = "stereo_peaks" if self._stereo_mode else "peaks"
-        # Invalidate cache entries that don't have stereo metadata to force regeneration
-        has_stereo_field = "has_stereo_data" in entry if entry else False
+        
         if entry and entry.get("columns") == WAVEFORM_COLUMNS and \
            int(entry.get("size", 0)) == size and int(entry.get("mtime", 0)) == mtime and \
-           isinstance(entry.get(cache_key), list) and isinstance(entry.get("duration_ms"), int) and \
-           has_stereo_field:
+           isinstance(entry.get(cache_key), list) and isinstance(entry.get("duration_ms"), int):
             
             self._peaks = entry[cache_key]
             self._duration_ms = int(entry["duration_ms"])
             
-            # Check if stereo data is available
-            self._has_stereo_data = bool(entry.get("has_stereo_data", False))
+            # Check stereo availability - use cached value if available, otherwise detect quickly
+            if "has_stereo_data" in entry:
+                self._has_stereo_data = bool(entry.get("has_stereo_data", False))
+            else:
+                # For backward compatibility, detect stereo availability without full decode
+                try:
+                    channel_count = get_audio_channel_count(path)
+                    self._has_stereo_data = channel_count >= 2
+                    # Update cache with stereo availability for future use
+                    entry["has_stereo_data"] = self._has_stereo_data
+                    cache["files"][path.name] = entry
+                    save_waveform_cache(path.parent, cache)
+                except Exception:
+                    self._has_stereo_data = False
             
             self._state = "ready"; self._msg = ""
             self.update()
