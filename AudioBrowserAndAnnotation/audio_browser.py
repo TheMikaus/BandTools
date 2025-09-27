@@ -2968,6 +2968,7 @@ class AudioBrowser(QMainWindow):
 
         # Backup tracking - only create backup on first modification
         self._backup_created_this_session: bool = False
+        self._initialization_complete: bool = False
 
         # Undo/Redo
         self._undo_stack: List[dict] = []
@@ -3068,6 +3069,9 @@ class AudioBrowser(QMainWindow):
         self._update_undo_actions_enabled()
         self._update_mono_button_state()  # Initialize mono button state
         
+        # Mark initialization as complete
+        self._initialization_complete = True
+        
         # Schedule root folder selection dialog if needed (after UI is shown)
         if self._needs_root_selection:
             QTimer.singleShot(100, self._show_root_selection_if_needed)
@@ -3101,10 +3105,15 @@ class AudioBrowser(QMainWindow):
         Backup behavior:
         - Only creates backup if metadata files exist in the current folder
         - Only creates backup once per session (tracked via _backup_created_this_session)
+        - Only creates backup after initialization is complete (not during app startup)
         - Creates .backup/YYYY-MM-DD-###/ folder in the current practice directory
         - Increments backup number for multiple backups on same day
         - Shows backup location in console if backup is created
         """
+        # Don't create backup during initialization
+        if not self._initialization_complete:
+            return
+            
         if self._backup_created_this_session:
             return  # Already created backup for this session
             
