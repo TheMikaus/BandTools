@@ -2059,29 +2059,65 @@ class AutoWaveformWorker(QObject):
                     self.file_done.emit(filename, True, "Already cached")
                     continue
                 
-                # Generate waveform data (this is a simplified approach)
-                # In practice, we would reuse the existing waveform generation logic
-                # For now, we'll create placeholder cache files to indicate completion
+                # Generate actual waveform data using existing logic
+                channel_count = get_audio_channel_count(audio_path)
+                has_stereo_data = channel_count >= 2
                 
-                # Create mono cache
+                # Generate mono waveform if not exists
                 if not mono_cache_file.exists():
-                    dummy_data = {"peaks": [], "duration_ms": 0, "generated": True}
                     try:
+                        samples, _sr, dur_ms, _ = decode_audio_samples(audio_path, stereo=False)
+                        
+                        # Generate mono peaks
+                        all_peaks = []
+                        for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100):
+                            all_peaks.extend(chunk_peaks)
+                        
+                        mono_data = {
+                            "peaks": all_peaks,
+                            "duration_ms": dur_ms,
+                            "columns": WAVEFORM_COLUMNS,
+                            "stereo": False
+                        }
+                        
                         with open(mono_cache_file, 'w') as f:
-                            json.dump(dummy_data, f)
+                            json.dump(mono_data, f)
+                            
                     except Exception as e:
-                        self.file_done.emit(filename, False, f"Error creating mono cache: {e}")
+                        self.file_done.emit(filename, False, f"Error generating mono waveform: {e}")
                         continue
                         
-                # Create stereo cache  
-                if not stereo_cache_file.exists():
-                    dummy_data = {"peaks": [], "duration_ms": 0, "generated": True}
+                # Generate stereo waveform if not exists and file has stereo data
+                if not stereo_cache_file.exists() and has_stereo_data:
+                    try:
+                        samples, _sr, dur_ms, stereo_samples = decode_audio_samples(audio_path, stereo=True)
+                        
+                        # Generate stereo peaks
+                        all_peaks = []
+                        for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100, stereo_samples):
+                            all_peaks.extend(chunk_peaks)
+                        
+                        stereo_data = {
+                            "peaks": all_peaks,
+                            "duration_ms": dur_ms,
+                            "columns": WAVEFORM_COLUMNS,
+                            "stereo": True
+                        }
+                        
+                        with open(stereo_cache_file, 'w') as f:
+                            json.dump(stereo_data, f)
+                            
+                    except Exception as e:
+                        self.file_done.emit(filename, False, f"Error generating stereo waveform: {e}")
+                        continue
+                elif not has_stereo_data:
+                    # Create placeholder stereo file indicating no stereo data
+                    stereo_data = {"peaks": [], "duration_ms": 0, "stereo": False, "no_stereo_data": True}
                     try:
                         with open(stereo_cache_file, 'w') as f:
-                            json.dump(dummy_data, f)
+                            json.dump(stereo_data, f)
                     except Exception as e:
-                        self.file_done.emit(filename, False, f"Error creating stereo cache: {e}")
-                        continue
+                        pass  # Not critical if placeholder creation fails
                 
                 generated_count += 1
                 self.file_done.emit(filename, True, "Generated")
@@ -7998,6 +8034,14 @@ class AudioBrowser(QMainWindow):
                 ev.ignore()
                 return
         
+        # Cancel any running auto-generation
+        if self._auto_gen_in_progress:
+            self._cancel_auto_generation()
+            
+        # Clean up auto-generation threads
+        self._cleanup_auto_waveform_thread()
+        self._cleanup_auto_fingerprint_thread()
+
         self._save_names(); self._save_notes(); self._save_duration_cache(); 
         self._cleanup_temp_channel_files();
         super().closeEvent(ev)
