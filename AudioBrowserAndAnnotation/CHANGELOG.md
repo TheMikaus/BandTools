@@ -13,6 +13,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Uses existing build infrastructure (PyInstaller, version.py, audio_browser.spec)
 
 ### Fixed
+- **Waveform Stereo Detection**: Fixed issue where all songs were incorrectly detected as mono
+  - Root cause: Legacy cache entries missing `has_stereo_data` field defaulted to False
+  - Solution: Added cache invalidation for entries without stereo metadata
+  - Impact: Stereo files now correctly enable stereo/mono toggle button
+  - Backward compatible: Existing new-format cache entries continue to work
 - **GitHub Actions CI/CD Pipeline**: Fixed multiple compatibility and reliability issues
   - Updated Ubuntu 24.04 system dependencies for Qt library compatibility
   - Replaced deprecated GitHub Actions with modern alternatives
