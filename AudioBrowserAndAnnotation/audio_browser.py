@@ -4499,19 +4499,26 @@ class AudioBrowser(QMainWindow):
             path = Path(fi.absoluteFilePath())
             # Update current practice folder when audio file is selected (to its parent directory)
             self._set_current_practice_folder(path.parent)
+            
+            # Check if this is actually a different file before expensive operations
+            is_different_file = self.current_audio_file != path
+            
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
             # Always play the selected file, even if it's already the current file
             # This allows restarting the same song from the beginning when clicked
             self._play_file(path)
+            
+            # Only update UI states if the file actually changed (performance optimization)
+            if is_different_file:
+                self._update_mono_button_state()
+                self._update_channel_muting_state()
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
-        
-        # Update mono button state
-        self._update_mono_button_state()
-        self._update_channel_muting_state()
+            self._update_mono_button_state()
+            self._update_channel_muting_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -4787,7 +4794,12 @@ class AudioBrowser(QMainWindow):
         # Get channel-muted file based on current checkbox settings
         left_enabled = self.left_channel_cb.isChecked() if hasattr(self, 'left_channel_cb') else True
         right_enabled = self.right_channel_cb.isChecked() if hasattr(self, 'right_channel_cb') else True
-        playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
+        
+        # Performance optimization: bypass all channel processing when both channels are enabled (default state)
+        if left_enabled and right_enabled:
+            playback_file = path
+        else:
+            playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
         
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
         
