@@ -34,6 +34,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Enhanced stereo/mono mode switching to avoid regeneration when both are cached
   - Performance improvement: 11,688x faster (selecting 11 songs: ~32s → ~0.003s)
   - Resolves issue where "loop across 11 elements should not take seconds"
+- **Additional Performance Optimizations for Song Selection**: Further reduced selection delays
+  - Added channel count caching to avoid repeated file I/O operations during selection
+  - Optimized channel muting logic with early exit when both channels enabled (default state)
+  - Deferred expensive UI state updates (mono button, channel muting) for unchanged file selections
+  - Eliminated unnecessary function calls when both channels are enabled by checking state first
+  - Cache automatically cleared when changing directories to prevent stale data
+  - All `get_audio_channel_count()` calls now use cached version for consistency
 
 ### Changed
 - **UI Redesign**: Converted toolbar to standard dropdown menus for cleaner interface

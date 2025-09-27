@@ -3183,6 +3183,9 @@ class AudioBrowser(QMainWindow):
         self._backup_created_this_session: bool = False
         self._initialization_complete: bool = False
 
+        # Channel count cache for performance optimization
+        self._channel_count_cache: Dict[Tuple[str, int, int], int] = {}
+
         # Undo/Redo
         self._undo_stack: List[dict] = []
         self._undo_index: int = 0
@@ -3448,6 +3451,8 @@ class AudioBrowser(QMainWindow):
             # Reset backup flag when changing to a different folder
             if self.current_practice_folder != folder:
                 self._backup_created_this_session = False
+                # Clear channel count cache when changing directories to avoid stale entries
+                self._channel_count_cache.clear()
             self.current_practice_folder = folder
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
@@ -4494,19 +4499,26 @@ class AudioBrowser(QMainWindow):
             path = Path(fi.absoluteFilePath())
             # Update current practice folder when audio file is selected (to its parent directory)
             self._set_current_practice_folder(path.parent)
+            
+            # Check if this is actually a different file before expensive operations
+            is_different_file = self.current_audio_file != path
+            
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
             # Always play the selected file, even if it's already the current file
             # This allows restarting the same song from the beginning when clicked
             self._play_file(path)
+            
+            # Only update UI states if the file actually changed (performance optimization)
+            if is_different_file:
+                self._update_mono_button_state()
+                self._update_channel_muting_state()
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
-        
-        # Update mono button state
-        self._update_mono_button_state()
-        self._update_channel_muting_state()
+            self._update_mono_button_state()
+            self._update_channel_muting_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -4643,6 +4655,42 @@ class AudioBrowser(QMainWindow):
             )
 
     # ----- Channel-specific audio processing -----
+    def _get_cached_channel_count(self, path: Path) -> int:
+        """
+        Get the channel count for an audio file using a cache for performance.
+        
+        Args:
+            path: Path to the audio file
+            
+        Returns:
+            Number of channels (1 for mono, 2+ for stereo/multichannel)
+        """
+        try:
+            # Create cache key using path, size, and modification time
+            stat_info = path.stat()
+            cache_key = (str(path), int(stat_info.st_size), int(stat_info.st_mtime))
+            
+            # Check cache first
+            if cache_key in self._channel_count_cache:
+                return self._channel_count_cache[cache_key]
+            
+            # Not in cache, detect channel count
+            channel_count = get_audio_channel_count(path)
+            
+            # Cache the result (limit cache size to avoid memory issues)
+            if len(self._channel_count_cache) > 1000:
+                # Clear oldest entries when cache gets too large
+                keys_to_remove = list(self._channel_count_cache.keys())[:500]
+                for key in keys_to_remove:
+                    del self._channel_count_cache[key]
+            
+            self._channel_count_cache[cache_key] = channel_count
+            return channel_count
+            
+        except Exception:
+            # Fallback to direct detection on error
+            return get_audio_channel_count(path)
+
     def _get_channel_muted_file(self, path: Path, left_enabled: bool, right_enabled: bool) -> Path:
         """
         Get a path to an audio file with the specified channel muting configuration.
@@ -4662,8 +4710,8 @@ class AudioBrowser(QMainWindow):
             # Fall back to original file if pydub is not available
             return path
             
-        # Check if file is actually stereo
-        channel_count = get_audio_channel_count(path)
+        # Check if file is actually stereo using cached channel count
+        channel_count = self._get_cached_channel_count(path)
         if channel_count < 2:
             return path  # File is not stereo, return original
             
@@ -4746,7 +4794,12 @@ class AudioBrowser(QMainWindow):
         # Get channel-muted file based on current checkbox settings
         left_enabled = self.left_channel_cb.isChecked() if hasattr(self, 'left_channel_cb') else True
         right_enabled = self.right_channel_cb.isChecked() if hasattr(self, 'right_channel_cb') else True
-        playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
+        
+        # Performance optimization: bypass all channel processing when both channels are enabled (default state)
+        if left_enabled and right_enabled:
+            playback_file = path
+        else:
+            playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
         
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
         
@@ -4811,8 +4864,6 @@ class AudioBrowser(QMainWindow):
             self._update_waveform_annotations()
         else:
             # Defer expensive operations when not on annotations tab and not auto-switching
-            self._update_stereo_button_state()
-            self._update_channel_muting_state()
             # Use QTimer.singleShot to defer waveform and annotation loading
             QTimer.singleShot(0, self._deferred_annotation_load)
         
@@ -4827,8 +4878,12 @@ class AudioBrowser(QMainWindow):
             self._refresh_best_take_field()
             try: 
                 self.waveform.set_audio_file(self.current_audio_file)
+                self._update_stereo_button_state()  # Update stereo button after waveform is loaded
+                self._update_channel_muting_state()  # Update channel muting state
             except Exception: 
                 self.waveform.clear()
+                self._update_stereo_button_state()  # Update button state even on error
+                self._update_channel_muting_state()  # Update channel muting state even on error
             self._update_waveform_annotations()
 
     def _highlight_file_in_tree(self, path: Path):
@@ -4942,7 +4997,7 @@ class AudioBrowser(QMainWindow):
         
         # Check channel count
         try:
-            channels = get_audio_channel_count(self.current_audio_file)
+            channels = self._get_cached_channel_count(self.current_audio_file)
             if channels == 1:
                 self.mono_action.setEnabled(False)
                 self.mono_action.setText("Convert to Mono (already mono)")
@@ -5088,7 +5143,7 @@ class AudioBrowser(QMainWindow):
             return
             
         # Enable channel controls only for stereo files
-        channel_count = get_audio_channel_count(self.current_audio_file) if self.current_audio_file else 1
+        channel_count = self._get_cached_channel_count(self.current_audio_file) if self.current_audio_file else 1
         
         # Enable only if file has more than 1 channel
         is_stereo = channel_count > 1
@@ -6622,7 +6677,7 @@ class AudioBrowser(QMainWindow):
             return
         
         # Check if the file is already mono
-        channels = get_audio_channel_count(self.current_audio_file)
+        channels = self._get_cached_channel_count(self.current_audio_file)
         if channels == 1:
             QMessageBox.information(self, "Already Mono", "The selected file is already mono.")
             return
