@@ -3790,6 +3790,7 @@ class AudioBrowser(QMainWindow):
         self.tabs.setDocumentMode(True); self.tabs.setTabPosition(QTabWidget.TabPosition.North)
         self.tabs.setMovable(True)
         self.tabs.tabBar().tabMoved.connect(self._on_tab_moved)
+        self.tabs.currentChanged.connect(self._on_tab_changed)  # Handle tab changes for deferred loading
 
         # Folder Notes tab
         self.folder_tab = QWidget(); folder_layout = QVBoxLayout(self.folder_tab)
@@ -4317,6 +4318,14 @@ class AudioBrowser(QMainWindow):
         order = [self.tabs.tabText(i) for i in range(self.tabs.count())]
         self.settings.setValue(SETTINGS_KEY_TABS_ORDER, "|".join(order))
 
+    def _on_tab_changed(self, index: int):
+        """Handle tab changes to trigger deferred loading when switching to Annotations tab."""
+        if index >= 0 and self.tabs.tabText(index) == "Annotations" and self.current_audio_file:
+            # Check if waveform is empty/not loaded yet (indicates deferred loading)
+            if not hasattr(self.waveform, '_path') or self.waveform._path != self.current_audio_file:
+                # Trigger immediate loading now that user is viewing Annotations tab
+                self._deferred_annotation_load()
+
     def _restore_tab_order(self):
         saved = self.settings.value(SETTINGS_KEY_TABS_ORDER, "", type=str) or ""
         if not saved: return
@@ -4735,21 +4744,45 @@ class AudioBrowser(QMainWindow):
             self._update_folder_notes_ui()  # Update folder notes UI for the new directory
             self._refresh_annotation_legend()
         
-        self._load_annotations_for_current()
-        self._refresh_provided_name_field()
-        self._refresh_best_take_field()
-        try: 
-            self.waveform.set_audio_file(path)
-            self._update_stereo_button_state()  # Update stereo button after waveform is loaded
-            self._update_channel_muting_state()  # Update channel muting state
-        except Exception: 
-            self.waveform.clear()
-            self._update_stereo_button_state()  # Update button state even on error
-            self._update_channel_muting_state()  # Update channel muting state even on error
-        self._update_waveform_annotations()
+        # Check if we should defer expensive annotation operations until the Annotations tab is viewed
+        annotations_tab_active = self.tabs.currentIndex() == self._tab_index_by_name("Annotations")
+        will_auto_switch = not self._programmatic_selection and self.auto_switch_cb.isChecked()
+        
+        if annotations_tab_active or will_auto_switch:
+            # Load annotations immediately if we're on the annotations tab or will switch to it
+            self._load_annotations_for_current()
+            self._refresh_provided_name_field()
+            self._refresh_best_take_field()
+            try: 
+                self.waveform.set_audio_file(path)
+                self._update_stereo_button_state()  # Update stereo button after waveform is loaded
+                self._update_channel_muting_state()  # Update channel muting state
+            except Exception: 
+                self.waveform.clear()
+                self._update_stereo_button_state()  # Update button state even on error
+                self._update_channel_muting_state()  # Update channel muting state even on error
+            self._update_waveform_annotations()
+        else:
+            # Defer expensive operations when not on annotations tab and not auto-switching
+            self._update_stereo_button_state()
+            self._update_channel_muting_state()
+            # Use QTimer.singleShot to defer waveform and annotation loading
+            QTimer.singleShot(0, self._deferred_annotation_load)
         
         # Ensure the file is highlighted in the tree view (important for auto-progression)
         self._highlight_file_in_tree(path)
+    
+    def _deferred_annotation_load(self):
+        """Load annotations and waveform data after a brief delay to improve perceived responsiveness."""
+        if self.current_audio_file:  # Make sure file is still current
+            self._load_annotations_for_current()
+            self._refresh_provided_name_field()
+            self._refresh_best_take_field()
+            try: 
+                self.waveform.set_audio_file(self.current_audio_file)
+            except Exception: 
+                self.waveform.clear()
+            self._update_waveform_annotations()
 
     def _highlight_file_in_tree(self, path: Path):
         """Highlight the specified file in the tree view, ensuring it's visible and selected.
