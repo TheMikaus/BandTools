@@ -3105,13 +3105,13 @@ class AudioBrowser(QMainWindow):
         self.waveform.seekRequested.connect(self._on_waveform_seek_requested)
         self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
         self.waveform.waveformReady.connect(self._update_stereo_button_state)
-        self.waveform.waveformReady.connect(self._update_channel_combo_state)
+        self.waveform.waveformReady.connect(self._update_channel_muting_state)
 
         # Toggles
         self._restore_toggles()
         self._update_undo_actions_enabled()
         self._update_mono_button_state()  # Initialize mono button state
-        self._update_channel_combo_state()  # Initialize channel combo state
+        self._update_channel_muting_state()  # Initialize channel muting state
         self._cleanup_temp_channel_files()  # Clean up old temporary files
         
         # Mark initialization as complete
@@ -3827,14 +3827,19 @@ class AudioBrowser(QMainWindow):
         self.stereo_mono_toggle.setMaximumWidth(80)
         waveform_controls.addWidget(self.stereo_mono_toggle)
         
-        # --- Channel selection controls ---
-        waveform_controls.addWidget(QLabel("Listen:"))
-        self.channel_combo = QComboBox()
-        self.channel_combo.addItems(["As is", "Left Only", "Right Only"])
-        self.channel_combo.setToolTip("Select which audio channels to play")
-        self.channel_combo.setMaximumWidth(100)
-        self.channel_combo.currentIndexChanged.connect(self._on_channel_selection_changed)
-        waveform_controls.addWidget(self.channel_combo)
+        # --- Channel muting controls ---
+        waveform_controls.addWidget(QLabel("Channels:"))
+        self.left_channel_cb = QCheckBox("Left")
+        self.left_channel_cb.setChecked(True)  # Default: both channels enabled
+        self.left_channel_cb.setToolTip("Enable/disable left audio channel")
+        self.left_channel_cb.stateChanged.connect(self._on_channel_muting_changed)
+        waveform_controls.addWidget(self.left_channel_cb)
+        
+        self.right_channel_cb = QCheckBox("Right")
+        self.right_channel_cb.setChecked(True)  # Default: both channels enabled
+        self.right_channel_cb.setToolTip("Enable/disable right audio channel")
+        self.right_channel_cb.stateChanged.connect(self._on_channel_muting_changed)
+        waveform_controls.addWidget(self.right_channel_cb)
         
         waveform_controls.addStretch(1)  # Push to the left
         ann_layout.addLayout(waveform_controls)
@@ -4269,7 +4274,7 @@ class AudioBrowser(QMainWindow):
         
         # Update mono button state
         self._update_mono_button_state()
-        self._update_channel_combo_state()
+        self._update_channel_muting_state()
 
     def _on_tree_context_menu(self, position: QPoint):
         """Handle right-click context menu on file tree."""
@@ -4406,18 +4411,19 @@ class AudioBrowser(QMainWindow):
             )
 
     # ----- Channel-specific audio processing -----
-    def _get_channel_specific_file(self, path: Path, channel_mode: int) -> Path:
+    def _get_channel_muted_file(self, path: Path, left_enabled: bool, right_enabled: bool) -> Path:
         """
-        Get a path to an audio file with the specified channel configuration.
+        Get a path to an audio file with the specified channel muting configuration.
         
         Args:
             path: Original audio file path
-            channel_mode: 0=As is, 1=Left only, 2=Right only
+            left_enabled: Whether left channel should be audible
+            right_enabled: Whether right channel should be audible
             
         Returns:
-            Path to the audio file to play (original or temporary channel-specific file)
+            Path to the audio file to play (original or temporary channel-muted file)
         """
-        if channel_mode == 0:  # As is
+        if left_enabled and right_enabled:  # Both channels enabled
             return path
             
         if not HAVE_PYDUB:
@@ -4429,13 +4435,20 @@ class AudioBrowser(QMainWindow):
         if channel_count < 2:
             return path  # File is not stereo, return original
             
-        # Create temporary directory for channel-specific files
+        # Create temporary directory for channel-muted files
         temp_dir = Path.home() / ".audiobrowser_temp"
         temp_dir.mkdir(exist_ok=True)
         
-        # Generate filename for channel-specific version
-        suffix_map = {1: "_left_only", 2: "_right_only"}
-        suffix = suffix_map.get(channel_mode, "")
+        # Generate filename for channel-muted version
+        if not left_enabled and right_enabled:
+            suffix = "_left_muted"
+        elif left_enabled and not right_enabled:
+            suffix = "_right_muted"
+        elif not left_enabled and not right_enabled:
+            suffix = "_both_muted"
+        else:
+            suffix = ""
+            
         temp_filename = f"{path.stem}{suffix}{path.suffix}"
         temp_path = temp_dir / temp_filename
         
@@ -4450,38 +4463,31 @@ class AudioBrowser(QMainWindow):
                 pass
         
         try:
-            # Create channel-specific audio file
+            # Create channel-muted audio file
             audio = AudioSegment.from_file(str(path))
             
-            if channel_mode == 1:  # Left only
-                # Duplicate left channel to both channels for stereo output
-                if audio.channels >= 2:
-                    left_channel = audio.split_to_mono()[0]
-                    # Create stereo with left channel on both sides
-                    channel_audio = AudioSegment.from_mono_audiosegments(left_channel, left_channel)
-                else:
-                    channel_audio = audio
-            elif channel_mode == 2:  # Right only
-                # Duplicate right channel to both channels for stereo output
-                if audio.channels >= 2:
-                    right_channel = audio.split_to_mono()[1] if len(audio.split_to_mono()) > 1 else audio.split_to_mono()[0]
-                    # Create stereo with right channel on both sides
-                    channel_audio = AudioSegment.from_mono_audiosegments(right_channel, right_channel)
-                else:
-                    channel_audio = audio
+            if audio.channels >= 2:
+                # Split into individual channels
+                channels = audio.split_to_mono()
+                left_channel = channels[0] if left_enabled else AudioSegment.silent(duration=len(channels[0]))
+                right_channel = channels[1] if right_enabled and len(channels) > 1 else AudioSegment.silent(duration=len(channels[0]))
+                
+                # Create stereo audio with muted channels
+                muted_audio = AudioSegment.from_mono_audiosegments(left_channel, right_channel)
             else:
-                channel_audio = audio
+                # For mono files, just return original or silence
+                muted_audio = audio if (left_enabled or right_enabled) else AudioSegment.silent(duration=len(audio))
                 
             # Export temporary file
-            channel_audio.export(str(temp_path), format=path.suffix[1:].lower())
+            muted_audio.export(str(temp_path), format=path.suffix[1:].lower())
             return temp_path
             
         except Exception as e:
-            print(f"Error creating channel-specific file: {e}")
+            print(f"Error creating channel-muted file: {e}")
             return path  # Fall back to original file
     
     def _cleanup_temp_channel_files(self):
-        """Clean up temporary channel-specific audio files."""
+        """Clean up temporary channel-muted audio files."""
         try:
             temp_dir = Path.home() / ".audiobrowser_temp"
             if temp_dir.exists():
@@ -4505,9 +4511,10 @@ class AudioBrowser(QMainWindow):
         new_audio_dir = path.parent
         need_reload_annotations = (prev_audio_dir != new_audio_dir)
         
-        # Get channel-specific file based on current selection
-        channel_mode = self.channel_combo.currentIndex() if hasattr(self, 'channel_combo') else 0
-        playback_file = self._get_channel_specific_file(path, channel_mode)
+        # Get channel-muted file based on current checkbox settings
+        left_enabled = self.left_channel_cb.isChecked() if hasattr(self, 'left_channel_cb') else True
+        right_enabled = self.right_channel_cb.isChecked() if hasattr(self, 'right_channel_cb') else True
+        playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
         
         self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
         
@@ -4525,10 +4532,16 @@ class AudioBrowser(QMainWindow):
         
         self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
         
-        # Update UI text to show channel info
-        channel_names = ["", " (Left Only)", " (Right Only)"]
-        channel_suffix = channel_names[channel_mode] if channel_mode < len(channel_names) else ""
-        self.now_playing.setText(f"Playing: {path.name}{channel_suffix}")
+        # Update UI text to show channel muting info
+        channel_info = ""
+        if not left_enabled and not right_enabled:
+            channel_info = " (Both Muted)"
+        elif not left_enabled:
+            channel_info = " (Left Muted)"
+        elif not right_enabled:
+            channel_info = " (Right Muted)"
+        
+        self.now_playing.setText(f"Playing: {path.name}{channel_info}")
         
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         self.current_audio_file = path; self.pending_note_start_ms = None  # Store original path, not temp file
@@ -4552,11 +4565,11 @@ class AudioBrowser(QMainWindow):
         try: 
             self.waveform.set_audio_file(path)
             self._update_stereo_button_state()  # Update stereo button after waveform is loaded
-            self._update_channel_combo_state()  # Update channel selection state
+            self._update_channel_muting_state()  # Update channel muting state
         except Exception: 
             self.waveform.clear()
             self._update_stereo_button_state()  # Update button state even on error
-            self._update_channel_combo_state()  # Update channel combo state even on error
+            self._update_channel_muting_state()  # Update channel muting state even on error
         self._update_waveform_annotations()
         
         # Ensure the file is highlighted in the tree view (important for auto-progression)
@@ -4793,15 +4806,15 @@ class AudioBrowser(QMainWindow):
             self.stereo_mono_toggle.setChecked(False)
             self._on_stereo_toggle_clicked(False)
 
-    def _on_channel_selection_changed(self, index: int):
-        """Handle channel selection change (As is=0, Left Only=1, Right Only=2)."""
+    def _on_channel_muting_changed(self, _state):
+        """Handle channel muting checkbox changes."""
         if not self.current_audio_file:
             return
             
-        # Update channel combo state based on file
-        self._update_channel_combo_state()
+        # Update channel checkbox state based on file
+        self._update_channel_muting_state()
         
-        # If we're currently playing, restart playback with new channel selection
+        # If we're currently playing, restart playback with new channel settings
         was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
         current_position = self.player.position() if was_playing else 0
         
@@ -4811,22 +4824,25 @@ class AudioBrowser(QMainWindow):
             if was_playing:
                 self.player.play()
 
-    def _update_channel_combo_state(self):
-        """Update channel selection combo state based on current file."""
+    def _update_channel_muting_state(self):
+        """Update channel muting checkbox state based on current file."""
         if not self.current_audio_file:
-            self.channel_combo.setEnabled(False)
+            self.left_channel_cb.setEnabled(False)
+            self.right_channel_cb.setEnabled(False)
             return
             
-        # Enable channel selection only for stereo files
-        has_stereo = self.waveform.has_stereo_data() if hasattr(self, 'waveform') else False
+        # Enable channel controls only for stereo files
         channel_count = get_audio_channel_count(self.current_audio_file) if self.current_audio_file else 1
         
         # Enable only if file has more than 1 channel
-        self.channel_combo.setEnabled(channel_count > 1)
+        is_stereo = channel_count > 1
+        self.left_channel_cb.setEnabled(is_stereo)
+        self.right_channel_cb.setEnabled(is_stereo)
         
-        # If file is mono, reset to "As is"
-        if channel_count == 1 and self.channel_combo.currentIndex() != 0:
-            self.channel_combo.setCurrentIndex(0)
+        # If file is mono, ensure both checkboxes are checked
+        if not is_stereo:
+            self.left_channel_cb.setChecked(True)
+            self.right_channel_cb.setChecked(True)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:

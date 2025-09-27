@@ -5,14 +5,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
-- **Channel Selection for Audio Playback**: Allow users to mute left or right channel of stereo audio
-  - New "Listen:" dropdown in waveform controls with options: "As is", "Left Only", "Right Only"
-  - Automatic temporary file generation for channel-specific playback using pydub
+- **Channel Muting Controls for Audio Playback**: Allow users to mute left or right channels independently
+  - New checkbox controls in waveform section: "Left" and "Right" channel checkboxes
+  - Acts like volume controls - unchecking mutes that channel (sets to silence, not duplication)
   - Smart enable/disable based on audio file channel count (only enabled for stereo files)
-  - Seamless playback continuation when switching channel modes during playback
-  - Automatic cleanup of temporary channel-specific audio files on app close and startup
-  - Now playing indicator shows current channel mode (e.g., "Playing: song.mp3 (Left Only)")
-- **GitHub Actions Build Workflow**: Created automated Windows build system
+  - Seamless playback continuation when toggling channel muting during playback
+  - Automatic cleanup of temporary channel-muted audio files on app close and startup
+  - Now playing indicator shows current muting state (e.g., "Playing: song.mp3 (Left Muted)")
+  - Uses proper channel silencing via pydub rather than channel duplication
   - Windows-only build pipeline for AudioBrowser executable
   - Triggers on changes to AudioBrowserAndAnnotation directory
   - Automatic version increment using existing git-based system
