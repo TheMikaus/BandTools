@@ -2003,9 +2003,12 @@ class WaveformView(QWidget):
         
         # Check if we have cached data for the current mode
         cache_key = "stereo_peaks" if self._stereo_mode else "peaks"
+        # Invalidate cache entries that don't have stereo metadata to force regeneration
+        has_stereo_field = "has_stereo_data" in entry if entry else False
         if entry and entry.get("columns") == WAVEFORM_COLUMNS and \
            int(entry.get("size", 0)) == size and int(entry.get("mtime", 0)) == mtime and \
-           isinstance(entry.get(cache_key), list) and isinstance(entry.get("duration_ms"), int):
+           isinstance(entry.get(cache_key), list) and isinstance(entry.get("duration_ms"), int) and \
+           has_stereo_field:
             
             self._peaks = entry[cache_key]
             self._duration_ms = int(entry["duration_ms"])
