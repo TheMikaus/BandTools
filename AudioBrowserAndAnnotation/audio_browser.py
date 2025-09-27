@@ -135,7 +135,7 @@ from PyQt6.QtCore import (
     pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel, QSortFilterProxyModel
 )
 from PyQt6.QtGui import (
-    QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor
+    QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor, QPalette
 )
 # QFileSystemModel may import from QtWidgets or QtGui depending on build
 try:
@@ -405,6 +405,126 @@ def hex_to_color(s: str) -> QColor:
         return QColor(s) if s else QColor("#00cc66")
     except Exception:
         return QColor("#00cc66")
+
+# ========== Color Standardization System ==========
+class ColorManager:
+    """Manages consistent colors across different machines and display environments."""
+    
+    def __init__(self):
+        self._color_cache = {}
+        
+    def get_standardized_color(self, base_color: str, purpose: str = "general") -> QColor:
+        """
+        Get a standardized color that appears consistent across different machines.
+        
+        Args:
+            base_color: Base hex color (e.g., "#58a6ff")
+            purpose: Purpose of the color (e.g., "selection", "waveform", "text")
+            
+        Returns:
+            QColor object with standardized properties for consistent appearance
+        """
+        cache_key = f"{base_color}_{purpose}"
+        if cache_key in self._color_cache:
+            return self._color_cache[cache_key]
+            
+        base_qcolor = QColor(base_color)
+        if not base_qcolor.isValid():
+            base_qcolor = QColor("#808080")  # Fallback gray
+            
+        # Apply standardization based on purpose
+        standardized = self._apply_color_standardization(base_qcolor, purpose)
+        self._color_cache[cache_key] = standardized
+        return standardized
+    
+    def _apply_color_standardization(self, color: QColor, purpose: str) -> QColor:
+        """Apply standardization rules to ensure consistent appearance across machines."""
+        # Convert to HSV for consistent manipulation
+        h, s, v, a = color.getHsvF()
+        
+        # Standardize based on purpose
+        if purpose == "selection":
+            # Ensure selection colors are vivid and high-contrast
+            s = max(0.8, s)  # Ensure high saturation for visibility
+            v = max(0.6, min(0.9, v))  # Ensure adequate brightness without being blinding
+        elif purpose == "waveform":
+            # Waveform colors should be clear but not too bright
+            s = max(0.7, min(0.95, s))  # Good saturation for clarity
+            v = max(0.5, min(0.8, v))  # Medium brightness for long viewing comfort
+        elif purpose == "text":
+            # Text colors need good contrast
+            if v > 0.5:  # Light colors
+                v = max(0.2, v)  # Ensure dark enough for readability
+            else:  # Dark colors  
+                v = min(0.8, max(0.4, v))  # Ensure light enough for readability
+        elif purpose == "ui_accent":
+            # UI accent colors (buttons, highlights)
+            s = max(0.6, min(0.9, s))  # Strong but not overwhelming
+            v = max(0.4, min(0.7, v))  # Medium brightness
+        
+        # Apply gamma correction for consistent appearance across displays
+        # Most displays have gamma around 2.2, so we normalize to that
+        v = pow(v, 1.0 / 2.2) if v > 0 else 0
+        v = pow(v, 2.2)
+        
+        return QColor.fromHsvF(h, s, v, a)
+    
+    def get_selection_colors(self) -> dict:
+        """Get standardized selection colors for UI consistency."""
+        return {
+            'primary': self.get_standardized_color("#2563eb", "selection"),
+            'active': self.get_standardized_color("#1d4ed8", "selection"), 
+            'inactive': self.get_standardized_color("#1e3a8a", "selection")
+        }
+    
+    def get_waveform_colors(self) -> dict:
+        """Get standardized waveform colors."""
+        return {
+            'background': self.get_standardized_color("#101114", "ui_accent"),
+            'axis': self.get_standardized_color("#2a2c31", "ui_accent"),
+            'left_channel': self.get_standardized_color("#58a6ff", "waveform"),
+            'right_channel': self.get_standardized_color("#ff6b58", "waveform"),
+            'playhead': self.get_standardized_color("#ff5555", "waveform"),
+            'selected': self.get_standardized_color("#ffa500", "selection"),
+            'message': self.get_standardized_color("#8a8f98", "text")
+        }
+    
+    def get_ui_colors(self) -> dict:
+        """Get standardized UI element colors."""
+        return {
+            'success': self.get_standardized_color("#4CAF50", "ui_accent"),
+            'danger': self.get_standardized_color("#f44336", "ui_accent"),
+            'info': self.get_standardized_color("#2196F3", "ui_accent"),
+            'warning': self.get_standardized_color("#ff9800", "ui_accent"),
+            'text_secondary': self.get_standardized_color("#666666", "text"),
+            'text_muted': self.get_standardized_color("#999999", "text"),
+            'background_light': self.get_standardized_color("#f8f8f8", "ui_accent"),
+            'background_medium': self.get_standardized_color("#f0f0f0", "ui_accent"),
+            'border': self.get_standardized_color("#cccccc", "ui_accent")
+        }
+
+# Global color manager instance
+_color_manager = ColorManager()
+
+def get_consistent_stylesheet_colors():
+    """Get color values for consistent stylesheets across machines."""
+    ui_colors = _color_manager.get_ui_colors()
+    selection_colors = _color_manager.get_selection_colors()
+    
+    return {
+        'selection_primary': selection_colors['primary'].name(),
+        'selection_active': selection_colors['active'].name(), 
+        'selection_inactive': selection_colors['inactive'].name(),
+        'success': ui_colors['success'].name(),
+        'danger': ui_colors['danger'].name(),
+        'info': ui_colors['info'].name(),
+        'warning': ui_colors['warning'].name(),
+        'text_secondary': ui_colors['text_secondary'].name(),
+        'text_muted': ui_colors['text_muted'].name(),
+        'bg_light': ui_colors['background_light'].name(),
+        'bg_medium': ui_colors['background_medium'].name(),
+        'border': ui_colors['border'].name()
+    }
 
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
@@ -1916,14 +2036,18 @@ class WaveformView(QWidget):
         self._stereo_mode: bool = False
         self._has_stereo_data: bool = False
 
-        self._bg = QColor("#101114"); self._axis = QColor("#2a2c31")
-        self._wave = QColor("#58a6ff"); self._playhead = QColor("#ff5555")
-        self._msg_color = QColor("#8a8f98")
-        self._selected_color = QColor("#ffa500")
+        # Use standardized colors for consistency across machines
+        waveform_colors = _color_manager.get_waveform_colors()
+        self._bg = waveform_colors['background']
+        self._axis = waveform_colors['axis'] 
+        self._wave = waveform_colors['left_channel']  # Default wave color
+        self._playhead = waveform_colors['playhead']
+        self._msg_color = waveform_colors['message']
+        self._selected_color = waveform_colors['selected']
         
         # Stereo channel colors
-        self._left_color = QColor("#58a6ff")   # Blue for left channel
-        self._right_color = QColor("#ff6b58")  # Red for right channel
+        self._left_color = waveform_colors['left_channel']
+        self._right_color = waveform_colors['right_channel']
 
         self._state: str = "empty"   # empty|loading|ready|error
         self._msg: str = ""
@@ -3566,9 +3690,10 @@ class AudioBrowser(QMainWindow):
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins for cleaner look
         
-        # Add path label at the top
+        # Add path label at the top with consistent colors
         self.path_label = QLabel()
-        self.path_label.setStyleSheet("QLabel { background-color: #f0f0f0; padding: 8px; border-bottom: 1px solid #ccc; font-weight: bold; }")
+        colors = get_consistent_stylesheet_colors()
+        self.path_label.setStyleSheet(f"QLabel {{ background-color: {colors['bg_medium']}; padding: 8px; border-bottom: 1px solid {colors['border']}; font-weight: bold; }}")
         self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         main_layout.addWidget(self.path_label)
 
@@ -3592,20 +3717,21 @@ class AudioBrowser(QMainWindow):
         self.tree.setColumnHidden(3, True)  # hide Date Modified column
         self.tree.setColumnWidth(0, 360)
         self.tree.setAlternatingRowColors(True)
-        # Enhanced selection styling for better visibility
-        self.tree.setStyleSheet("""
-            QTreeView::item:selected {
-                background-color: #1e3a8a;
+        # Enhanced selection styling with consistent colors for cross-machine compatibility
+        colors = get_consistent_stylesheet_colors()
+        self.tree.setStyleSheet(f"""
+            QTreeView::item:selected {{
+                background-color: {colors['selection_inactive']};
                 color: white;
-            }
-            QTreeView::item:selected:active {
-                background-color: #1d4ed8;
+            }}
+            QTreeView::item:selected:active {{
+                background-color: {colors['selection_active']};
                 color: white;
-            }
-            QTreeView::item:selected:!active {
-                background-color: #2563eb;
+            }}
+            QTreeView::item:selected:!active {{
+                background-color: {colors['selection_primary']};
                 color: white;
-            }
+            }}
         """)
         self.tree.setSortingEnabled(True); self.tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -3655,7 +3781,8 @@ class AudioBrowser(QMainWindow):
         # Initialize output devices
         self._refresh_output_devices()
 
-        self.now_playing = QLabel("No selection"); self.now_playing.setStyleSheet("color: #666;")
+        colors = get_consistent_stylesheet_colors()
+        self.now_playing = QLabel("No selection"); self.now_playing.setStyleSheet(f"color: {colors['text_secondary']};")
         right_layout.addWidget(self.now_playing)
 
         # Tabs
@@ -3700,7 +3827,8 @@ class AudioBrowser(QMainWindow):
         fp_group = QWidget()
         fp_layout = QVBoxLayout(fp_group)
         fp_layout.setContentsMargins(10, 10, 10, 10)
-        fp_group.setStyleSheet("QWidget { background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 5px; }")
+        colors = get_consistent_stylesheet_colors()
+        fp_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
         
         fp_title = QLabel("Audio Fingerprinting")
         fp_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
@@ -3710,7 +3838,8 @@ class AudioBrowser(QMainWindow):
         ref_row = QHBoxLayout()
         ref_row.addWidget(QLabel("Reference folder:"))
         self.fingerprint_ref_label = QLabel("(None selected)")
-        self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+        colors = get_consistent_stylesheet_colors()
+        self.fingerprint_ref_label.setStyleSheet(f"color: {colors['text_muted']}; font-style: italic;")
         ref_row.addWidget(self.fingerprint_ref_label, 1)
         self.select_ref_btn = QPushButton("Choose...")
         self.select_ref_btn.clicked.connect(self._select_fingerprint_reference_folder)
@@ -3763,13 +3892,14 @@ class AudioBrowser(QMainWindow):
         clear_row.addStretch(1)  # Push button to the right
         self.clear_all_names_btn = QPushButton("Clear All Provided Names")
         self.clear_all_names_btn.clicked.connect(self._on_clear_all_provided_names)
-        self.clear_all_names_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; }")
+        colors = get_consistent_stylesheet_colors()
+        self.clear_all_names_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['danger']}; color: white; font-weight: bold; }}")
         clear_row.addWidget(self.clear_all_names_btn)
         fp_layout.addLayout(clear_row)
         
         # Status label
         self.fingerprint_status = QLabel("")
-        self.fingerprint_status.setStyleSheet("color: #666; font-size: 11px;")
+        self.fingerprint_status.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
         fp_layout.addWidget(self.fingerprint_status)
         
         # Apply/Cancel buttons for auto-labeling (initially hidden)
@@ -3777,12 +3907,13 @@ class AudioBrowser(QMainWindow):
         self.auto_label_buttons_row.addStretch(1)  # Push buttons to the right
         self.auto_label_apply_btn = QPushButton("Apply")
         self.auto_label_apply_btn.clicked.connect(self._on_auto_label_apply)
-        self.auto_label_apply_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }")
+        colors = get_consistent_stylesheet_colors()
+        self.auto_label_apply_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['success']}; color: white; font-weight: bold; }}")
         self.auto_label_buttons_row.addWidget(self.auto_label_apply_btn)
         
         self.auto_label_cancel_btn = QPushButton("Cancel")
         self.auto_label_cancel_btn.clicked.connect(self._on_auto_label_cancel)
-        self.auto_label_cancel_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; }")
+        self.auto_label_cancel_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['danger']}; color: white; font-weight: bold; }}")
         self.auto_label_buttons_row.addWidget(self.auto_label_cancel_btn)
         
         self.auto_label_buttons_widget = QWidget()
@@ -5714,7 +5845,8 @@ class AudioBrowser(QMainWindow):
             
             # Make read-only when showing all sets
             self.folder_notes_edit.setReadOnly(True)
-            self.folder_notes_edit.setStyleSheet("QPlainTextEdit { background-color: #f8f8f8; }")
+            colors = get_consistent_stylesheet_colors()
+            self.folder_notes_edit.setStyleSheet(f"QPlainTextEdit {{ background-color: {colors['bg_light']}; }}")
             
         else:
             # Show only current set folder notes (original behavior)
@@ -6720,13 +6852,14 @@ class AudioBrowser(QMainWindow):
         can_auto_label = not self.auto_label_in_progress and bool(other_folders)
         
         # Show information about all available folders for fingerprinting
+        colors = get_consistent_stylesheet_colors()
         if not all_fingerprint_folders:
             self.fingerprint_ref_label.setText("(No fingerprints found)")
-            self.fingerprint_ref_label.setStyleSheet("color: #666; font-style: italic;")
+            self.fingerprint_ref_label.setStyleSheet(f"color: {colors['text_muted']}; font-style: italic;")
         elif len(all_fingerprint_folders) == 1 and all_fingerprint_folders[0].resolve() == current_dir.resolve():
             folder_text = f"Current folder only ({all_fingerprint_folders[0].name})"
             self.fingerprint_ref_label.setText(folder_text)
-            self.fingerprint_ref_label.setStyleSheet("color: #333;")
+            self.fingerprint_ref_label.setStyleSheet(f"color: {colors['text_secondary']};")
         else:
             # Count different types of folders
             num_practice = len(practice_folders)
@@ -6746,7 +6879,7 @@ class AudioBrowser(QMainWindow):
                 folder_text = f"{other_folders_count} available folders"
             
             self.fingerprint_ref_label.setText(folder_text)
-            self.fingerprint_ref_label.setStyleSheet("color: #333;")
+            self.fingerprint_ref_label.setStyleSheet(f"color: {colors['text_secondary']};")
         
         self.auto_label_btn.setEnabled(can_auto_label)
         
@@ -7357,7 +7490,34 @@ class AudioBrowser(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_ORG); app.setApplicationName(APP_NAME)
-    if "Fusion" in QStyleFactory.keys(): app.setStyle("Fusion")
+    
+    # Set a consistent style for cross-machine compatibility
+    # Fusion provides the most consistent appearance across platforms
+    available_styles = QStyleFactory.keys()
+    preferred_styles = ["Fusion", "Windows", "WindowsVista", "Breeze", "Qt6CT-Style"]
+    
+    selected_style = None
+    for style in preferred_styles:
+        if style in available_styles:
+            selected_style = style
+            break
+    
+    if selected_style:
+        app.setStyle(selected_style)
+        print(f"Using Qt style: {selected_style}")
+    else:
+        print(f"Using default Qt style (available: {', '.join(available_styles)})")
+    
+    # Apply consistent application-wide color scheme
+    # This ensures consistent appearance regardless of system theme
+    app_palette = app.palette()
+    colors = _color_manager.get_ui_colors()
+    
+    # Set standard colors for consistent appearance
+    app_palette.setColor(app_palette.ColorRole.Highlight, colors['info'])
+    app_palette.setColor(app_palette.ColorRole.HighlightedText, QColor("white"))
+    app.setPalette(app_palette)
+    
     w = AudioBrowser(); w.show(); sys.exit(app.exec())
 
 if __name__ == "__main__":

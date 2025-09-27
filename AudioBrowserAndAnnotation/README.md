@@ -17,6 +17,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Multiple annotation files can live in a directory, and be visible in the application allowing each bandmate to make their own comments
 - Can export the annotations to a text file 
 - Has an undo chain
+- **Color Consistency**: Ensures consistent visual appearance across different machines and display setups
 - **Automatic Backup System**: Creates timestamped backups of metadata files before modifications
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software
 
