@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, audioop, time, getpass
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -122,6 +122,7 @@ For more help, see: https://pypi.org/project/PyQt6/"""
 
 HAVE_NUMPY, _ = _ensure_import("numpy", "numpy")
 HAVE_PYDUB, _ = _ensure_import("pydub", "pydub")
+HAVE_AUDIOOP, _ = _ensure_import("audioop", "audioop")
 if HAVE_PYDUB:
     try:
         from pydub import AudioSegment
