@@ -12,6 +12,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Build artifacts stored for 30 days, releases created on main branch
   - Uses existing build infrastructure (PyInstaller, version.py, audio_browser.spec)
 
+### Changed
+- **UI Redesign**: Converted toolbar to standard dropdown menus for cleaner interface
+  - Added proper menu bar with File and Help menus
+  - File menu contains: Change Folder, Up, Batch Rename, Export Annotations, Convert Audio, Restore Backup
+  - Help menu contains: About, Changelog
+  - Simplified toolbar now only shows: Undo/Redo, Undo limit controls, Auto-switch checkbox
+  - All existing functionality preserved with keyboard shortcuts maintained
+
 ### Fixed
 - **Waveform Stereo Detection**: Fixed issue where all songs were incorrectly detected as mono
   - Root cause: Legacy cache entries missing `has_stereo_data` field defaulted to False

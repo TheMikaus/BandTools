@@ -148,7 +148,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
-    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit
+    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit, QMenuBar
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -3482,6 +3482,60 @@ class AudioBrowser(QMainWindow):
     # ----- UI -----
     def _init_ui(self):
         self.resize(1360, 900); self.setStatusBar(QStatusBar(self))
+        
+        # Create menu bar
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu("&File")
+        
+        act_change_root = QAction("Change Band Practice &Folder…", self)
+        act_change_root.triggered.connect(self._change_root_clicked)
+        file_menu.addAction(act_change_root)
+        
+        act_up = QAction("&Up", self)
+        act_up.setShortcut(QKeySequence("Alt+Up"))
+        act_up.triggered.connect(self._go_up)
+        file_menu.addAction(act_up)
+        
+        file_menu.addSeparator()
+        
+        self.rename_action = QAction("&Batch Rename (##_ProvidedName)", self)
+        self.rename_action.triggered.connect(self._batch_rename)
+        file_menu.addAction(self.rename_action)
+        
+        self.export_action = QAction("&Export Annotations…", self)
+        self.export_action.triggered.connect(self._export_annotations)
+        file_menu.addAction(self.export_action)
+        
+        file_menu.addSeparator()
+        
+        self.convert_action = QAction("&Convert WAV→MP3 (delete WAVs)", self)
+        self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded)
+        file_menu.addAction(self.convert_action)
+        
+        self.mono_action = QAction("Convert to &Mono", self)
+        self.mono_action.triggered.connect(self._convert_to_mono)
+        file_menu.addAction(self.mono_action)
+        
+        file_menu.addSeparator()
+        
+        self.restore_backup_action = QAction("&Restore from Backup…", self)
+        self.restore_backup_action.triggered.connect(self._restore_from_backup)
+        file_menu.addAction(self.restore_backup_action)
+        
+        # Help menu
+        help_menu = menubar.addMenu("&Help")
+        
+        help_about_action = QAction("&About", self)
+        help_about_action.triggered.connect(self._show_about_dialog)
+        help_menu.addAction(help_about_action)
+        
+        help_changelog_action = QAction("&Changelog", self)
+        help_changelog_action.triggered.connect(self._show_changelog_dialog)
+        help_menu.addAction(help_changelog_action)
+        
+        # Simplified toolbar - only Undo/Redo, Undo limit, and Auto-switch
         tb = QToolBar("Main"); self.addToolBar(tb)
 
         # Undo/Redo
@@ -3497,23 +3551,8 @@ class AudioBrowser(QMainWindow):
         tb.addWidget(self.undo_spin)
         tb.addSeparator()
 
-        act_change_root = QAction("Change Band Practice Folder…", self); act_change_root.triggered.connect(self._change_root_clicked); tb.addAction(act_change_root)
-        act_up = QAction("Up", self); act_up.setShortcut(QKeySequence("Alt+Up")); act_up.triggered.connect(self._go_up); tb.addAction(act_up)
-        tb.addSeparator()
-        self.rename_action = QAction("Batch Rename (##_ProvidedName)", self); self.rename_action.triggered.connect(self._batch_rename); tb.addAction(self.rename_action)
-        self.export_action = QAction("Export Annotations…", self); self.export_action.triggered.connect(self._export_annotations); tb.addAction(self.export_action)
-        self.convert_action = QAction("Convert WAV→MP3 (delete WAVs)", self); self.convert_action.triggered.connect(self._convert_wav_to_mp3_threaded); tb.addAction(self.convert_action)
-        self.mono_action = QAction("Convert to Mono", self); self.mono_action.triggered.connect(self._convert_to_mono); tb.addAction(self.mono_action)
-        self.restore_backup_action = QAction("Restore from Backup…", self); self.restore_backup_action.triggered.connect(self._restore_from_backup); tb.addAction(self.restore_backup_action)
-        tb.addSeparator()
-
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
         wa = QWidgetAction(self); wa.setDefaultWidget(self.auto_switch_cb); tb.addAction(wa)
-        
-        # Add Help menu items
-        tb.addSeparator()
-        help_about_action = QAction("About", self); help_about_action.triggered.connect(self._show_about_dialog); tb.addAction(help_about_action)
-        help_changelog_action = QAction("Changelog", self); help_changelog_action.triggered.connect(self._show_changelog_dialog); tb.addAction(help_changelog_action)
 
         # Create main widget to hold path label and splitter
         main_widget = QWidget()
