@@ -5096,35 +5096,40 @@ class AudioBrowser(QMainWindow):
         new_audio_dir = path.parent
         need_reload_annotations = (prev_audio_dir != new_audio_dir)
         
-        # Get channel-muted file based on current checkbox settings
-        left_enabled = self.left_channel_cb.isChecked() if hasattr(self, 'left_channel_cb') else True
-        right_enabled = self.right_channel_cb.isChecked() if hasattr(self, 'right_channel_cb') else True
+        # Performance optimization: check channel muting state efficiently
+        # Skip all channel processing overhead when both channels enabled (common case)
+        try:
+            left_enabled = self.left_channel_cb.isChecked()
+            right_enabled = self.right_channel_cb.isChecked()
+            both_channels_enabled = left_enabled and right_enabled
+        except AttributeError:
+            # Fallback during initialization - assume both channels enabled
+            both_channels_enabled = True
         
-        # Performance optimization: bypass all channel processing when both channels are enabled (default state)
-        if left_enabled and right_enabled:
+        if both_channels_enabled:
             playback_file = path
         else:
             playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
         
-        self.player.stop(); self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
-        
-        # Set position if specified before starting playback
-        if seek_to_ms is not None:
-            # We'll seek after starting playback to ensure media is loaded
-            pass
-        
+        # Optimize media player state changes for faster song switching
+        self.player.stop()
+        self.player.setSource(QUrl.fromLocalFile(str(playback_file)))
         self.player.play()
         
-        # Seek to position after starting playback if requested
+        # Handle seeking if requested (this may add delay but only when seeking)
         if seek_to_ms is not None:
             # Use a small delay to ensure media is loaded before seeking
             QTimer.singleShot(100, lambda: self.player.setPosition(seek_to_ms))
         
-        self.play_pause_btn.setEnabled(True); self.position_slider.setEnabled(True); self.slider_sync.start()
+        self.play_pause_btn.setEnabled(True)
+        self.position_slider.setEnabled(True)
+        self.slider_sync.start()
         
-        # Update UI text to show channel muting info
+        # Update UI text to show channel muting info (fast operation)
         channel_info = ""
-        if not left_enabled and not right_enabled:
+        if both_channels_enabled:
+            channel_info = ""
+        elif not left_enabled and not right_enabled:
             channel_info = " (Both Muted)"
         elif not left_enabled:
             channel_info = " (Left Muted)"
@@ -5134,9 +5139,16 @@ class AudioBrowser(QMainWindow):
         self.now_playing.setText(f"Playing: {path.name}{channel_info}")
         
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-        self.current_audio_file = path; self.pending_note_start_ms = None  # Store original path, not temp file
+        self.current_audio_file = path
+        self.pending_note_start_ms = None  # Store original path, not temp file
         self._update_captured_time_label()
         
+        # Defer expensive operations to not block audio playback startup
+        # Use a short timer to let audio start playing before doing heavy UI work
+        QTimer.singleShot(10, lambda: self._finish_song_loading(path, need_reload_annotations))
+    
+    def _finish_song_loading(self, path: Path, need_reload_annotations: bool):
+        """Complete the song loading process with expensive UI operations deferred to not block audio playback."""
         # Reload annotations from the audio file's directory if needed
         if need_reload_annotations:
             self._load_names()  # Reload provided names from the new directory
