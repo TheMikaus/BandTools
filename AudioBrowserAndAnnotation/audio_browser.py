@@ -3036,6 +3036,89 @@ class BackupSelectionDialog(QMessageBox):
         self.selected_folder = self.folder_combo.currentData()
         super().accept()
 
+# ========== Auto-Generation Settings Dialog ==========
+class AutoGenerationSettingsDialog(QDialog):
+    """Dialog for configuring auto-generation settings for the whole band practice folder."""
+    
+    def __init__(self, current_settings: dict, parent=None):
+        super().__init__(parent)
+        self.current_settings = current_settings
+        self.result_settings = current_settings.copy()
+        
+        self.setWindowTitle("Auto-Generation Settings")
+        self.setModal(True)
+        self.resize(500, 300)
+        
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        
+        # Description
+        description = QLabel("Configure automatic generation settings for the entire band practice folder.")
+        description.setWordWrap(True)
+        main_layout.addWidget(description)
+        
+        main_layout.addWidget(QLabel(""))  # Spacer
+        
+        # Settings group
+        colors = get_consistent_stylesheet_colors()
+        settings_group = QWidget()
+        settings_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
+        settings_layout = QVBoxLayout(settings_group)
+        settings_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Auto-generation checkboxes
+        options_row = QHBoxLayout()
+        self.auto_gen_waveforms_cb = QCheckBox("Auto-generate waveform images")
+        self.auto_gen_waveforms_cb.setChecked(current_settings.get('auto_gen_waveforms', False))
+        options_row.addWidget(self.auto_gen_waveforms_cb)
+        
+        self.auto_gen_fingerprints_cb = QCheckBox("Auto-generate fingerprints")
+        self.auto_gen_fingerprints_cb.setChecked(current_settings.get('auto_gen_fingerprints', False))
+        options_row.addWidget(self.auto_gen_fingerprints_cb)
+        settings_layout.addLayout(options_row)
+        
+        # Timing selection
+        timing_row = QHBoxLayout()
+        timing_row.addWidget(QLabel("Auto-generate:"))
+        self.auto_gen_timing_combo = QComboBox()
+        self.auto_gen_timing_combo.addItem("On application startup", "boot")
+        self.auto_gen_timing_combo.addItem("When clicking into folder", "folder_selection")
+        current_timing_idx = self.auto_gen_timing_combo.findData(current_settings.get('auto_gen_timing', 'folder_selection'))
+        if current_timing_idx >= 0:
+            self.auto_gen_timing_combo.setCurrentIndex(current_timing_idx)
+        timing_row.addWidget(self.auto_gen_timing_combo)
+        timing_row.addStretch(1)
+        settings_layout.addLayout(timing_row)
+        
+        main_layout.addWidget(settings_group)
+        main_layout.addStretch(1)
+        
+        # Dialog buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.accept)
+        ok_btn.setDefault(True)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
+    
+    def accept(self):
+        """Handle OK button click - save settings to result."""
+        self.result_settings['auto_gen_waveforms'] = self.auto_gen_waveforms_cb.isChecked()
+        self.result_settings['auto_gen_fingerprints'] = self.auto_gen_fingerprints_cb.isChecked()
+        self.result_settings['auto_gen_timing'] = self.auto_gen_timing_combo.currentData()
+        super().accept()
+    
+    def get_settings(self):
+        """Return the configured settings."""
+        return self.result_settings
+
 # ========== Main window ==========
 class AudioBrowser(QMainWindow):
 
@@ -3449,8 +3532,6 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_waveform_thread: Optional[QThread] = None
         self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
         self._auto_gen_fingerprint_thread: Optional[QThread] = None
-        self._auto_gen_progress_label: Optional[QLabel] = None
-        self._auto_gen_cancel_btn: Optional[QPushButton] = None
         self._auto_gen_in_progress: bool = False
 
         # UI
@@ -3914,6 +3995,10 @@ class AudioBrowser(QMainWindow):
         
         file_menu.addSeparator()
         
+        self.auto_gen_settings_action = QAction("Auto-Generation &Settings…", self)
+        self.auto_gen_settings_action.triggered.connect(self._show_auto_generation_settings)
+        file_menu.addAction(self.auto_gen_settings_action)
+        
         self.restore_backup_action = QAction("&Restore from Backup…", self)
         self.restore_backup_action.triggered.connect(self._restore_from_backup)
         file_menu.addAction(self.restore_backup_action)
@@ -4195,61 +4280,6 @@ class AudioBrowser(QMainWindow):
         fp_layout.addWidget(self.auto_label_buttons_widget)
         
         lib_layout.addWidget(fp_group)
-        
-        # Auto-generation preferences section
-        auto_gen_group = QWidget()
-        auto_gen_layout = QVBoxLayout(auto_gen_group)
-        auto_gen_layout.setContentsMargins(10, 10, 10, 10)
-        colors = get_consistent_stylesheet_colors()
-        auto_gen_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
-        
-        auto_gen_title = QLabel("Auto-Generation Settings")
-        auto_gen_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
-        auto_gen_layout.addWidget(auto_gen_title)
-        
-        # Auto-generation checkboxes
-        auto_gen_options_row = QHBoxLayout()
-        self.auto_gen_waveforms_cb = QCheckBox("Auto-generate waveform images")
-        self.auto_gen_waveforms_cb.setChecked(self.auto_gen_waveforms)
-        self.auto_gen_waveforms_cb.stateChanged.connect(self._on_auto_gen_waveforms_changed)
-        auto_gen_options_row.addWidget(self.auto_gen_waveforms_cb)
-        
-        self.auto_gen_fingerprints_cb = QCheckBox("Auto-generate fingerprints")
-        self.auto_gen_fingerprints_cb.setChecked(self.auto_gen_fingerprints)
-        self.auto_gen_fingerprints_cb.stateChanged.connect(self._on_auto_gen_fingerprints_changed)
-        auto_gen_options_row.addWidget(self.auto_gen_fingerprints_cb)
-        auto_gen_layout.addLayout(auto_gen_options_row)
-        
-        # Timing selection
-        timing_row = QHBoxLayout()
-        timing_row.addWidget(QLabel("Auto-generate:"))
-        self.auto_gen_timing_combo = QComboBox()
-        self.auto_gen_timing_combo.addItem("On application startup", "boot")
-        self.auto_gen_timing_combo.addItem("When clicking into folder", "folder_selection")
-        current_timing_idx = self.auto_gen_timing_combo.findData(self.auto_gen_timing)
-        if current_timing_idx >= 0:
-            self.auto_gen_timing_combo.setCurrentIndex(current_timing_idx)
-        self.auto_gen_timing_combo.currentTextChanged.connect(self._on_auto_gen_timing_changed)
-        timing_row.addWidget(self.auto_gen_timing_combo)
-        timing_row.addStretch(1)
-        auto_gen_layout.addLayout(timing_row)
-        
-        # Progress and cancel controls (initially hidden)
-        self._auto_gen_progress_row = QHBoxLayout()
-        self._auto_gen_progress_label = QLabel("")
-        self._auto_gen_progress_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
-        self._auto_gen_progress_row.addWidget(self._auto_gen_progress_label)
-        self._auto_gen_progress_row.addStretch(1)
-        
-        self._auto_gen_cancel_btn = QPushButton("Cancel")
-        self._auto_gen_cancel_btn.clicked.connect(self._cancel_auto_generation)
-        self._auto_gen_cancel_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['danger']}; color: white; font-weight: bold; }}")
-        self._auto_gen_cancel_btn.setVisible(False)
-        self._auto_gen_progress_row.addWidget(self._auto_gen_cancel_btn)
-        
-        auto_gen_layout.addLayout(self._auto_gen_progress_row)
-        
-        lib_layout.addWidget(auto_gen_group)
         
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
@@ -7396,23 +7426,6 @@ class AudioBrowser(QMainWindow):
             self._update_fingerprint_ui()
 
     # ----- Auto-generation callbacks -----
-    def _on_auto_gen_waveforms_changed(self, state):
-        """Handle auto-generate waveforms checkbox change."""
-        self.auto_gen_waveforms = bool(state)
-        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
-    
-    def _on_auto_gen_fingerprints_changed(self, state):
-        """Handle auto-generate fingerprints checkbox change."""
-        self.auto_gen_fingerprints = bool(state)
-        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
-    
-    def _on_auto_gen_timing_changed(self):
-        """Handle auto-generation timing selection change."""
-        selected_data = self.auto_gen_timing_combo.currentData()
-        if selected_data:
-            self.auto_gen_timing = selected_data
-            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
-
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
         # Check if a fingerprinting operation is already in progress
@@ -7830,6 +7843,30 @@ class AudioBrowser(QMainWindow):
         QMessageBox.information(self, "Reference Fingerprints Generated",
                                 f"Generated {generated} new fingerprints in reference folder.")
 
+    def _show_auto_generation_settings(self):
+        """Show auto-generation settings dialog."""
+        # Gather current settings
+        current_settings = {
+            'auto_gen_waveforms': self.auto_gen_waveforms,
+            'auto_gen_fingerprints': self.auto_gen_fingerprints,
+            'auto_gen_timing': self.auto_gen_timing
+        }
+        
+        # Show dialog
+        dialog = AutoGenerationSettingsDialog(current_settings, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Apply new settings
+            new_settings = dialog.get_settings()
+            
+            self.auto_gen_waveforms = new_settings['auto_gen_waveforms']
+            self.auto_gen_fingerprints = new_settings['auto_gen_fingerprints'] 
+            self.auto_gen_timing = new_settings['auto_gen_timing']
+            
+            # Save to persistent settings
+            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
+            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
+            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
+
     def _show_about_dialog(self):
         """Show About dialog with version information."""
         about_text = f"""<h2>{APP_NAME}</h2>
@@ -7913,7 +7950,6 @@ class AudioBrowser(QMainWindow):
             return  # Nothing to generate
             
         self._auto_gen_in_progress = True
-        self._auto_gen_cancel_btn.setVisible(True)
         
         # Start with waveforms if needed, then fingerprints
         if needs_waveforms:
@@ -7923,7 +7959,7 @@ class AudioBrowser(QMainWindow):
             
     def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
         """Start auto waveform generation."""
-        self._auto_gen_progress_label.setText("Generating waveforms...")
+        self.statusBar().showMessage("Generating waveforms...")
         
         # Create worker and thread
         self._auto_gen_waveform_thread = QThread(self)
@@ -7931,7 +7967,7 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
         
         def on_waveform_progress(current, total, filename):
-            self._auto_gen_progress_label.setText(f"Generating waveforms... {current + 1}/{total}: {filename}")
+            self.statusBar().showMessage(f"Generating waveforms... {current + 1}/{total}: {filename}")
             
         def on_waveform_finished(generated_count, canceled):
             self._cleanup_auto_waveform_thread()
@@ -7956,7 +7992,7 @@ class AudioBrowser(QMainWindow):
         
     def _start_auto_fingerprint_generation(self, folder_path: Path, audio_files: List[Path]):
         """Start auto fingerprint generation.""" 
-        self._auto_gen_progress_label.setText("Generating fingerprints...")
+        self.statusBar().showMessage("Generating fingerprints...")
         
         # Create worker and thread
         self._auto_gen_fingerprint_thread = QThread(self)
@@ -7964,8 +8000,8 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_fingerprint_worker.moveToThread(self._auto_gen_fingerprint_thread)
         
         def on_fingerprint_progress(current, total, filename):
-            self._auto_gen_progress_label.setText(f"Generating fingerprints... {current + 1}/{total}: {filename}")
-            
+            self.statusBar().showMessage(f"Generating fingerprints... {current + 1}/{total}: {filename}")
+        
         def on_fingerprint_finished(generated_count, canceled):
             self._cleanup_auto_fingerprint_thread()
             self._finish_auto_generation()
@@ -7988,8 +8024,7 @@ class AudioBrowser(QMainWindow):
     def _finish_auto_generation(self):
         """Clean up after auto-generation is complete."""
         self._auto_gen_in_progress = False
-        self._auto_gen_cancel_btn.setVisible(False)
-        self._auto_gen_progress_label.setText("")
+        self.statusBar().showMessage("Auto-generation complete", 3000)  # Show for 3 seconds
         
     def _cleanup_auto_waveform_thread(self):
         """Clean up auto waveform worker and thread."""
