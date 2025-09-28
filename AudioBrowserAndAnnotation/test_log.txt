@@ -1,3 +1,0 @@
-2025-09-28 16:58:42,591 - INFO - Test message with newline
-and tab	character
-2025-09-28 16:58:42,591 - INFO - Normal message
