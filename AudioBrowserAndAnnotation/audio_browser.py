@@ -4346,6 +4346,13 @@ class AudioBrowser(QMainWindow):
         self.best_take_cb.stateChanged.connect(self._on_best_take_changed)
         pn_row.addWidget(self.best_take_cb)
         
+        # Partial Take checkbox in annotation tab
+        self.partial_take_cb = QCheckBox("Partial Take")
+        self.partial_take_cb.setToolTip("Mark this song as a partial take")
+        self.partial_take_cb.setEnabled(False)
+        self.partial_take_cb.stateChanged.connect(self._on_partial_take_changed)
+        pn_row.addWidget(self.partial_take_cb)
+        
         ann_layout.addLayout(pn_row)
 
         # --- Waveform controls ---
@@ -4786,7 +4793,7 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
             self._update_mono_button_state()
             return
@@ -4796,7 +4803,7 @@ class AudioBrowser(QMainWindow):
             folder_path = Path(fi.absoluteFilePath())
             self._set_current_practice_folder(folder_path)
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_right_table()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_right_table()
             # Note: Keep _refresh_right_table() here since folder selection means directory change
             self._update_mono_button_state()
             return
@@ -4820,7 +4827,7 @@ class AudioBrowser(QMainWindow):
                 self._update_channel_muting_state()
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
             self._update_mono_button_state()
             self._update_channel_muting_state()
@@ -5158,6 +5165,7 @@ class AudioBrowser(QMainWindow):
             self._load_annotations_for_current()
             self._refresh_provided_name_field()
             self._refresh_best_take_field()
+            self._refresh_partial_take_field()
             try: 
                 self.waveform.set_audio_file(path)
                 self._update_stereo_button_state()  # Update stereo button after waveform is loaded
@@ -5181,6 +5189,7 @@ class AudioBrowser(QMainWindow):
             self._load_annotations_for_current()
             self._refresh_provided_name_field()
             self._refresh_best_take_field()
+            self._refresh_partial_take_field()
             try: 
                 self.waveform.set_audio_file(self.current_audio_file)
                 self._update_stereo_button_state()  # Update stereo button after waveform is loaded
@@ -5282,6 +5291,7 @@ class AudioBrowser(QMainWindow):
         self._update_waveform_annotations()
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
+        self._refresh_partial_take_field()
 
     def _update_mono_button_state(self):
         """Update the mono conversion button enabled/disabled state based on current selection."""
@@ -5750,6 +5760,7 @@ class AudioBrowser(QMainWindow):
         self._update_waveform_annotations()
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
+        self._refresh_partial_take_field()
 
     def _append_annotation_row(self, entry: Dict, *, set_id: Optional[str]=None, set_name: Optional[str]=None, editable: bool=True):
         ms = int(entry.get("ms", 0))
@@ -6215,6 +6226,19 @@ class AudioBrowser(QMainWindow):
         # Refresh the tree display to show best take formatting
         self._refresh_tree_display()
 
+    # Partial take checkbox on Annotations tab
+    def _on_partial_take_changed(self, state):
+        if not self.current_audio_file:
+            return
+        fname = self.current_audio_file.name
+        is_checked = state == Qt.CheckState.Checked.value
+        self.file_partial_takes[fname] = is_checked
+        self._save_notes()  # Save the annotation data including partial_take
+        self._refresh_right_table()  # Update the library table to show the highlighting
+        
+        # Refresh the tree display to show partial take formatting
+        self._refresh_tree_display()
+
     def _refresh_provided_name_field(self):
         if not self.current_audio_file:
             self.provided_name_edit.setText("")
@@ -6234,6 +6258,17 @@ class AudioBrowser(QMainWindow):
         self.best_take_cb.blockSignals(True)  # Prevent triggering the change handler
         self.best_take_cb.setChecked(self.file_best_takes.get(fname, False))
         self.best_take_cb.blockSignals(False)
+
+    def _refresh_partial_take_field(self):
+        if not self.current_audio_file:
+            self.partial_take_cb.setChecked(False)
+            self.partial_take_cb.setEnabled(False)
+            return
+        fname = self.current_audio_file.name
+        self.partial_take_cb.setEnabled(True)
+        self.partial_take_cb.blockSignals(True)  # Prevent triggering the change handler
+        self.partial_take_cb.setChecked(self.file_partial_takes.get(fname, False))
+        self.partial_take_cb.blockSignals(False)
 
     # Autosave handlers
     def _on_general_changed(self):
