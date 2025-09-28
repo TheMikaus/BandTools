@@ -5,6 +5,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Console Output Logging System**: All console output is now redirected to a log file for better debugging and user support
+  - New log file `audiobrowser.log` created in the application directory
+  - Log file is recreated on each application startup (not appended to)
+  - All print statements replaced with proper logging calls using timestamps
+  - Maintains all existing console output functionality (startup messages, auto-generation feedback, error reporting)
+  - Provides better debugging capabilities for users and developers
+  - No console output during normal operation - all output goes to log file
 - **Enhanced Autogeneration Feedback System**: Users now have full visibility into autogeneration behavior
   - Console output shows loaded settings at startup (waveforms, fingerprints, timing)
   - Clear boot-time decision making with detailed reasoning for why autogeneration did/didn't run

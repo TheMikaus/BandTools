@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -191,6 +191,72 @@ MARKER_HIT_TOLERANCE_PX = 8
 
 # Conversion
 DEFAULT_MP3_BITRATE = "192k"
+
+# ========== Logging Setup ==========
+def setup_logging():
+    """
+    Set up logging to redirect all console output to a log file.
+    The log file is recreated each time the application starts.
+    """
+    # Get the application directory
+    app_dir = Path(__file__).parent
+    log_file = app_dir / "audiobrowser.log"
+    
+    # Remove existing log file if it exists (recreate on each startup)
+    if log_file.exists():
+        try:
+            log_file.unlink()
+        except Exception:
+            pass  # Ignore errors removing old log file
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+        ]
+    )
+    
+    # Get the root logger
+    logger = logging.getLogger()
+    
+    # Log startup message
+    logger.info(f"AudioBrowser application starting up - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Log file location: {log_file.absolute()}")
+    
+    return logger
+
+# Global logger instance
+_logger = None
+
+def get_logger():
+    """Get the global logger instance."""
+    global _logger
+    if _logger is None:
+        _logger = setup_logging()
+    return _logger
+
+def log_print(*args, **kwargs):
+    """
+    Replacement for print() that logs to file instead of console.
+    Maintains similar interface to print() for easy replacement.
+    """
+    # Convert args to string like print() does
+    message = ' '.join(str(arg) for arg in args)
+    
+    # Handle common print() keyword arguments
+    sep = kwargs.get('sep', ' ')
+    end = kwargs.get('end', '\n')
+    
+    if len(args) > 1:
+        message = sep.join(str(arg) for arg in args)
+    
+    # Remove the trailing newline since logging adds its own
+    if end == '\n' and message.endswith('\n'):
+        message = message[:-1]
+    
+    get_logger().info(message)
 
 # ========== Custom Widgets ==========
 class BestTakeIndicatorWidget(QWidget):
@@ -1335,7 +1401,7 @@ def compute_multiple_fingerprints(samples: List[float], sr: int, algorithms: Lis
             try:
                 fingerprints[alg_name] = compute_func(samples, sr)
             except Exception as e:
-                print(f"Error computing {alg_name} fingerprint: {e}")
+                log_print(f"Error computing {alg_name} fingerprint: {e}")
                 # Fallback to basic pattern
                 fingerprints[alg_name] = [0.1] * 50
     
@@ -1362,7 +1428,7 @@ def migrate_fingerprint_cache(cache: Dict) -> Dict:
             migrated = True
     
     if migrated:
-        print("Migrated fingerprint cache to new multi-algorithm format")
+        log_print("Migrated fingerprint cache to new multi-algorithm format")
     
     return cache
 
@@ -1638,7 +1704,7 @@ def backup_metadata_files(practice_folder: Path, backup_base_folder: Path) -> in
             backup_file_path.write_bytes(metadata_file.read_bytes())
             backed_up_count += 1
         except Exception as e:
-            print(f"Warning: Failed to backup {metadata_file}: {e}")
+            log_print(f"Warning: Failed to backup {metadata_file}: {e}")
     
     return backed_up_count
 
@@ -1781,9 +1847,9 @@ def restore_metadata_from_backup(backup_folder: Path, target_practice_folder: Pa
             target_file = target_practice_folder / backup_file.name
             target_file.write_bytes(backup_file.read_bytes())
             restored_count += 1
-            print(f"Restored: {backup_file.name}")
+            log_print(f"Restored: {backup_file.name}")
         except Exception as e:
-            print(f"Warning: Failed to restore {backup_file.name}: {e}")
+            log_print(f"Warning: Failed to restore {backup_file.name}: {e}")
     
     return restored_count
 
@@ -2014,7 +2080,7 @@ class FingerprintWorker(QObject):
                 
             except Exception as e:
                 error_msg = f"Error generating fingerprint: {e}"
-                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+                log_print(f"Error generating fingerprint for {audio_file.name}: {e}")
                 self.file_done.emit(audio_file.name, False, error_msg)
         
         # Save the cache after processing all files
@@ -3169,7 +3235,7 @@ class AudioBrowser(QMainWindow):
                     except Exception:
                         time.sleep(0.05)
         except Exception as _e:
-            print("Issue#2: release-media error:", _e)
+            log_print("Issue#2: release-media error:", _e)
     
     # ---- Issue #3: default annotation-set name from current user ----
     def _resolve_user_display_name(self) -> str:
@@ -3528,10 +3594,10 @@ class AudioBrowser(QMainWindow):
         self.auto_gen_timing: str = self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
         
         # Print loaded settings for debugging
-        print("Auto-generation settings loaded:")
-        print(f"  Waveforms: {self.auto_gen_waveforms}")
-        print(f"  Fingerprints: {self.auto_gen_fingerprints}") 
-        print(f"  Timing: {self.auto_gen_timing}")
+        log_print("Auto-generation settings loaded:")
+        log_print(f"  Waveforms: {self.auto_gen_waveforms}")
+        log_print(f"  Fingerprints: {self.auto_gen_fingerprints}") 
+        log_print(f"  Timing: {self.auto_gen_timing}")
 
         # Auto-generation workers and progress tracking
         self._auto_gen_waveform_worker: Optional['AutoWaveformWorker'] = None
@@ -3571,21 +3637,21 @@ class AudioBrowser(QMainWindow):
 
         # Start auto-generation on boot if enabled
         if self.auto_gen_timing == "boot" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
-            print(f"Boot auto-generation enabled - will start in 1 second")
-            print(f"  Settings: timing=boot, waveforms={self.auto_gen_waveforms}, fingerprints={self.auto_gen_fingerprints}")
+            log_print(f"Boot auto-generation enabled - will start in 1 second")
+            log_print(f"  Settings: timing=boot, waveforms={self.auto_gen_waveforms}, fingerprints={self.auto_gen_fingerprints}")
             self.statusBar().showMessage("Auto-generation will start shortly...", 4000)
             QTimer.singleShot(1000, lambda: self._start_auto_generation_for_folder(self.current_practice_folder))
         else:
             # Show why boot auto-generation was not triggered
             if self.auto_gen_timing != "boot":
-                print(f"Boot auto-generation not enabled (timing set to '{self.auto_gen_timing}')")
+                log_print(f"Boot auto-generation not enabled (timing set to '{self.auto_gen_timing}')")
             elif not (self.auto_gen_waveforms or self.auto_gen_fingerprints):
-                print("Boot auto-generation not enabled (both waveforms and fingerprints disabled)")
+                log_print("Boot auto-generation not enabled (both waveforms and fingerprints disabled)")
             else:
-                print("Boot auto-generation not enabled (unknown reason)")
+                log_print("Boot auto-generation not enabled (unknown reason)")
             
             if self.auto_gen_timing == "folder_selection" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
-                print("Auto-generation will trigger when selecting folders")
+                log_print("Auto-generation will trigger when selecting folders")
             
             self.statusBar().showMessage("Auto-generation ready", 2000)
 
@@ -3656,7 +3722,7 @@ class AudioBrowser(QMainWindow):
             backup_folder = create_metadata_backup_if_needed(self.current_practice_folder)
             if backup_folder:
                 relative_backup = backup_folder.relative_to(self.current_practice_folder)
-                print(f"Backup created before modification: {relative_backup}")
+                log_print(f"Backup created before modification: {relative_backup}")
                 # Could also show a brief status message in the UI if desired
                 # self.statusBar().showMessage(f"Backup created: {relative_backup}", 3000)
             
@@ -3664,7 +3730,7 @@ class AudioBrowser(QMainWindow):
             self._backup_created_this_session = True
             
         except Exception as e:
-            print(f"Warning: Failed to create backup: {e}")
+            log_print(f"Warning: Failed to create backup: {e}")
             # Mark as attempted even if failed to avoid repeated attempts
             self._backup_created_this_session = True
 
@@ -3821,9 +3887,9 @@ class AudioBrowser(QMainWindow):
                 legacy_data = load_json(legacy_notes_path, {})
                 if legacy_data:  # Only migrate if there's actual data
                     save_json(user_notes_path, legacy_data)
-                    print(f"Migrated annotations from {legacy_notes_path.name} to {user_notes_path.name}")
+                    log_print(f"Migrated annotations from {legacy_notes_path.name} to {user_notes_path.name}")
             except Exception as e:
-                print(f"Warning: Could not migrate legacy annotations: {e}")
+                log_print(f"Warning: Could not migrate legacy annotations: {e}")
         
         data = load_json(user_notes_path, {})
         try:
@@ -5090,7 +5156,7 @@ class AudioBrowser(QMainWindow):
             return temp_path
             
         except Exception as e:
-            print(f"Error creating channel-muted file: {e}")
+            log_print(f"Error creating channel-muted file: {e}")
             return path  # Fall back to original file
     
     def _cleanup_temp_channel_files(self):
@@ -5224,13 +5290,13 @@ class AudioBrowser(QMainWindow):
             src_idx = self.fs_model.index(str(path))
             if not src_idx.isValid():
                 # File not found in filesystem model, this could happen if model is not updated
-                print(f"Warning: Could not find {path} in filesystem model")
+                log_print(f"Warning: Could not find {path} in filesystem model")
                 return
                 
             # Map from source model to proxy model
             proxy_idx = self.file_proxy.mapFromSource(src_idx)
             if not proxy_idx.isValid():
-                print(f"Warning: Could not map {path} to proxy model")
+                log_print(f"Warning: Could not map {path} to proxy model")
                 return
             
             # Set the programmatic selection flag to prevent triggering selection change events
@@ -5254,7 +5320,7 @@ class AudioBrowser(QMainWindow):
                 
         except Exception as e:
             # Log the error but don't crash - tree highlighting is not critical for playback
-            print(f"Warning: Failed to highlight {path} in tree view: {e}")
+            log_print(f"Warning: Failed to highlight {path} in tree view: {e}")
 
     def _restore_folder_selection(self):
         """Restore the folder selection in the tree view to match current_practice_folder.
@@ -5292,7 +5358,7 @@ class AudioBrowser(QMainWindow):
                 
         except Exception as e:
             # Log the error but don't crash - folder selection restoration is not critical
-            print(f"Warning: Failed to restore folder selection for {self.current_practice_folder}: {e}")
+            log_print(f"Warning: Failed to restore folder selection for {self.current_practice_folder}: {e}")
 
     def _stop_playback(self):
         if self.player.playbackState() != QMediaPlayer.PlaybackState.StoppedState: self.player.stop()
@@ -5367,13 +5433,13 @@ class AudioBrowser(QMainWindow):
                 if p.resolve() == cur:
                     if i + 1 < len(files):
                         next_file = files[i + 1]
-                        print(f"Auto-progressing from '{cur.name}' to '{next_file.name}'")
+                        log_print(f"Auto-progressing from '{cur.name}' to '{next_file.name}'")
                         self._play_file(next_file)
                     else:
-                        print(f"Auto-progression: reached end of playlist (last file: '{cur.name}')")
+                        log_print(f"Auto-progression: reached end of playlist (last file: '{cur.name}')")
                     break
         except Exception as e:
-            print(f"Error during auto-progression: {e}")
+            log_print(f"Error during auto-progression: {e}")
             # Don't let auto-progression errors crash the application
 
     # ----- Slider/time -----
@@ -5641,7 +5707,7 @@ class AudioBrowser(QMainWindow):
                 self._play_file(path)
         except Exception as _e:
             # Be defensive; do not break UI if something is slightly different locally
-            print("Issue#1 handler error:", _e)
+            log_print("Issue#1 handler error:", _e)
 
     def _on_library_cell_double_clicked(self, row: int, column: int):
         """Handle double-clicks on the library table cells."""
@@ -6662,7 +6728,7 @@ class AudioBrowser(QMainWindow):
                         "duration_ms": dur_ms
                     }
                 except Exception as e:
-                    print(f"Error processing {audio_file.name}: {e}")
+                    log_print(f"Error processing {audio_file.name}: {e}")
                     continue
             
             # Find best match across all practice folders
@@ -7671,7 +7737,7 @@ class AudioBrowser(QMainWindow):
                         "duration_ms": dur_ms
                     }
                 except Exception as e:
-                    print(f"Error processing {audio_file.name}: {e}")
+                    log_print(f"Error processing {audio_file.name}: {e}")
                     continue
             
             # Find best match across all practice folders
@@ -7687,7 +7753,7 @@ class AudioBrowser(QMainWindow):
                 # Also copy sub-sections from the matched file
                 subsections_copied = self._copy_subsections_from_matched_file(audio_file.name, source_folder, matched_filename)
                 if subsections_copied > 0:
-                    print(f"Copied {subsections_copied} sub-sections for {audio_file.name}")
+                    log_print(f"Copied {subsections_copied} sub-sections for {audio_file.name}")
                 
                 # Check if this was a unique match (song appears in only one folder)
                 folder_count = len(fingerprint_map[matched_filename])
@@ -7857,7 +7923,7 @@ class AudioBrowser(QMainWindow):
                 generated += 1
                 
             except Exception as e:
-                print(f"Error generating fingerprint for {audio_file.name}: {e}")
+                log_print(f"Error generating fingerprint for {audio_file.name}: {e}")
         
         progress.setValue(len(ref_audio_files))
         save_fingerprint_cache(self.fingerprint_reference_dir, cache)
@@ -7885,10 +7951,10 @@ class AudioBrowser(QMainWindow):
             self.auto_gen_timing = new_settings['auto_gen_timing']
             
             # Print updated settings for debugging
-            print("Auto-generation settings updated:")
-            print(f"  Waveforms: {self.auto_gen_waveforms}")
-            print(f"  Fingerprints: {self.auto_gen_fingerprints}")
-            print(f"  Timing: {self.auto_gen_timing}")
+            log_print("Auto-generation settings updated:")
+            log_print(f"  Waveforms: {self.auto_gen_waveforms}")
+            log_print(f"  Fingerprints: {self.auto_gen_fingerprints}")
+            log_print(f"  Timing: {self.auto_gen_timing}")
             
             # Save to persistent settings
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
@@ -7960,10 +8026,10 @@ class AudioBrowser(QMainWindow):
     # ----- Auto-generation methods -----
     def _start_auto_generation_for_folder(self, folder_path: Path):
         """Start auto-generation for the given folder if enabled and not already running."""
-        print(f"Auto-generation check for folder: {folder_path}")
+        log_print(f"Auto-generation check for folder: {folder_path}")
         
         if self._auto_gen_in_progress:
-            print("  Skipped: auto-generation already in progress")
+            log_print("  Skipped: auto-generation already in progress")
             self.statusBar().showMessage("Auto-generation already running", 2000)
             return  # Already running
             
@@ -7972,7 +8038,7 @@ class AudioBrowser(QMainWindow):
             audio_files.extend(folder_path.glob(f"*{ext}"))
             
         if not audio_files:
-            print("  Skipped: no audio files found in folder")
+            log_print("  Skipped: no audio files found in folder")
             self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
             return  # No audio files to process
             
@@ -7980,14 +8046,14 @@ class AudioBrowser(QMainWindow):
         needs_waveforms = self.auto_gen_waveforms
         needs_fingerprints = self.auto_gen_fingerprints
         
-        print(f"  Settings: waveforms={needs_waveforms}, fingerprints={needs_fingerprints}")
+        log_print(f"  Settings: waveforms={needs_waveforms}, fingerprints={needs_fingerprints}")
         
         if not needs_waveforms and not needs_fingerprints:
-            print("  Skipped: auto-generation disabled in settings")
+            log_print("  Skipped: auto-generation disabled in settings")
             self.statusBar().showMessage("Auto-generation skipped: disabled in settings", 3000)
             return  # Nothing to generate
             
-        print(f"  Starting auto-generation for {len(audio_files)} audio files")
+        log_print(f"  Starting auto-generation for {len(audio_files)} audio files")
         self._auto_gen_in_progress = True
         
         # Start with waveforms if needed, then fingerprints
@@ -7998,7 +8064,7 @@ class AudioBrowser(QMainWindow):
             
     def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
         """Start auto waveform generation."""
-        print(f"Starting waveform generation for {len(audio_files)} files...")
+        log_print(f"Starting waveform generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating waveforms...")
         
         # Create worker and thread
@@ -8008,18 +8074,18 @@ class AudioBrowser(QMainWindow):
         
         def on_waveform_progress(current, total, filename):
             progress_msg = f"Generating waveforms... {current + 1}/{total}: {filename}"
-            print(f"  {progress_msg}")
+            log_print(f"  {progress_msg}")
             self.statusBar().showMessage(progress_msg)
             
         def on_waveform_finished(generated_count, canceled):
             self._cleanup_auto_waveform_thread()
             
             if canceled:
-                print("Waveform generation was canceled")
+                log_print("Waveform generation was canceled")
                 self._finish_auto_generation()
                 return
                 
-            print(f"Waveform generation completed: {generated_count} files processed")
+            log_print(f"Waveform generation completed: {generated_count} files processed")
             
             # Start fingerprints if requested
             if follow_with_fingerprints and self.auto_gen_fingerprints:
@@ -8037,7 +8103,7 @@ class AudioBrowser(QMainWindow):
         
     def _start_auto_fingerprint_generation(self, folder_path: Path, audio_files: List[Path]):
         """Start auto fingerprint generation."""
-        print(f"Starting fingerprint generation for {len(audio_files)} files...")
+        log_print(f"Starting fingerprint generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating fingerprints...")
         
         # Create worker and thread
@@ -8047,15 +8113,15 @@ class AudioBrowser(QMainWindow):
         
         def on_fingerprint_progress(current, total, filename):
             progress_msg = f"Generating fingerprints... {current + 1}/{total}: {filename}"
-            print(f"  {progress_msg}")
+            log_print(f"  {progress_msg}")
             self.statusBar().showMessage(progress_msg)
         
         def on_fingerprint_finished(generated_count, canceled):
             self._cleanup_auto_fingerprint_thread()
             if canceled:
-                print("Fingerprint generation was canceled")
+                log_print("Fingerprint generation was canceled")
             else:
-                print(f"Fingerprint generation completed: {generated_count} files processed")
+                log_print(f"Fingerprint generation completed: {generated_count} files processed")
             self._finish_auto_generation()
             
         # Connect signals
@@ -8068,7 +8134,7 @@ class AudioBrowser(QMainWindow):
         
     def _cancel_auto_generation(self):
         """Cancel the currently running auto-generation."""
-        print("Canceling auto-generation...")
+        log_print("Canceling auto-generation...")
         if self._auto_gen_waveform_worker:
             self._auto_gen_waveform_worker.cancel()
         if self._auto_gen_fingerprint_worker:
@@ -8077,7 +8143,7 @@ class AudioBrowser(QMainWindow):
     def _finish_auto_generation(self):
         """Clean up after auto-generation is complete."""
         self._auto_gen_in_progress = False
-        print("Auto-generation completed successfully")
+        log_print("Auto-generation completed successfully")
         self.statusBar().showMessage("Auto-generation complete", 3000)  # Show for 3 seconds
         
     def _cleanup_auto_waveform_thread(self):
@@ -8137,6 +8203,9 @@ class AudioBrowser(QMainWindow):
 
 # ========== Entrypoint ==========
 def main():
+    # Set up logging first, before any other output
+    setup_logging()
+    
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_ORG); app.setApplicationName(APP_NAME)
     
@@ -8153,9 +8222,9 @@ def main():
     
     if selected_style:
         app.setStyle(selected_style)
-        print(f"Using Qt style: {selected_style}")
+        log_print(f"Using Qt style: {selected_style}")
     else:
-        print(f"Using default Qt style (available: {', '.join(available_styles)})")
+        log_print(f"Using default Qt style (available: {', '.join(available_styles)})")
     
     # Apply consistent application-wide color scheme
     # This ensures consistent appearance regardless of system theme
