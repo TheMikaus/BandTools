@@ -3680,8 +3680,14 @@ class AudioBrowser(QMainWindow):
         if self.auto_gen_timing == "boot" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
             log_print(f"Boot auto-generation enabled - will start in 1 second")
             log_print(f"  Settings: timing=boot, waveforms={self.auto_gen_waveforms}, fingerprints={self.auto_gen_fingerprints}")
+            log_print(f"  Target folder: {self.current_practice_folder}")
             self.statusBar().showMessage("Auto-generation will start shortly...", 4000)
-            QTimer.singleShot(1000, lambda: self._start_auto_generation_for_folder(self.current_practice_folder))
+            try:
+                QTimer.singleShot(1000, lambda: self._start_auto_generation_for_folder(self.current_practice_folder))
+                log_print("  Auto-generation timer scheduled successfully")
+            except Exception as e:
+                log_print(f"  ERROR: Failed to schedule auto-generation timer: {e}")
+                self.statusBar().showMessage(f"Auto-generation failed to schedule: {str(e)}", 3000)
         else:
             # Show why boot auto-generation was not triggered
             if self.auto_gen_timing != "boot":
@@ -3883,7 +3889,11 @@ class AudioBrowser(QMainWindow):
                 self.auto_gen_timing == "folder_selection" and 
                 (self.auto_gen_waveforms or self.auto_gen_fingerprints)):
                 # Use a timer to avoid blocking the UI thread
-                QTimer.singleShot(100, lambda: self._start_auto_generation_for_folder(folder))
+                try:
+                    QTimer.singleShot(100, lambda: self._start_auto_generation_for_folder(folder))
+                    log_print(f"Folder selection auto-generation scheduled for: {folder}")
+                except Exception as e:
+                    log_print(f"ERROR: Failed to schedule folder selection auto-generation: {e}")
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
         """Return the notes JSON path for the current audio file's directory."""
@@ -8116,14 +8126,42 @@ class AudioBrowser(QMainWindow):
         """Start auto-generation for the given folder if enabled and not already running."""
         log_print(f"Auto-generation check for folder: {folder_path}")
         
+        # Validate folder_path
+        if not folder_path:
+            log_print("  ERROR: folder_path is None or empty")
+            self.statusBar().showMessage("Auto-generation failed: invalid folder path", 3000)
+            return
+        
+        if not isinstance(folder_path, Path):
+            log_print(f"  ERROR: folder_path is not a Path object (type: {type(folder_path)})")
+            self.statusBar().showMessage("Auto-generation failed: invalid folder path", 3000)
+            return
+        
+        if not folder_path.exists():
+            log_print(f"  ERROR: Folder does not exist: {folder_path}")
+            self.statusBar().showMessage("Auto-generation failed: folder not found", 3000)
+            return
+        
+        if not folder_path.is_dir():
+            log_print(f"  ERROR: Path is not a directory: {folder_path}")
+            self.statusBar().showMessage("Auto-generation failed: not a directory", 3000)
+            return
+        
         if self._auto_gen_in_progress:
             log_print("  Skipped: auto-generation already in progress")
             self.statusBar().showMessage("Auto-generation already running", 2000)
             return  # Already running
             
         audio_files = []
-        for ext in AUDIO_EXTS:
-            audio_files.extend(folder_path.glob(f"*{ext}"))
+        try:
+            for ext in AUDIO_EXTS:
+                found_files = list(folder_path.glob(f"*{ext}"))
+                audio_files.extend(found_files)
+                log_print(f"  Found {len(found_files)} {ext} files")
+        except Exception as e:
+            log_print(f"  ERROR: Failed to scan folder for audio files: {e}")
+            self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
+            return
             
         if not audio_files:
             log_print("  Skipped: no audio files found in folder")
@@ -8145,20 +8183,32 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_in_progress = True
         
         # Start with waveforms if needed, then fingerprints
-        if needs_waveforms:
-            self._start_auto_waveform_generation(folder_path, audio_files, needs_fingerprints)
-        elif needs_fingerprints:
-            self._start_auto_fingerprint_generation(folder_path, audio_files)
+        try:
+            if needs_waveforms:
+                self._start_auto_waveform_generation(folder_path, audio_files, needs_fingerprints)
+            elif needs_fingerprints:
+                self._start_auto_fingerprint_generation(folder_path, audio_files)
+        except Exception as e:
+            log_print(f"  ERROR: Failed to start auto-generation: {e}")
+            self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
+            self._auto_gen_in_progress = False  # Reset flag on error
+            return
             
     def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
         """Start auto waveform generation."""
         log_print(f"Starting waveform generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating waveforms...")
         
-        # Create worker and thread
-        self._auto_gen_waveform_thread = QThread(self)
-        self._auto_gen_waveform_worker = AutoWaveformWorker([str(f) for f in audio_files], str(folder_path))
-        self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
+        try:
+            # Create worker and thread
+            self._auto_gen_waveform_thread = QThread(self)
+            self._auto_gen_waveform_worker = AutoWaveformWorker([str(f) for f in audio_files], str(folder_path))
+            self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
+        except Exception as e:
+            log_print(f"  ERROR: Failed to create waveform worker: {e}")
+            self.statusBar().showMessage(f"Waveform generation failed: {str(e)}", 3000)
+            self._auto_gen_in_progress = False
+            return
         
         def on_waveform_progress(current, total, filename):
             progress_msg = f"Generating waveforms... {current + 1}/{total}: {filename}"
@@ -8181,23 +8231,37 @@ class AudioBrowser(QMainWindow):
             else:
                 self._finish_auto_generation()
                 
-        # Connect signals
-        self._auto_gen_waveform_thread.started.connect(self._auto_gen_waveform_worker.run)
-        self._auto_gen_waveform_worker.progress.connect(on_waveform_progress)
-        self._auto_gen_waveform_worker.finished.connect(on_waveform_finished)
-        
-        # Start thread
-        self._auto_gen_waveform_thread.start()
+        # Connect signals and start thread
+        try:
+            self._auto_gen_waveform_thread.started.connect(self._auto_gen_waveform_worker.run)
+            self._auto_gen_waveform_worker.progress.connect(on_waveform_progress)
+            self._auto_gen_waveform_worker.finished.connect(on_waveform_finished)
+            
+            # Start thread
+            self._auto_gen_waveform_thread.start()
+            log_print("  Waveform generation thread started successfully")
+        except Exception as e:
+            log_print(f"  ERROR: Failed to start waveform generation thread: {e}")
+            self.statusBar().showMessage(f"Waveform generation failed to start: {str(e)}", 3000)
+            self._cleanup_auto_waveform_thread()
+            self._auto_gen_in_progress = False
+            return
         
     def _start_auto_fingerprint_generation(self, folder_path: Path, audio_files: List[Path]):
         """Start auto fingerprint generation."""
         log_print(f"Starting fingerprint generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating fingerprints...")
         
-        # Create worker and thread
-        self._auto_gen_fingerprint_thread = QThread(self)
-        self._auto_gen_fingerprint_worker = AutoFingerprintWorker([str(f) for f in audio_files], str(folder_path))
-        self._auto_gen_fingerprint_worker.moveToThread(self._auto_gen_fingerprint_thread)
+        try:
+            # Create worker and thread
+            self._auto_gen_fingerprint_thread = QThread(self)
+            self._auto_gen_fingerprint_worker = AutoFingerprintWorker([str(f) for f in audio_files], str(folder_path))
+            self._auto_gen_fingerprint_worker.moveToThread(self._auto_gen_fingerprint_thread)
+        except Exception as e:
+            log_print(f"  ERROR: Failed to create fingerprint worker: {e}")
+            self.statusBar().showMessage(f"Fingerprint generation failed: {str(e)}", 3000)
+            self._auto_gen_in_progress = False
+            return
         
         def on_fingerprint_progress(current, total, filename):
             progress_msg = f"Generating fingerprints... {current + 1}/{total}: {filename}"
@@ -8212,13 +8276,21 @@ class AudioBrowser(QMainWindow):
                 log_print(f"Fingerprint generation completed: {generated_count} files processed")
             self._finish_auto_generation()
             
-        # Connect signals
-        self._auto_gen_fingerprint_thread.started.connect(self._auto_gen_fingerprint_worker.run)
-        self._auto_gen_fingerprint_worker.progress.connect(on_fingerprint_progress)
-        self._auto_gen_fingerprint_worker.finished.connect(on_fingerprint_finished)
-        
-        # Start thread
-        self._auto_gen_fingerprint_thread.start()
+        # Connect signals and start thread
+        try:
+            self._auto_gen_fingerprint_thread.started.connect(self._auto_gen_fingerprint_worker.run)
+            self._auto_gen_fingerprint_worker.progress.connect(on_fingerprint_progress)
+            self._auto_gen_fingerprint_worker.finished.connect(on_fingerprint_finished)
+            
+            # Start thread
+            self._auto_gen_fingerprint_thread.start()
+            log_print("  Fingerprint generation thread started successfully")
+        except Exception as e:
+            log_print(f"  ERROR: Failed to start fingerprint generation thread: {e}")
+            self.statusBar().showMessage(f"Fingerprint generation failed to start: {str(e)}", 3000)
+            self._cleanup_auto_fingerprint_thread()
+            self._auto_gen_in_progress = False
+            return
         
     def _cancel_auto_generation(self):
         """Cancel the currently running auto-generation."""
