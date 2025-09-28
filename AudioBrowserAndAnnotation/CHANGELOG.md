@@ -33,6 +33,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Automatic version increment using existing git-based system
   - Build artifacts stored for 30 days, releases created on main branch
   - Uses existing build infrastructure (PyInstaller, version.py, audio_browser.spec)
+- **Partial Take Checkbox in Annotations Tab**: Complete the partial take marking workflow
+  - Added "Partial Take" checkbox next to "Best Take" checkbox in Annotations tab
+  - Checkbox is enabled/disabled based on file selection state
+  - State automatically saved to annotation data with proper integration
+  - Checkbox state updates when switching between files 
+  - Tooltip explains "Mark this song as a partial take"
+  - Seamlessly integrates with existing multi-user annotation system
 
 ### Fixed
 - **Major Performance Optimization for Song Selection**: Eliminated multi-second delays when selecting songs
