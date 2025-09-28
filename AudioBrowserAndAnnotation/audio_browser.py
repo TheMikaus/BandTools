@@ -168,6 +168,9 @@ SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "show_all_folder_notes"
 SETTINGS_KEY_FINGERPRINT_DIR = "fingerprint_reference_dir"
 SETTINGS_KEY_FINGERPRINT_THRESHOLD = "fingerprint_match_threshold"
 SETTINGS_KEY_FINGERPRINT_ALGORITHM = "fingerprint_algorithm"
+SETTINGS_KEY_AUTO_GEN_WAVEFORMS = "auto_generate_waveforms"
+SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generate_fingerprints"
+SETTINGS_KEY_AUTO_GEN_TIMING = "auto_generation_timing"  # "boot" or "folder_selection"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
@@ -2018,6 +2021,195 @@ class FingerprintWorker(QObject):
         save_fingerprint_cache(self._current_dir, cache)
         self.finished.emit(generated, False)
 
+# ========== Auto-generation workers ==========
+class AutoWaveformWorker(QObject):
+    """Worker to automatically generate waveforms for all audio files in a folder"""
+    progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
+    file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
+    finished = pyqtSignal(int, bool)  # generated_count, canceled
+
+    def __init__(self, audio_files: List[str], folder_path: str):
+        super().__init__()
+        self._audio_files = audio_files[:]
+        self._folder_path = folder_path
+        self._canceled = False
+
+    def cancel(self):
+        self._canceled = True
+
+    def run(self):
+        generated_count = 0
+        
+        for i, audio_file in enumerate(self._audio_files):
+            if self._canceled:
+                self.finished.emit(generated_count, True)
+                return
+                
+            filename = Path(audio_file).name
+            self.progress.emit(i, len(self._audio_files), filename)
+            
+            try:
+                # Check if waveform cache files already exist
+                audio_path = Path(audio_file)
+                mono_cache_file = audio_path.parent / f".waveform_cache_{audio_path.stem}.json"
+                stereo_cache_file = audio_path.parent / f".waveform_cache_{audio_path.stem}_stereo.json"
+                
+                # Skip if both caches exist (don't regenerate existing waveforms)
+                if mono_cache_file.exists() and stereo_cache_file.exists():
+                    self.file_done.emit(filename, True, "Already cached")
+                    continue
+                
+                # Generate actual waveform data using existing logic
+                channel_count = get_audio_channel_count(audio_path)
+                has_stereo_data = channel_count >= 2
+                
+                # Generate mono waveform if not exists
+                if not mono_cache_file.exists():
+                    try:
+                        samples, _sr, dur_ms, _ = decode_audio_samples(audio_path, stereo=False)
+                        
+                        # Generate mono peaks
+                        all_peaks = []
+                        for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100):
+                            all_peaks.extend(chunk_peaks)
+                        
+                        mono_data = {
+                            "peaks": all_peaks,
+                            "duration_ms": dur_ms,
+                            "columns": WAVEFORM_COLUMNS,
+                            "stereo": False
+                        }
+                        
+                        with open(mono_cache_file, 'w') as f:
+                            json.dump(mono_data, f)
+                            
+                    except Exception as e:
+                        self.file_done.emit(filename, False, f"Error generating mono waveform: {e}")
+                        continue
+                        
+                # Generate stereo waveform if not exists and file has stereo data
+                if not stereo_cache_file.exists() and has_stereo_data:
+                    try:
+                        samples, _sr, dur_ms, stereo_samples = decode_audio_samples(audio_path, stereo=True)
+                        
+                        # Generate stereo peaks
+                        all_peaks = []
+                        for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100, stereo_samples):
+                            all_peaks.extend(chunk_peaks)
+                        
+                        stereo_data = {
+                            "peaks": all_peaks,
+                            "duration_ms": dur_ms,
+                            "columns": WAVEFORM_COLUMNS,
+                            "stereo": True
+                        }
+                        
+                        with open(stereo_cache_file, 'w') as f:
+                            json.dump(stereo_data, f)
+                            
+                    except Exception as e:
+                        self.file_done.emit(filename, False, f"Error generating stereo waveform: {e}")
+                        continue
+                elif not has_stereo_data:
+                    # Create placeholder stereo file indicating no stereo data
+                    stereo_data = {"peaks": [], "duration_ms": 0, "stereo": False, "no_stereo_data": True}
+                    try:
+                        with open(stereo_cache_file, 'w') as f:
+                            json.dump(stereo_data, f)
+                    except Exception as e:
+                        pass  # Not critical if placeholder creation fails
+                
+                generated_count += 1
+                self.file_done.emit(filename, True, "Generated")
+                
+            except Exception as e:
+                self.file_done.emit(filename, False, str(e))
+        
+        self.finished.emit(generated_count, False)
+
+class AutoFingerprintWorker(QObject):
+    """Worker to automatically generate fingerprints for all audio files in a folder"""
+    progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
+    file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
+    finished = pyqtSignal(int, bool)  # generated_count, canceled
+
+    def __init__(self, audio_files: List[str], folder_path: str):
+        super().__init__()
+        self._audio_files = audio_files[:]
+        self._folder_path = folder_path
+        self._canceled = False
+
+    def cancel(self):
+        self._canceled = True
+
+    def run(self):
+        generated_count = 0
+        
+        # Load existing fingerprint cache
+        cache_path = Path(self._folder_path) / FINGERPRINTS_JSON
+        cache = load_fingerprint_cache(self._folder_path)
+        
+        for i, audio_file in enumerate(self._audio_files):
+            if self._canceled:
+                self.finished.emit(generated_count, True)
+                return
+                
+            filename = Path(audio_file).name
+            self.progress.emit(i, len(self._audio_files), filename)
+            
+            try:
+                # Check if fingerprint already exists in cache
+                if filename in cache:
+                    self.file_done.emit(filename, True, "Already cached")
+                    continue
+                
+                # Generate fingerprint (reuses existing logic)
+                try:
+                    # Load existing cache properly
+                    if "files" not in cache:
+                        cache["files"] = {}
+                        
+                    # Check if fingerprint already exists in cache  
+                    if filename in cache["files"]:
+                        self.file_done.emit(filename, True, "Already cached")
+                        continue
+                    
+                    # Decode audio and generate fingerprints
+                    samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
+                    
+                    # Generate all algorithms
+                    new_fingerprints = compute_multiple_fingerprints(samples, sr, list(FINGERPRINT_ALGORITHMS.keys()))
+                    
+                    if new_fingerprints:
+                        # Get file signature
+                        size, mtime = file_signature(Path(audio_file))
+                        
+                        cache["files"][filename] = {
+                            "fingerprints": new_fingerprints,
+                            "size": size,
+                            "mtime": mtime,
+                            "duration_ms": dur_ms
+                        }
+                        generated_count += 1
+                        self.file_done.emit(filename, True, "Generated")
+                    else:
+                        self.file_done.emit(filename, False, "No fingerprints generated")
+                        
+                except Exception as e:
+                    self.file_done.emit(filename, False, str(e))
+                    
+            except Exception as e:
+                self.file_done.emit(filename, False, str(e))
+        
+        # Save updated cache
+        try:
+            save_fingerprint_cache(self._folder_path, cache)
+        except Exception as e:
+            # Don't fail completely if cache save fails
+            pass
+            
+        self.finished.emit(generated_count, False)
+
 # ========== Waveform view ==========
 class WaveformView(QWidget):
     markerMoved = pyqtSignal(str, int, int)     # set_id, uid, ms
@@ -3247,6 +3439,20 @@ class AudioBrowser(QMainWindow):
         self.auto_label_in_progress: bool = False
         self.auto_label_backup_names: Dict[str, str] = {}
 
+        # Auto-generation preferences
+        self.auto_gen_waveforms: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, 0)))
+        self.auto_gen_fingerprints: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, 0)))
+        self.auto_gen_timing: str = self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
+
+        # Auto-generation workers and progress tracking
+        self._auto_gen_waveform_worker: Optional['AutoWaveformWorker'] = None
+        self._auto_gen_waveform_thread: Optional[QThread] = None
+        self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
+        self._auto_gen_fingerprint_thread: Optional[QThread] = None
+        self._auto_gen_progress_label: Optional[QLabel] = None
+        self._auto_gen_cancel_btn: Optional[QPushButton] = None
+        self._auto_gen_in_progress: bool = False
+
         # UI
         self._init_ui()
 
@@ -3272,6 +3478,13 @@ class AudioBrowser(QMainWindow):
         self.slider_sync = QTimer(self); self.slider_sync.setInterval(200)
         self.slider_sync.timeout.connect(self._sync_slider)
         self.player.positionChanged.connect(lambda _: self._sync_slider())
+
+        # Mark initialization as complete
+        self._initialization_complete = True
+
+        # Start auto-generation on boot if enabled
+        if self.auto_gen_timing == "boot" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
+            QTimer.singleShot(1000, lambda: self._start_auto_generation_for_folder(self.current_practice_folder))
 
         # Waveform hooks
         self.waveform.markerMoved.connect(self._on_marker_moved_multi)
@@ -3454,6 +3667,13 @@ class AudioBrowser(QMainWindow):
                 # Clear channel count cache when changing directories to avoid stale entries
                 self._channel_count_cache.clear()
             self.current_practice_folder = folder
+            
+            # Trigger auto-generation if enabled for folder selection and initialization is complete
+            if (self._initialization_complete and 
+                self.auto_gen_timing == "folder_selection" and 
+                (self.auto_gen_waveforms or self.auto_gen_fingerprints)):
+                # Use a timer to avoid blocking the UI thread
+                QTimer.singleShot(100, lambda: self._start_auto_generation_for_folder(folder))
     
     def _get_notes_json_path_for_audio_file(self) -> Path:
         """Return the notes JSON path for the current audio file's directory."""
@@ -3975,6 +4195,61 @@ class AudioBrowser(QMainWindow):
         fp_layout.addWidget(self.auto_label_buttons_widget)
         
         lib_layout.addWidget(fp_group)
+        
+        # Auto-generation preferences section
+        auto_gen_group = QWidget()
+        auto_gen_layout = QVBoxLayout(auto_gen_group)
+        auto_gen_layout.setContentsMargins(10, 10, 10, 10)
+        colors = get_consistent_stylesheet_colors()
+        auto_gen_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
+        
+        auto_gen_title = QLabel("Auto-Generation Settings")
+        auto_gen_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
+        auto_gen_layout.addWidget(auto_gen_title)
+        
+        # Auto-generation checkboxes
+        auto_gen_options_row = QHBoxLayout()
+        self.auto_gen_waveforms_cb = QCheckBox("Auto-generate waveform images")
+        self.auto_gen_waveforms_cb.setChecked(self.auto_gen_waveforms)
+        self.auto_gen_waveforms_cb.stateChanged.connect(self._on_auto_gen_waveforms_changed)
+        auto_gen_options_row.addWidget(self.auto_gen_waveforms_cb)
+        
+        self.auto_gen_fingerprints_cb = QCheckBox("Auto-generate fingerprints")
+        self.auto_gen_fingerprints_cb.setChecked(self.auto_gen_fingerprints)
+        self.auto_gen_fingerprints_cb.stateChanged.connect(self._on_auto_gen_fingerprints_changed)
+        auto_gen_options_row.addWidget(self.auto_gen_fingerprints_cb)
+        auto_gen_layout.addLayout(auto_gen_options_row)
+        
+        # Timing selection
+        timing_row = QHBoxLayout()
+        timing_row.addWidget(QLabel("Auto-generate:"))
+        self.auto_gen_timing_combo = QComboBox()
+        self.auto_gen_timing_combo.addItem("On application startup", "boot")
+        self.auto_gen_timing_combo.addItem("When clicking into folder", "folder_selection")
+        current_timing_idx = self.auto_gen_timing_combo.findData(self.auto_gen_timing)
+        if current_timing_idx >= 0:
+            self.auto_gen_timing_combo.setCurrentIndex(current_timing_idx)
+        self.auto_gen_timing_combo.currentTextChanged.connect(self._on_auto_gen_timing_changed)
+        timing_row.addWidget(self.auto_gen_timing_combo)
+        timing_row.addStretch(1)
+        auto_gen_layout.addLayout(timing_row)
+        
+        # Progress and cancel controls (initially hidden)
+        self._auto_gen_progress_row = QHBoxLayout()
+        self._auto_gen_progress_label = QLabel("")
+        self._auto_gen_progress_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px;")
+        self._auto_gen_progress_row.addWidget(self._auto_gen_progress_label)
+        self._auto_gen_progress_row.addStretch(1)
+        
+        self._auto_gen_cancel_btn = QPushButton("Cancel")
+        self._auto_gen_cancel_btn.clicked.connect(self._cancel_auto_generation)
+        self._auto_gen_cancel_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['danger']}; color: white; font-weight: bold; }}")
+        self._auto_gen_cancel_btn.setVisible(False)
+        self._auto_gen_progress_row.addWidget(self._auto_gen_cancel_btn)
+        
+        auto_gen_layout.addLayout(self._auto_gen_progress_row)
+        
+        lib_layout.addWidget(auto_gen_group)
         
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
@@ -7120,6 +7395,24 @@ class AudioBrowser(QMainWindow):
             self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, self.fingerprint_algorithm)
             self._update_fingerprint_ui()
 
+    # ----- Auto-generation callbacks -----
+    def _on_auto_gen_waveforms_changed(self, state):
+        """Handle auto-generate waveforms checkbox change."""
+        self.auto_gen_waveforms = bool(state)
+        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
+    
+    def _on_auto_gen_fingerprints_changed(self, state):
+        """Handle auto-generate fingerprints checkbox change."""
+        self.auto_gen_fingerprints = bool(state)
+        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
+    
+    def _on_auto_gen_timing_changed(self):
+        """Handle auto-generation timing selection change."""
+        selected_data = self.auto_gen_timing_combo.currentData()
+        if selected_data:
+            self.auto_gen_timing = selected_data
+            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
+
     def _generate_fingerprints_for_folder(self):
         """Generate fingerprints for all audio files in the current folder."""
         # Check if a fingerprinting operation is already in progress
@@ -7599,6 +7892,127 @@ class AudioBrowser(QMainWindow):
         
         dialog.exec()
 
+    # ----- Auto-generation methods -----
+    def _start_auto_generation_for_folder(self, folder_path: Path):
+        """Start auto-generation for the given folder if enabled and not already running."""
+        if self._auto_gen_in_progress:
+            return  # Already running
+            
+        audio_files = []
+        for ext in AUDIO_EXTS:
+            audio_files.extend(folder_path.glob(f"*{ext}"))
+            
+        if not audio_files:
+            return  # No audio files to process
+            
+        # Check what needs to be generated
+        needs_waveforms = self.auto_gen_waveforms
+        needs_fingerprints = self.auto_gen_fingerprints
+        
+        if not needs_waveforms and not needs_fingerprints:
+            return  # Nothing to generate
+            
+        self._auto_gen_in_progress = True
+        self._auto_gen_cancel_btn.setVisible(True)
+        
+        # Start with waveforms if needed, then fingerprints
+        if needs_waveforms:
+            self._start_auto_waveform_generation(folder_path, audio_files, needs_fingerprints)
+        elif needs_fingerprints:
+            self._start_auto_fingerprint_generation(folder_path, audio_files)
+            
+    def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
+        """Start auto waveform generation."""
+        self._auto_gen_progress_label.setText("Generating waveforms...")
+        
+        # Create worker and thread
+        self._auto_gen_waveform_thread = QThread(self)
+        self._auto_gen_waveform_worker = AutoWaveformWorker([str(f) for f in audio_files], str(folder_path))
+        self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
+        
+        def on_waveform_progress(current, total, filename):
+            self._auto_gen_progress_label.setText(f"Generating waveforms... {current + 1}/{total}: {filename}")
+            
+        def on_waveform_finished(generated_count, canceled):
+            self._cleanup_auto_waveform_thread()
+            
+            if canceled:
+                self._finish_auto_generation()
+                return
+                
+            # Start fingerprints if requested
+            if follow_with_fingerprints and self.auto_gen_fingerprints:
+                self._start_auto_fingerprint_generation(folder_path, audio_files)
+            else:
+                self._finish_auto_generation()
+                
+        # Connect signals
+        self._auto_gen_waveform_thread.started.connect(self._auto_gen_waveform_worker.run)
+        self._auto_gen_waveform_worker.progress.connect(on_waveform_progress)
+        self._auto_gen_waveform_worker.finished.connect(on_waveform_finished)
+        
+        # Start thread
+        self._auto_gen_waveform_thread.start()
+        
+    def _start_auto_fingerprint_generation(self, folder_path: Path, audio_files: List[Path]):
+        """Start auto fingerprint generation.""" 
+        self._auto_gen_progress_label.setText("Generating fingerprints...")
+        
+        # Create worker and thread
+        self._auto_gen_fingerprint_thread = QThread(self)
+        self._auto_gen_fingerprint_worker = AutoFingerprintWorker([str(f) for f in audio_files], str(folder_path))
+        self._auto_gen_fingerprint_worker.moveToThread(self._auto_gen_fingerprint_thread)
+        
+        def on_fingerprint_progress(current, total, filename):
+            self._auto_gen_progress_label.setText(f"Generating fingerprints... {current + 1}/{total}: {filename}")
+            
+        def on_fingerprint_finished(generated_count, canceled):
+            self._cleanup_auto_fingerprint_thread()
+            self._finish_auto_generation()
+            
+        # Connect signals
+        self._auto_gen_fingerprint_thread.started.connect(self._auto_gen_fingerprint_worker.run)
+        self._auto_gen_fingerprint_worker.progress.connect(on_fingerprint_progress)
+        self._auto_gen_fingerprint_worker.finished.connect(on_fingerprint_finished)
+        
+        # Start thread
+        self._auto_gen_fingerprint_thread.start()
+        
+    def _cancel_auto_generation(self):
+        """Cancel the currently running auto-generation."""
+        if self._auto_gen_waveform_worker:
+            self._auto_gen_waveform_worker.cancel()
+        if self._auto_gen_fingerprint_worker:
+            self._auto_gen_fingerprint_worker.cancel()
+            
+    def _finish_auto_generation(self):
+        """Clean up after auto-generation is complete."""
+        self._auto_gen_in_progress = False
+        self._auto_gen_cancel_btn.setVisible(False)
+        self._auto_gen_progress_label.setText("")
+        
+    def _cleanup_auto_waveform_thread(self):
+        """Clean up auto waveform worker and thread."""
+        if self._auto_gen_waveform_worker:
+            self._auto_gen_waveform_worker.deleteLater()
+            self._auto_gen_waveform_worker = None
+        if self._auto_gen_waveform_thread:
+            self._auto_gen_waveform_thread.quit()
+            self._auto_gen_waveform_thread.wait()
+            self._auto_gen_waveform_thread.deleteLater()
+            self._auto_gen_waveform_thread = None
+            
+    def _cleanup_auto_fingerprint_thread(self):
+        """Clean up auto fingerprint worker and thread."""
+        if self._auto_gen_fingerprint_worker:
+            self._auto_gen_fingerprint_worker.deleteLater()
+            self._auto_gen_fingerprint_worker = None
+        if self._auto_gen_fingerprint_thread:
+            self._auto_gen_fingerprint_thread.quit()
+            self._auto_gen_fingerprint_thread.wait()
+            self._auto_gen_fingerprint_thread.deleteLater()
+            self._auto_gen_fingerprint_thread = None
+
     def closeEvent(self, ev):
         # Check if auto-labeling is in progress
         if self.auto_label_in_progress:
@@ -7620,6 +8034,14 @@ class AudioBrowser(QMainWindow):
                 ev.ignore()
                 return
         
+        # Cancel any running auto-generation
+        if self._auto_gen_in_progress:
+            self._cancel_auto_generation()
+            
+        # Clean up auto-generation threads
+        self._cleanup_auto_waveform_thread()
+        self._cleanup_auto_fingerprint_thread()
+
         self._save_names(); self._save_notes(); self._save_duration_cache(); 
         self._cleanup_temp_channel_files();
         super().closeEvent(ev)
