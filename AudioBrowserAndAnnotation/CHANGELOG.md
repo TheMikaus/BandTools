@@ -49,6 +49,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Seamlessly integrates with existing multi-user annotation system
 
 ### Fixed
+- **Log File Readability**: Fixed unreadable log files caused by unescaped control characters
+  - Modified `log_print` function to properly escape control characters (newlines, tabs, carriage returns)
+  - Prevents log file corruption from file paths, error messages, or user content containing control chars
+  - Maintains proper one-entry-per-line log structure for better text editor compatibility
+  - All existing log functionality preserved while ensuring files remain readable
 - **Major Performance Optimization for Song Selection**: Eliminated multi-second delays when selecting songs
   - Fixed WaveformWorker to avoid unnecessary full audio decoding for stereo detection
   - Optimized waveform caching to use lightweight channel count detection (0.06ms vs full decode)
