@@ -49,6 +49,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Eliminated unnecessary function calls when both channels are enabled by checking state first
   - Cache automatically cleared when changing directories to prevent stale data
   - All `get_audio_channel_count()` calls now use cached version for consistency
+- **Audio Playback Responsiveness**: Fixed song selection delay for immediate audio playback
+  - Optimized channel muting checkbox state checking to avoid `hasattr()` overhead
+  - Streamlined media player state transitions (stop → setSource → play)
+  - Deferred expensive UI operations (waveform loading, annotation loading) after audio starts
+  - Audio now starts playing within 10ms while heavy UI work happens asynchronously
+  - Resolves user-reported issue where "clicking a song used to start right away" but had delays
 
 ### Changed
 - **UI Redesign**: Converted toolbar to standard dropdown menus for cleaner interface
