@@ -5,6 +5,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Enhanced Autogeneration Feedback System**: Users now have full visibility into autogeneration behavior
+  - Console output shows loaded settings at startup (waveforms, fingerprints, timing)
+  - Clear boot-time decision making with detailed reasoning for why autogeneration did/didn't run
+  - Informative skip messages when no audio files found or settings disabled
+  - Progress logging during waveform and fingerprint generation with file-by-file updates
+  - Status bar messages for all scenarios including skips, progress, and completion
+  - Settings change notifications when autogeneration preferences are updated
+  - Completion and cancellation confirmations for better user awareness
 - **Color Consistency System**: Ensures consistent visual appearance across different machines
   - New ColorManager class for standardized color management across all UI elements
   - Purpose-based color standardization (selection, waveform, text, UI accent colors)
