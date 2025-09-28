@@ -241,6 +241,7 @@ def log_print(*args, **kwargs):
     """
     Replacement for print() that logs to file instead of console.
     Maintains similar interface to print() for easy replacement.
+    Escapes control characters to ensure readable log files.
     """
     # Convert args to string like print() does
     message = ' '.join(str(arg) for arg in args)
@@ -255,6 +256,18 @@ def log_print(*args, **kwargs):
     # Remove the trailing newline since logging adds its own
     if end == '\n' and message.endswith('\n'):
         message = message[:-1]
+    
+    # Escape control characters to keep log files readable
+    # This prevents multiline breaks and non-printable characters from 
+    # corrupting the log file structure
+    message = message.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+    
+    # Escape other common control characters that could cause issues
+    for i in range(32):
+        if i not in (9, 10, 13):  # Skip tab, newline, carriage return (already handled)
+            char = chr(i)
+            if char in message:
+                message = message.replace(char, f'\\x{i:02x}')
     
     get_logger().info(message)
 
