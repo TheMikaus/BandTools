@@ -3526,6 +3526,12 @@ class AudioBrowser(QMainWindow):
         self.auto_gen_waveforms: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, 0)))
         self.auto_gen_fingerprints: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, 0)))
         self.auto_gen_timing: str = self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
+        
+        # Print loaded settings for debugging
+        print("Auto-generation settings loaded:")
+        print(f"  Waveforms: {self.auto_gen_waveforms}")
+        print(f"  Fingerprints: {self.auto_gen_fingerprints}") 
+        print(f"  Timing: {self.auto_gen_timing}")
 
         # Auto-generation workers and progress tracking
         self._auto_gen_waveform_worker: Optional['AutoWaveformWorker'] = None
@@ -3565,7 +3571,23 @@ class AudioBrowser(QMainWindow):
 
         # Start auto-generation on boot if enabled
         if self.auto_gen_timing == "boot" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
+            print(f"Boot auto-generation enabled - will start in 1 second")
+            print(f"  Settings: timing=boot, waveforms={self.auto_gen_waveforms}, fingerprints={self.auto_gen_fingerprints}")
+            self.statusBar().showMessage("Auto-generation will start shortly...", 4000)
             QTimer.singleShot(1000, lambda: self._start_auto_generation_for_folder(self.current_practice_folder))
+        else:
+            # Show why boot auto-generation was not triggered
+            if self.auto_gen_timing != "boot":
+                print(f"Boot auto-generation not enabled (timing set to '{self.auto_gen_timing}')")
+            elif not (self.auto_gen_waveforms or self.auto_gen_fingerprints):
+                print("Boot auto-generation not enabled (both waveforms and fingerprints disabled)")
+            else:
+                print("Boot auto-generation not enabled (unknown reason)")
+            
+            if self.auto_gen_timing == "folder_selection" and (self.auto_gen_waveforms or self.auto_gen_fingerprints):
+                print("Auto-generation will trigger when selecting folders")
+            
+            self.statusBar().showMessage("Auto-generation ready", 2000)
 
         # Waveform hooks
         self.waveform.markerMoved.connect(self._on_marker_moved_multi)
@@ -7862,6 +7884,12 @@ class AudioBrowser(QMainWindow):
             self.auto_gen_fingerprints = new_settings['auto_gen_fingerprints'] 
             self.auto_gen_timing = new_settings['auto_gen_timing']
             
+            # Print updated settings for debugging
+            print("Auto-generation settings updated:")
+            print(f"  Waveforms: {self.auto_gen_waveforms}")
+            print(f"  Fingerprints: {self.auto_gen_fingerprints}")
+            print(f"  Timing: {self.auto_gen_timing}")
+            
             # Save to persistent settings
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
@@ -7932,7 +7960,11 @@ class AudioBrowser(QMainWindow):
     # ----- Auto-generation methods -----
     def _start_auto_generation_for_folder(self, folder_path: Path):
         """Start auto-generation for the given folder if enabled and not already running."""
+        print(f"Auto-generation check for folder: {folder_path}")
+        
         if self._auto_gen_in_progress:
+            print("  Skipped: auto-generation already in progress")
+            self.statusBar().showMessage("Auto-generation already running", 2000)
             return  # Already running
             
         audio_files = []
@@ -7940,15 +7972,22 @@ class AudioBrowser(QMainWindow):
             audio_files.extend(folder_path.glob(f"*{ext}"))
             
         if not audio_files:
+            print("  Skipped: no audio files found in folder")
+            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
             return  # No audio files to process
             
         # Check what needs to be generated
         needs_waveforms = self.auto_gen_waveforms
         needs_fingerprints = self.auto_gen_fingerprints
         
+        print(f"  Settings: waveforms={needs_waveforms}, fingerprints={needs_fingerprints}")
+        
         if not needs_waveforms and not needs_fingerprints:
+            print("  Skipped: auto-generation disabled in settings")
+            self.statusBar().showMessage("Auto-generation skipped: disabled in settings", 3000)
             return  # Nothing to generate
             
+        print(f"  Starting auto-generation for {len(audio_files)} audio files")
         self._auto_gen_in_progress = True
         
         # Start with waveforms if needed, then fingerprints
@@ -7959,6 +7998,7 @@ class AudioBrowser(QMainWindow):
             
     def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
         """Start auto waveform generation."""
+        print(f"Starting waveform generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating waveforms...")
         
         # Create worker and thread
@@ -7967,15 +8007,20 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
         
         def on_waveform_progress(current, total, filename):
-            self.statusBar().showMessage(f"Generating waveforms... {current + 1}/{total}: {filename}")
+            progress_msg = f"Generating waveforms... {current + 1}/{total}: {filename}"
+            print(f"  {progress_msg}")
+            self.statusBar().showMessage(progress_msg)
             
         def on_waveform_finished(generated_count, canceled):
             self._cleanup_auto_waveform_thread()
             
             if canceled:
+                print("Waveform generation was canceled")
                 self._finish_auto_generation()
                 return
                 
+            print(f"Waveform generation completed: {generated_count} files processed")
+            
             # Start fingerprints if requested
             if follow_with_fingerprints and self.auto_gen_fingerprints:
                 self._start_auto_fingerprint_generation(folder_path, audio_files)
@@ -7991,7 +8036,8 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_waveform_thread.start()
         
     def _start_auto_fingerprint_generation(self, folder_path: Path, audio_files: List[Path]):
-        """Start auto fingerprint generation.""" 
+        """Start auto fingerprint generation."""
+        print(f"Starting fingerprint generation for {len(audio_files)} files...")
         self.statusBar().showMessage("Generating fingerprints...")
         
         # Create worker and thread
@@ -8000,10 +8046,16 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_fingerprint_worker.moveToThread(self._auto_gen_fingerprint_thread)
         
         def on_fingerprint_progress(current, total, filename):
-            self.statusBar().showMessage(f"Generating fingerprints... {current + 1}/{total}: {filename}")
+            progress_msg = f"Generating fingerprints... {current + 1}/{total}: {filename}"
+            print(f"  {progress_msg}")
+            self.statusBar().showMessage(progress_msg)
         
         def on_fingerprint_finished(generated_count, canceled):
             self._cleanup_auto_fingerprint_thread()
+            if canceled:
+                print("Fingerprint generation was canceled")
+            else:
+                print(f"Fingerprint generation completed: {generated_count} files processed")
             self._finish_auto_generation()
             
         # Connect signals
@@ -8016,6 +8068,7 @@ class AudioBrowser(QMainWindow):
         
     def _cancel_auto_generation(self):
         """Cancel the currently running auto-generation."""
+        print("Canceling auto-generation...")
         if self._auto_gen_waveform_worker:
             self._auto_gen_waveform_worker.cancel()
         if self._auto_gen_fingerprint_worker:
@@ -8024,6 +8077,7 @@ class AudioBrowser(QMainWindow):
     def _finish_auto_generation(self):
         """Clean up after auto-generation is complete."""
         self._auto_gen_in_progress = False
+        print("Auto-generation completed successfully")
         self.statusBar().showMessage("Auto-generation complete", 3000)  # Show for 3 seconds
         
     def _cleanup_auto_waveform_thread(self):
