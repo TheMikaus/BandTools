@@ -209,21 +209,28 @@ def setup_logging():
         except Exception:
             pass  # Ignore errors removing old log file
     
-    # Configure logging
+    # Clear any existing handlers to avoid conflicts
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Configure logging with explicit encoding and error handling
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
-        ]
+            logging.FileHandler(log_file, mode='w', encoding='utf-8', errors='replace'),
+        ],
+        force=True
     )
     
     # Get the root logger
     logger = logging.getLogger()
     
-    # Log startup message
-    logger.info(f"AudioBrowser application starting up - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Log file location: {log_file.absolute()}")
+    # Log startup message with safe string formatting
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    logger.info("AudioBrowser application starting up - %s", timestamp)
+    logger.info("Log file location: %s", str(log_file.absolute()))
     
     return logger
 
@@ -241,35 +248,56 @@ def log_print(*args, **kwargs):
     """
     Replacement for print() that logs to file instead of console.
     Maintains similar interface to print() for easy replacement.
-    Escapes control characters to ensure readable log files.
+    Ensures all content is safely encoded and readable.
     """
-    # Convert args to string like print() does
-    message = ' '.join(str(arg) for arg in args)
-    
-    # Handle common print() keyword arguments
-    sep = kwargs.get('sep', ' ')
-    end = kwargs.get('end', '\n')
-    
-    if len(args) > 1:
-        message = sep.join(str(arg) for arg in args)
-    
-    # Remove the trailing newline since logging adds its own
-    if end == '\n' and message.endswith('\n'):
-        message = message[:-1]
-    
-    # Escape control characters to keep log files readable
-    # This prevents multiline breaks and non-printable characters from 
-    # corrupting the log file structure
-    message = message.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
-    
-    # Escape other common control characters that could cause issues
-    for i in range(32):
-        if i not in (9, 10, 13):  # Skip tab, newline, carriage return (already handled)
-            char = chr(i)
-            if char in message:
-                message = message.replace(char, f'\\x{i:02x}')
-    
-    get_logger().info(message)
+    try:
+        # Convert args to string like print() does, with safe string conversion
+        def safe_str(obj):
+            """Safely convert any object to string, handling encoding issues"""
+            try:
+                if isinstance(obj, bytes):
+                    return obj.decode('utf-8', errors='replace')
+                else:
+                    return str(obj)
+            except Exception:
+                return repr(obj)
+        
+        message_parts = [safe_str(arg) for arg in args]
+        
+        # Handle common print() keyword arguments
+        sep = kwargs.get('sep', ' ')
+        end = kwargs.get('end', '\n')
+        
+        # Join the message parts
+        message = sep.join(message_parts)
+        
+        # Remove the trailing newline since logging adds its own
+        if end == '\n' and message.endswith('\n'):
+            message = message[:-1]
+        
+        # Escape control characters to keep log files readable
+        # This prevents multiline breaks and non-printable characters from 
+        # corrupting the log file structure
+        message = message.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        
+        # Escape other common control characters that could cause issues
+        for i in range(32):
+            if i not in (9, 10, 13):  # Skip tab, newline, carriage return (already handled)
+                char = chr(i)
+                if char in message:
+                    message = message.replace(char, f'\\x{i:02x}')
+        
+        # Use parameterized logging to avoid format string issues
+        get_logger().info("%s", message)
+        
+    except Exception as e:
+        # Fallback logging in case of any encoding issues
+        try:
+            get_logger().error("log_print failed: %s", str(e))
+            get_logger().error("Original args: %s", repr(args))
+        except:
+            # Ultimate fallback - write to stderr
+            print(f"Critical logging error: {e}", file=sys.stderr)
 
 # ========== Custom Widgets ==========
 class BestTakeIndicatorWidget(QWidget):

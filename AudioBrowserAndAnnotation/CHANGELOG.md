@@ -49,11 +49,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Seamlessly integrates with existing multi-user annotation system
 
 ### Fixed
-- **Log File Readability**: Fixed unreadable log files caused by unescaped control characters
-  - Modified `log_print` function to properly escape control characters (newlines, tabs, carriage returns)
-  - Prevents log file corruption from file paths, error messages, or user content containing control chars
+- **Log File Readability**: Fixed unreadable log files caused by encoding and format string issues
+  - Enhanced logging configuration with explicit UTF-8 encoding and error handling (`errors='replace'`)
+  - Added proper handler cleanup to prevent conflicts with existing loggers
+  - Used parameterized logging (`logger.info("%s", message)`) to avoid format string corruption
+  - Improved `log_print` function with robust error handling and safe string conversion
+  - Added fallback logging for critical errors to prevent silent failures
+  - All existing log functionality preserved while ensuring files remain readable with proper timestamps
+  - Prevents log file corruption from Unicode characters, file paths, or user content
   - Maintains proper one-entry-per-line log structure for better text editor compatibility
-  - All existing log functionality preserved while ensuring files remain readable
 - **Major Performance Optimization for Song Selection**: Eliminated multi-second delays when selecting songs
   - Fixed WaveformWorker to avoid unnecessary full audio decoding for stereo detection
   - Optimized waveform caching to use lightweight channel count detection (0.06ms vs full decode)
