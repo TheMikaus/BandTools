@@ -8399,7 +8399,7 @@ class AudioBrowser(QMainWindow):
             log_print(f"Waveform generation completed: {generated_count} files processed")
             
             # Check if we're in recursive mode
-            if hasattr(self, '_directories_to_process') and self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
+            if self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
                 # Continue with next directory for waveforms
                 self._process_next_directory_waveforms()
             elif follow_with_fingerprints and self.auto_gen_fingerprints:
@@ -8456,7 +8456,7 @@ class AudioBrowser(QMainWindow):
                 log_print(f"Fingerprint generation completed: {generated_count} files processed")
             
             # Check if we're in recursive mode
-            if hasattr(self, '_directories_to_process') and self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
+            if self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
                 # Continue with next directory for fingerprints
                 self._process_next_directory_fingerprints()
             else:
