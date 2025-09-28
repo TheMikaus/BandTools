@@ -49,6 +49,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Seamlessly integrates with existing multi-user annotation system
 
 ### Fixed
+- **Autogeneration Silent Failure Bug**: Fixed issue where autogeneration would show "will start in 1 second" but then fail silently
+  - Added comprehensive error handling and validation in `_start_auto_generation_for_folder()` method
+  - Added validation for folder path existence, type checking, and directory verification  
+  - Added proper error handling around file system operations (folder.glob() calls)
+  - Added error handling for worker thread creation and startup processes
+  - Added detailed error logging for all failure scenarios with descriptive status bar messages
+  - Added logging of target folder path during boot autogeneration for better debugging
+  - Ensures users now see clear error messages when autogeneration fails instead of silent failures
+  - Prevents autogeneration from getting stuck in progress state when errors occur
 - **Log File Readability**: Fixed unreadable log files caused by encoding and format string issues
   - Enhanced logging configuration with explicit UTF-8 encoding and error handling (`errors='replace'`)
   - Added proper handler cleanup to prevent conflicts with existing loggers
