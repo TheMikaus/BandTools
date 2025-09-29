@@ -1538,6 +1538,44 @@ def discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]:
     
     return practice_folders
 
+def discover_directories_with_audio_files(root_path: Path) -> List[Path]:
+    """
+    Recursively discover all directories that contain audio files.
+    Returns list of directories that have .wav, .wave, or .mp3 files.
+    """
+    directories_with_audio = []
+    if not root_path.exists() or not root_path.is_dir():
+        return directories_with_audio
+    
+    def scan_directory(directory: Path):
+        """Recursively scan directory for audio files."""
+        try:
+            has_audio_files = False
+            subdirectories = []
+            
+            for item in directory.iterdir():
+                if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                    has_audio_files = True
+                elif item.is_dir():
+                    # Skip hidden directories and common non-audio directories
+                    if not item.name.startswith('.') and item.name.lower() not in {'__pycache__', 'node_modules', '.git'}:
+                        subdirectories.append(item)
+            
+            # Add this directory if it contains audio files
+            if has_audio_files:
+                directories_with_audio.append(directory)
+            
+            # Recursively scan subdirectories
+            for subdir in subdirectories:
+                scan_directory(subdir)
+                
+        except (OSError, PermissionError):
+            # Skip directories we can't read
+            pass
+    
+    scan_directory(root_path)
+    return directories_with_audio
+
 def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]:
     """
     Collect fingerprints from multiple folders and organize by filename.
@@ -3646,6 +3684,11 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
         self._auto_gen_fingerprint_thread: Optional[QThread] = None
         self._auto_gen_in_progress: bool = False
+        
+        # Recursive auto-generation state
+        self._directories_to_process: List[Path] = []
+        self._current_directory_index: int = 0
+        self._follow_with_fingerprints: bool = False
 
         # UI
         self._init_ui()
@@ -8123,7 +8166,7 @@ class AudioBrowser(QMainWindow):
 
     # ----- Auto-generation methods -----
     def _start_auto_generation_for_folder(self, folder_path: Path):
-        """Start auto-generation for the given folder if enabled and not already running."""
+        """Start auto-generation for the given folder and its subdirectories if enabled and not already running."""
         log_print(f"Auto-generation check for folder: {folder_path}")
         
         # Validate folder_path
@@ -8151,24 +8194,8 @@ class AudioBrowser(QMainWindow):
             log_print("  Skipped: auto-generation already in progress")
             self.statusBar().showMessage("Auto-generation already running", 2000)
             return  # Already running
-            
-        audio_files = []
-        try:
-            for ext in AUDIO_EXTS:
-                found_files = list(folder_path.glob(f"*{ext}"))
-                audio_files.extend(found_files)
-                log_print(f"  Found {len(found_files)} {ext} files")
-        except Exception as e:
-            log_print(f"  ERROR: Failed to scan folder for audio files: {e}")
-            self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
-            return
-            
-        if not audio_files:
-            log_print("  Skipped: no audio files found in folder")
-            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
-            return  # No audio files to process
-            
-        # Check what needs to be generated
+        
+        # Check what needs to be generated first
         needs_waveforms = self.auto_gen_waveforms
         needs_fingerprints = self.auto_gen_fingerprints
         
@@ -8179,21 +8206,167 @@ class AudioBrowser(QMainWindow):
             self.statusBar().showMessage("Auto-generation skipped: disabled in settings", 3000)
             return  # Nothing to generate
             
-        log_print(f"  Starting auto-generation for {len(audio_files)} audio files")
+        # Discover all directories with audio files recursively
+        log_print("  Discovering directories with audio files...")
+        directories_with_audio = discover_directories_with_audio_files(folder_path)
+        
+        if not directories_with_audio:
+            log_print("  Skipped: no directories with audio files found")
+            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
+            return  # No directories with audio files to process
+        
+        log_print(f"  Found {len(directories_with_audio)} directories with audio files:")
+        for i, directory in enumerate(directories_with_audio):
+            log_print(f"    {i+1}. {directory}")
+            
+        # Collect all audio files from all discovered directories
+        all_audio_files = []
+        directories_to_process = []
+        
+        try:
+            for directory in directories_with_audio:
+                directory_audio_files = []
+                for ext in AUDIO_EXTS:
+                    found_files = list(directory.glob(f"*{ext}"))
+                    directory_audio_files.extend(found_files)
+                
+                if directory_audio_files:
+                    log_print(f"    {directory}: {len(directory_audio_files)} audio files")
+                    all_audio_files.extend(directory_audio_files)
+                    directories_to_process.append(directory)
+                    
+        except Exception as e:
+            log_print(f"  ERROR: Failed to scan directories for audio files: {e}")
+            self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
+            return
+            
+        if not all_audio_files:
+            log_print("  Skipped: no audio files found in any directories")
+            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
+            return  # No audio files to process
+            
+        log_print(f"  Starting recursive auto-generation for {len(all_audio_files)} audio files across {len(directories_to_process)} directories")
         self._auto_gen_in_progress = True
         
         # Start with waveforms if needed, then fingerprints
         try:
             if needs_waveforms:
-                self._start_auto_waveform_generation(folder_path, audio_files, needs_fingerprints)
+                self._start_auto_waveform_generation_recursive(directories_to_process, needs_fingerprints)
             elif needs_fingerprints:
-                self._start_auto_fingerprint_generation(folder_path, audio_files)
+                self._start_auto_fingerprint_generation_recursive(directories_to_process)
         except Exception as e:
             log_print(f"  ERROR: Failed to start auto-generation: {e}")
             self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
             self._auto_gen_in_progress = False  # Reset flag on error
             return
             
+    def _start_auto_waveform_generation_recursive(self, directories: List[Path], follow_with_fingerprints: bool = False):
+        """Start recursive auto waveform generation for multiple directories."""
+        if not directories:
+            self._finish_auto_generation()
+            return
+            
+        log_print(f"Starting recursive waveform generation for {len(directories)} directories...")
+        self.statusBar().showMessage(f"Generating waveforms in {len(directories)} directories...")
+        
+        # Store state for recursive processing
+        self._directories_to_process = directories[:]
+        self._current_directory_index = 0
+        self._follow_with_fingerprints = follow_with_fingerprints
+        
+        # Start with the first directory
+        self._process_next_directory_waveforms()
+    
+    def _process_next_directory_waveforms(self):
+        """Process waveforms for the next directory in the queue."""
+        if self._current_directory_index >= len(self._directories_to_process):
+            # All directories processed for waveforms
+            log_print("All waveform generation completed")
+            
+            if self._follow_with_fingerprints and self.auto_gen_fingerprints:
+                self._start_auto_fingerprint_generation_recursive(self._directories_to_process)
+            else:
+                self._finish_auto_generation()
+            return
+            
+        current_directory = self._directories_to_process[self._current_directory_index]
+        log_print(f"Processing waveforms for directory {self._current_directory_index + 1}/{len(self._directories_to_process)}: {current_directory}")
+        
+        # Get audio files for this directory
+        audio_files = []
+        try:
+            for ext in AUDIO_EXTS:
+                found_files = list(current_directory.glob(f"*{ext}"))
+                audio_files.extend(found_files)
+        except Exception as e:
+            log_print(f"  ERROR: Failed to scan directory {current_directory}: {e}")
+            # Move to next directory
+            self._current_directory_index += 1
+            self._process_next_directory_waveforms()
+            return
+            
+        if not audio_files:
+            log_print(f"  Skipped: no audio files found in {current_directory}")
+            # Move to next directory
+            self._current_directory_index += 1
+            self._process_next_directory_waveforms()
+            return
+        
+        # Process this directory using the existing function
+        self._current_directory_index += 1  # Increment before starting
+        self._start_auto_waveform_generation(current_directory, audio_files, False)  # Don't follow with fingerprints here
+    
+    def _start_auto_fingerprint_generation_recursive(self, directories: List[Path]):
+        """Start recursive auto fingerprint generation for multiple directories."""
+        if not directories:
+            self._finish_auto_generation()
+            return
+            
+        log_print(f"Starting recursive fingerprint generation for {len(directories)} directories...")
+        self.statusBar().showMessage(f"Generating fingerprints in {len(directories)} directories...")
+        
+        # Store state for recursive processing
+        self._directories_to_process = directories[:]
+        self._current_directory_index = 0
+        
+        # Start with the first directory
+        self._process_next_directory_fingerprints()
+    
+    def _process_next_directory_fingerprints(self):
+        """Process fingerprints for the next directory in the queue."""
+        if self._current_directory_index >= len(self._directories_to_process):
+            # All directories processed
+            log_print("All fingerprint generation completed")
+            self._finish_auto_generation()
+            return
+            
+        current_directory = self._directories_to_process[self._current_directory_index]
+        log_print(f"Processing fingerprints for directory {self._current_directory_index + 1}/{len(self._directories_to_process)}: {current_directory}")
+        
+        # Get audio files for this directory
+        audio_files = []
+        try:
+            for ext in AUDIO_EXTS:
+                found_files = list(current_directory.glob(f"*{ext}"))
+                audio_files.extend(found_files)
+        except Exception as e:
+            log_print(f"  ERROR: Failed to scan directory {current_directory}: {e}")
+            # Move to next directory
+            self._current_directory_index += 1
+            self._process_next_directory_fingerprints()
+            return
+            
+        if not audio_files:
+            log_print(f"  Skipped: no audio files found in {current_directory}")
+            # Move to next directory
+            self._current_directory_index += 1
+            self._process_next_directory_fingerprints()
+            return
+        
+        # Process this directory using the existing function
+        self._current_directory_index += 1  # Increment before starting
+        self._start_auto_fingerprint_generation(current_directory, audio_files)
+
     def _start_auto_waveform_generation(self, folder_path: Path, audio_files: List[Path], follow_with_fingerprints: bool = False):
         """Start auto waveform generation."""
         log_print(f"Starting waveform generation for {len(audio_files)} files...")
@@ -8225,10 +8398,15 @@ class AudioBrowser(QMainWindow):
                 
             log_print(f"Waveform generation completed: {generated_count} files processed")
             
-            # Start fingerprints if requested
-            if follow_with_fingerprints and self.auto_gen_fingerprints:
+            # Check if we're in recursive mode
+            if self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
+                # Continue with next directory for waveforms
+                self._process_next_directory_waveforms()
+            elif follow_with_fingerprints and self.auto_gen_fingerprints:
+                # Start fingerprints if requested
                 self._start_auto_fingerprint_generation(folder_path, audio_files)
             else:
+                # Finish auto-generation
                 self._finish_auto_generation()
                 
         # Connect signals and start thread
@@ -8272,9 +8450,18 @@ class AudioBrowser(QMainWindow):
             self._cleanup_auto_fingerprint_thread()
             if canceled:
                 log_print("Fingerprint generation was canceled")
+                self._finish_auto_generation()
+                return
             else:
                 log_print(f"Fingerprint generation completed: {generated_count} files processed")
-            self._finish_auto_generation()
+            
+            # Check if we're in recursive mode
+            if self._directories_to_process and self._current_directory_index < len(self._directories_to_process):
+                # Continue with next directory for fingerprints
+                self._process_next_directory_fingerprints()
+            else:
+                # Finish auto-generation
+                self._finish_auto_generation()
             
         # Connect signals and start thread
         try:

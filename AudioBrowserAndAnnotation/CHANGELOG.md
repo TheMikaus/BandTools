@@ -5,6 +5,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Recursive Autogeneration**: Autogeneration now recursively discovers and processes all directories with audio files
+  - New `discover_directories_with_audio_files()` function recursively scans for directories containing audio files
+  - Autogeneration processes all discovered directories instead of just the current folder
+  - Enhanced logging shows directory-by-directory progress with file counts
+  - Supports deep directory structures with audio files at any level
+  - Maintains existing functionality while expanding scope to entire directory tree
+  - Both waveform and fingerprint generation now work recursively
 - **Console Output Logging System**: All console output is now redirected to a log file for better debugging and user support
   - New log file `audiobrowser.log` created in the application directory
   - Log file is recreated on each application startup (not appended to)
