@@ -5,6 +5,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Audio Playback Stuttering During Playback**: Fixed stuttering that occurred during audio playback when just listening
+  - Removed redundant `positionChanged` signal connection that was calling `_sync_slider()` excessively
+  - `_sync_slider()` now only called by 200ms timer instead of on every position change (potentially hundreds of times per second)
+  - Eliminated excessive UI updates that were blocking the audio thread during playback
+  - Resolves stuttering issue reported during normal playback (not during song selection)
 - **Point Annotation Creation with Partial Clip Selection**: Clarified and documented the behavior when pressing Enter with only one clip boundary set
   - When only clip start OR only clip end is set (not both), pressing Enter now correctly creates a point annotation at the current timestamp
   - Clip annotations are only created when BOTH clip start AND clip end values are set
