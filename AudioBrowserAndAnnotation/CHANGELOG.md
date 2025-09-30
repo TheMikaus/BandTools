@@ -10,6 +10,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Clip annotations are only created when BOTH clip start AND clip end values are set
   - Improved code readability by refactoring the conditional logic into a clearer if/else structure
   - Added inline comments documenting the intended behavior for future maintainability
+- **Audio Fingerprinting UI Visibility**: Enhanced visibility of controls in the Audio Fingerprinting section
+  - Added bold, dark text styling to all label elements for better contrast against the light background
+  - Added visible borders and background colors to buttons (Generate Fingerprints, Auto-Label, Show Practice Folders)
+  - Added white background and prominent borders to QComboBox and QSpinBox controls
+  - Added hover effects to buttons for better interactive feedback
+  - Improved disabled state styling for Auto-Label button with appropriate grayed-out appearance
+  - All changes maintain consistency with the existing ColorManager system
 
 ### Added
 - **Enhanced Fingerprint Algorithm Consistency**: Improved robustness and safety of fingerprint matching
