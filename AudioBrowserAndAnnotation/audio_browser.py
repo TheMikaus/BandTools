@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging, math
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -2169,7 +2169,6 @@ class VolumeBoostWorker(QObject):
             # Apply volume boost (boost_factor is 1.0 to 4.0)
             # pydub uses dBFS, so we need to convert linear gain to dB
             # dB = 20 * log10(gain)
-            import math
             db_change = 20 * math.log10(self._boost_factor)
             boosted_audio = audio + db_change
             
