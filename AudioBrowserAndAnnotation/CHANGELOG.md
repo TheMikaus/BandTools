@@ -5,6 +5,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Channel Muting Signal Recursion**: Fixed infinite signal recursion bug when toggling channel muting checkboxes
+  - Removed redundant `_update_channel_muting_state()` call from `_on_channel_muting_changed()` that caused unwanted re-entry
+  - Added signal blocking when programmatically setting checkbox states for mono files to prevent triggering stateChanged events
+  - Channel muting checkboxes now respond correctly to user input without causing signal loops
+  - Mono file detection and checkbox state updates work properly without side effects
 - **Point Annotation Creation with Partial Clip Selection**: Clarified and documented the behavior when pressing Enter with only one clip boundary set
   - When only clip start OR only clip end is set (not both), pressing Enter now correctly creates a point annotation at the current timestamp
   - Clip annotations are only created when BOTH clip start AND clip end values are set
