@@ -5396,8 +5396,8 @@ class AudioBrowser(QMainWindow):
         self._update_captured_time_label()
         
         # Defer expensive operations to not block audio playback startup
-        # Use a short timer to let audio start playing before doing heavy UI work
-        QTimer.singleShot(10, lambda: self._finish_song_loading(path, need_reload_annotations))
+        # Use a longer delay to give audio time to buffer and start playing smoothly
+        QTimer.singleShot(100, lambda: self._finish_song_loading(path, need_reload_annotations))
     
     def _finish_song_loading(self, path: Path, need_reload_annotations: bool):
         """Complete the song loading process with expensive UI operations deferred to not block audio playback."""
@@ -5437,8 +5437,9 @@ class AudioBrowser(QMainWindow):
             # Use QTimer.singleShot to defer waveform and annotation loading
             QTimer.singleShot(0, self._deferred_annotation_load)
         
-        # Ensure the file is highlighted in the tree view (important for auto-progression)
-        self._highlight_file_in_tree(path)
+        # Defer tree highlighting to avoid blocking audio playback
+        # This is important for auto-progression but not time-critical
+        QTimer.singleShot(150, lambda: self._highlight_file_in_tree(path))
     
     def _deferred_annotation_load(self):
         """Load annotations and waveform data after a brief delay to improve perceived responsiveness."""

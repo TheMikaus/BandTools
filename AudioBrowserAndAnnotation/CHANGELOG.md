@@ -5,6 +5,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Audio Playback Stuttering**: Fixed stuttering during audio playback caused by UI operations blocking the main thread
+  - Increased delay for expensive operations from 10ms to 100ms to allow audio buffering to complete
+  - Deferred tree view highlighting operations (150ms delay) to prevent blocking during critical playback startup
+  - Tree operations (expansion, scrolling, selection) now happen after audio has started playing smoothly
+  - Resolves issue where playback would stutter when selecting songs due to synchronous UI updates
 - **Audio Fingerprinting UI Visibility**: Enhanced visibility of controls in the Audio Fingerprinting section
   - Added bold, dark text styling to all label elements for better contrast against the light background
   - Added visible borders and background colors to buttons (Generate Fingerprints, Auto-Label, Show Practice Folders)
