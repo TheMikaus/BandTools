@@ -5694,9 +5694,6 @@ class AudioBrowser(QMainWindow):
         """Handle channel muting checkbox changes."""
         if not self.current_audio_file:
             return
-            
-        # Update channel checkbox state based on file
-        self._update_channel_muting_state()
         
         # If we're currently playing, restart playback with new channel settings
         was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -5723,10 +5720,14 @@ class AudioBrowser(QMainWindow):
         self.left_channel_cb.setEnabled(is_stereo)
         self.right_channel_cb.setEnabled(is_stereo)
         
-        # If file is mono, ensure both checkboxes are checked
+        # If file is mono, ensure both checkboxes are checked (block signals to prevent recursion)
         if not is_stereo:
+            self.left_channel_cb.blockSignals(True)
+            self.right_channel_cb.blockSignals(True)
             self.left_channel_cb.setChecked(True)
             self.right_channel_cb.setChecked(True)
+            self.left_channel_cb.blockSignals(False)
+            self.right_channel_cb.blockSignals(False)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:

@@ -5,6 +5,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Channel Muting Signal Recursion**: Fixed infinite signal recursion bug when toggling channel muting checkboxes
+  - Removed redundant `_update_channel_muting_state()` call from `_on_channel_muting_changed()` that caused unwanted re-entry
+  - Added signal blocking when programmatically setting checkbox states for mono files to prevent triggering stateChanged events
+  - Channel muting checkboxes now respond correctly to user input without causing signal loops
+  - Mono file detection and checkbox state updates work properly without side effects
 - **Audio Playback Stuttering During Playback**: Fixed stuttering that occurred during audio playback when just listening
   - Removed redundant `positionChanged` signal connection that was calling `_sync_slider()` excessively
   - `_sync_slider()` now only called by 200ms timer instead of on every position change (potentially hundreds of times per second)
