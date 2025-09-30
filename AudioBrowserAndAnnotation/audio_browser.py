@@ -1027,12 +1027,21 @@ def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
     """
     Compare two fingerprints and return similarity score (0.0 to 1.0).
     Higher values indicate more similarity.
+    
+    Note: This function assumes both fingerprints were generated using the same algorithm.
+    The calling code is responsible for ensuring algorithm consistency.
     """
     if not fp1 or not fp2:
         return 0.0
     
+    # Safety check: warn if fingerprints have very different lengths, which might indicate different algorithms
+    len1, len2 = len(fp1), len(fp2)
+    if abs(len1 - len2) > max(len1, len2) * 0.5:  # More than 50% size difference
+        log_print(f"Warning: Comparing fingerprints of very different lengths ({len1} vs {len2}). "
+                 f"This might indicate different algorithms were used.")
+    
     # Align lengths by truncating to shorter
-    min_len = min(len(fp1), len(fp2))
+    min_len = min(len1, len2)
     fp1_trunc = fp1[:min_len]
     fp2_trunc = fp2[:min_len]
     
@@ -1448,6 +1457,48 @@ def compute_multiple_fingerprints(samples: List[float], sr: int, algorithms: Lis
     
     return fingerprints
 
+def validate_fingerprint_algorithm_coverage(cache: Dict, required_algorithm: str) -> Dict[str, bool]:
+    """
+    Check which files in a cache have fingerprints for the specified algorithm.
+    
+    Args:
+        cache: Fingerprint cache dictionary
+        required_algorithm: Algorithm name to check for
+        
+    Returns:
+        Dictionary mapping filename -> boolean (True if algorithm present, False otherwise)
+    """
+    coverage = {}
+    files_data = cache.get("files", {})
+    
+    for filename, file_data in files_data.items():
+        fingerprint = get_fingerprint_for_algorithm(file_data, required_algorithm)
+        coverage[filename] = fingerprint is not None
+    
+    return coverage
+
+def get_fingerprint_for_algorithm(file_data: Dict, algorithm: str) -> Optional[List[float]]:
+    """
+    Safely retrieve a fingerprint for a specific algorithm from file data.
+    
+    Args:
+        file_data: File data from fingerprint cache
+        algorithm: Algorithm name to retrieve fingerprint for
+        
+    Returns:
+        Fingerprint list if available for the algorithm, None otherwise
+    """
+    if not file_data or not isinstance(file_data, dict):
+        return None
+    
+    fingerprints = file_data.get("fingerprints", {})
+    
+    # Handle legacy format migration inline
+    if not fingerprints and "fingerprint" in file_data:
+        fingerprints = {DEFAULT_ALGORITHM: file_data["fingerprint"]}
+    
+    return fingerprints.get(algorithm)
+
 def migrate_fingerprint_cache(cache: Dict) -> Dict:
     """
     Migrate old single-fingerprint cache format to new multiple-algorithms format.
@@ -1580,13 +1631,18 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
     """
     Collect fingerprints from multiple folders and organize by filename.
     
+    ALGORITHM CONSISTENCY: This function only collects fingerprints that were generated
+    using the specified algorithm, ensuring that all returned fingerprints are comparable.
+    
     Args:
         folder_paths: List of directories to scan for fingerprints
         algorithm: Which fingerprint algorithm to use (e.g., 'spectral', 'lightweight')
+                  Only fingerprints generated with this algorithm will be collected
         exclude_dir: Optional directory to exclude from collection
     
     Returns:
         Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name}
+        All fingerprints in the result were generated using the same algorithm.
         Format: {
             "song1.mp3": [
                 {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name"},
@@ -1613,13 +1669,8 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
             if filename in excluded_files:
                 continue
                 
-            # Get fingerprint for the selected algorithm
-            fingerprints = file_data.get("fingerprints", {})
-            if not fingerprints and "fingerprint" in file_data:
-                # Handle legacy format (migration should have handled this, but just in case)
-                fingerprints = {DEFAULT_ALGORITHM: file_data["fingerprint"]}
-            
-            fingerprint = fingerprints.get(algorithm)
+            # Get fingerprint for the selected algorithm using safer method
+            fingerprint = get_fingerprint_for_algorithm(file_data, algorithm)
             if fingerprint:  # Only include files with fingerprint for this algorithm
                 if filename not in fingerprint_map:
                     fingerprint_map[filename] = []
@@ -6846,12 +6897,8 @@ class AudioBrowser(QMainWindow):
             
             # Get or generate fingerprint for current file using selected algorithm
             current_file_data = current_cache.get("files", {}).get(audio_file.name, {})
-            fingerprints = current_file_data.get("fingerprints", {})
-            # Handle legacy format
-            if not fingerprints and "fingerprint" in current_file_data:
-                fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
+            current_fp = get_fingerprint_for_algorithm(current_file_data, self.fingerprint_algorithm)
             
-            current_fp = fingerprints.get(self.fingerprint_algorithm)
             if not current_fp:
                 try:
                     samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
@@ -6861,9 +6908,14 @@ class AudioBrowser(QMainWindow):
                     
                     # Update cache with new fingerprint
                     size, mtime = file_signature(audio_file)
-                    fingerprints.update(new_fingerprints)
+                    existing_fingerprints = current_file_data.get("fingerprints", {})
+                    # Handle legacy format migration inline for existing data
+                    if not existing_fingerprints and "fingerprint" in current_file_data:
+                        existing_fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
+                    
+                    existing_fingerprints.update(new_fingerprints)
                     current_cache.setdefault("files", {})[audio_file.name] = {
-                        "fingerprints": fingerprints,
+                        "fingerprints": existing_fingerprints,
                         "size": size,
                         "mtime": mtime,
                         "duration_ms": dur_ms
@@ -7855,12 +7907,8 @@ class AudioBrowser(QMainWindow):
             
             # Get or generate fingerprint for current file using selected algorithm
             current_file_data = current_fingerprints.get(audio_file.name, {})
-            fingerprints = current_file_data.get("fingerprints", {})
-            # Handle legacy format
-            if not fingerprints and "fingerprint" in current_file_data:
-                fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
-                
-            current_fp = fingerprints.get(self.fingerprint_algorithm)
+            current_fp = get_fingerprint_for_algorithm(current_file_data, self.fingerprint_algorithm)
+            
             if not current_fp:
                 try:
                     samples, sr, dur_ms, _ = decode_audio_samples(audio_file)
@@ -7870,9 +7918,14 @@ class AudioBrowser(QMainWindow):
                     
                     # Update cache with new fingerprint
                     size, mtime = file_signature(audio_file)
-                    fingerprints.update(new_fingerprints)
+                    existing_fingerprints = current_file_data.get("fingerprints", {})
+                    # Handle legacy format migration inline for existing data
+                    if not existing_fingerprints and "fingerprint" in current_file_data:
+                        existing_fingerprints = {DEFAULT_ALGORITHM: current_file_data["fingerprint"]}
+                    
+                    existing_fingerprints.update(new_fingerprints)
                     current_cache["files"][audio_file.name] = {
-                        "fingerprints": fingerprints,
+                        "fingerprints": existing_fingerprints,
                         "size": size,
                         "mtime": mtime,
                         "duration_ms": dur_ms

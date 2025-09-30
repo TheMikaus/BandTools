@@ -5,6 +5,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Enhanced Fingerprint Algorithm Consistency**: Improved robustness and safety of fingerprint matching
+  - New `get_fingerprint_for_algorithm()` function for safer fingerprint retrieval with automatic legacy format handling
+  - New `validate_fingerprint_algorithm_coverage()` function to check algorithm coverage in caches
+  - Enhanced fingerprint comparison with safety warnings for potential algorithm mismatches  
+  - Improved documentation clarifying algorithm consistency guarantees throughout the system
+  - All fingerprint matching operations now use centralized, algorithm-aware retrieval functions
+  - Better error detection for cross-algorithm comparison attempts (logs warnings for suspicious length differences)
 - **Recursive Autogeneration**: Autogeneration now recursively discovers and processes all directories with audio files
   - New `discover_directories_with_audio_files()` function recursively scans for directories containing audio files
   - Autogeneration processes all discovered directories instead of just the current folder
