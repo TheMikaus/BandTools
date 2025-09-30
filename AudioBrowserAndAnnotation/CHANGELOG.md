@@ -5,6 +5,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Point Annotation Creation with Partial Clip Selection**: Clarified and documented the behavior when pressing Enter with only one clip boundary set
+  - When only clip start OR only clip end is set (not both), pressing Enter now correctly creates a point annotation at the current timestamp
+  - Clip annotations are only created when BOTH clip start AND clip end values are set
+  - Improved code readability by refactoring the conditional logic into a clearer if/else structure
+  - Added inline comments documenting the intended behavior for future maintainability
 - **Audio Fingerprinting UI Visibility**: Enhanced visibility of controls in the Audio Fingerprinting section
   - Added bold, dark text styling to all label elements for better contrast against the light background
   - Added visible borders and background colors to buttons (Generate Fingerprints, Auto-Label, Show Practice Folders)

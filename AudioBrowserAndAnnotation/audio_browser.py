@@ -6143,7 +6143,16 @@ class AudioBrowser(QMainWindow):
         self.pending_note_start_ms = None; self._update_captured_time_label()
         fname = self.current_audio_file.name
         uid = self._uid_counter; self._uid_counter += 1
-        entry = ({'uid': uid, 'ms': int(ms), 'text': txt, 'important': False} if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None else {'uid': uid, 'ms': int(self.clip_sel_start_ms), 'end_ms': int(self.clip_sel_end_ms), 'text': txt, 'important': False})
+        
+        # Create point annotation if only one or neither clip value is set.
+        # Only create clip annotation when BOTH clip_sel_start_ms AND clip_sel_end_ms are set.
+        if self.clip_sel_start_ms is None or self.clip_sel_end_ms is None:
+            # Point annotation: single timestamp
+            entry = {'uid': uid, 'ms': int(ms), 'text': txt, 'important': False}
+        else:
+            # Clip annotation: time range with start and end
+            entry = {'uid': uid, 'ms': int(self.clip_sel_start_ms), 'end_ms': int(self.clip_sel_end_ms), 'text': txt, 'important': False}
+        
         self.notes_by_file.setdefault(fname, []).append(entry)
         self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
