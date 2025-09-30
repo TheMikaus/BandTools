@@ -3765,7 +3765,8 @@ class AudioBrowser(QMainWindow):
         self.tree.selectionModel().selectionChanged.connect(self._on_tree_selection_changed)
         self.slider_sync = QTimer(self); self.slider_sync.setInterval(200)
         self.slider_sync.timeout.connect(self._sync_slider)
-        self.player.positionChanged.connect(lambda _: self._sync_slider())
+        # Note: _sync_slider is only called by the timer (200ms interval), not on every position change
+        # This prevents excessive UI updates during playback that can cause stuttering
 
         # Mark initialization as complete
         self._initialization_complete = True
