@@ -4427,20 +4427,26 @@ class AudioBrowser(QMainWindow):
         
         # Reference folder selection
         ref_row = QHBoxLayout()
-        ref_row.addWidget(QLabel("Reference folder:"))
+        ref_folder_lbl = QLabel("Reference folder:")
+        ref_folder_lbl.setStyleSheet("color: #333; font-weight: bold;")
+        ref_row.addWidget(ref_folder_lbl)
         self.fingerprint_ref_label = QLabel("(None selected)")
         colors = get_consistent_stylesheet_colors()
         self.fingerprint_ref_label.setStyleSheet(f"color: {colors['text_muted']}; font-style: italic;")
         ref_row.addWidget(self.fingerprint_ref_label, 1)
         self.select_ref_btn = QPushButton("Choose...")
+        self.select_ref_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['bg_medium']}; border: 1px solid {colors['border']}; padding: 4px 12px; border-radius: 3px; }} QPushButton:hover {{ background-color: {colors['info']}; color: white; }}")
         self.select_ref_btn.clicked.connect(self._select_fingerprint_reference_folder)
         ref_row.addWidget(self.select_ref_btn)
         fp_layout.addLayout(ref_row)
         
         # Algorithm selection
         algorithm_row = QHBoxLayout()
-        algorithm_row.addWidget(QLabel("Fingerprint algorithm:"))
+        alg_lbl = QLabel("Fingerprint algorithm:")
+        alg_lbl.setStyleSheet("color: #333; font-weight: bold;")
+        algorithm_row.addWidget(alg_lbl)
         self.algorithm_combo = QComboBox()
+        self.algorithm_combo.setStyleSheet(f"QComboBox {{ background-color: white; border: 2px solid {colors['border']}; padding: 4px; border-radius: 3px; }} QComboBox:hover {{ border-color: {colors['info']}; }}")
         for alg_key, alg_info in FINGERPRINT_ALGORITHMS.items():
             self.algorithm_combo.addItem(alg_info["name"], alg_key)
         # Set current selection
@@ -4454,8 +4460,11 @@ class AudioBrowser(QMainWindow):
         
         # Threshold and actions
         threshold_row = QHBoxLayout()
-        threshold_row.addWidget(QLabel("Match threshold:"))
+        threshold_lbl = QLabel("Match threshold:")
+        threshold_lbl.setStyleSheet("color: #333; font-weight: bold;")
+        threshold_row.addWidget(threshold_lbl)
         self.threshold_spin = QSpinBox()
+        self.threshold_spin.setStyleSheet(f"QSpinBox {{ background-color: white; border: 2px solid {colors['border']}; padding: 4px; border-radius: 3px; }} QSpinBox:hover {{ border-color: {colors['info']}; }}")
         self.threshold_spin.setRange(50, 95)
         self.threshold_spin.setValue(int(self.fingerprint_threshold * 100))
         self.threshold_spin.setSuffix("%")
@@ -4464,15 +4473,18 @@ class AudioBrowser(QMainWindow):
         threshold_row.addStretch(1)
         
         self.generate_fingerprints_btn = QPushButton("Generate Fingerprints for Current Folder")
+        self.generate_fingerprints_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['info']}; color: white; border: 2px solid {colors['info']}; padding: 6px 12px; border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ background-color: #1976D2; border-color: #1565C0; }}")
         self.generate_fingerprints_btn.clicked.connect(self._generate_fingerprints_for_folder)
         threshold_row.addWidget(self.generate_fingerprints_btn)
         
         self.auto_label_btn = QPushButton("Auto-Label Files")
+        self.auto_label_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['success']}; color: white; border: 2px solid {colors['success']}; padding: 6px 12px; border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ background-color: #388E3C; border-color: #2E7D32; }} QPushButton:disabled {{ background-color: {colors['bg_medium']}; color: {colors['text_muted']}; border-color: {colors['border']}; }}")
         self.auto_label_btn.clicked.connect(self._auto_label_with_fingerprints)
         self.auto_label_btn.setEnabled(False)  # Enabled when reference folder is set
         threshold_row.addWidget(self.auto_label_btn)
         
         self.show_practice_folders_btn = QPushButton("Show Practice Folders")
+        self.show_practice_folders_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['bg_medium']}; color: #333; border: 2px solid {colors['border']}; padding: 6px 12px; border-radius: 4px; font-weight: bold; }} QPushButton:hover {{ background-color: {colors['warning']}; color: white; border-color: {colors['warning']}; }}")
         self.show_practice_folders_btn.clicked.connect(self._show_practice_folders_info)
         threshold_row.addWidget(self.show_practice_folders_btn)
         
