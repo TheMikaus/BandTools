@@ -4,6 +4,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **Audio Fingerprinting UI Visibility**: Enhanced visibility of controls in the Audio Fingerprinting section
+  - Added bold, dark text styling to all label elements for better contrast against the light background
+  - Added visible borders and background colors to buttons (Generate Fingerprints, Auto-Label, Show Practice Folders)
+  - Added white background and prominent borders to QComboBox and QSpinBox controls
+  - Added hover effects to buttons for better interactive feedback
+  - Improved disabled state styling for Auto-Label button with appropriate grayed-out appearance
+  - All changes maintain consistency with the existing ColorManager system
+
 ### Added
 - **Enhanced Fingerprint Algorithm Consistency**: Improved robustness and safety of fingerprint matching
   - New `get_fingerprint_for_algorithm()` function for safer fingerprint retrieval with automatic legacy format handling
