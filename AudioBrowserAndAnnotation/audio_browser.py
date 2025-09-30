@@ -12,7 +12,7 @@
 #   and allows editing across sets (time/text/important/delete).
 from __future__ import annotations
 
-import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging
+import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging, math
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -161,6 +161,7 @@ SETTINGS_KEY_TABS_ORDER = "tabs_order"
 SETTINGS_KEY_AUTOPROGRESS = "auto_progress"
 SETTINGS_KEY_AUTOSWITCH = "auto_switch_ann"
 SETTINGS_KEY_VOLUME = "volume_0_100"
+SETTINGS_KEY_VOLUME_BOOST = "volume_boost_100_400"
 SETTINGS_KEY_UNDO_CAP = "undo_capacity"
 SETTINGS_KEY_CUR_SET = "current_set_id"
 SETTINGS_KEY_SHOW_ALL = "show_all_sets"
@@ -2138,6 +2139,68 @@ class MonoConvertWorker(QObject):
         self.progress.emit(1, 1, src.name)
         self.finished.emit(False)
 
+# ========== Volume boost export worker ==========
+class VolumeBoostWorker(QObject):
+    progress = pyqtSignal(int, int, str)  # done, total, filename
+    file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
+    finished = pyqtSignal(bool)  # canceled?
+
+    def __init__(self, audio_path: str, boost_factor: float):
+        super().__init__()
+        self._path = str(audio_path)
+        self._boost_factor = float(boost_factor)
+        self._cancel = False
+
+    def cancel(self): 
+        self._cancel = True
+
+    def run(self):
+        if self._cancel: 
+            self.finished.emit(True)
+            return
+            
+        src = Path(self._path)
+        self.progress.emit(0, 1, src.name)
+        
+        try:
+            # Load the audio file
+            audio = AudioSegment.from_file(str(src))
+            
+            # Apply volume boost (boost_factor is 1.0 to 4.0)
+            # pydub uses dBFS, so we need to convert linear gain to dB
+            # dB = 20 * log10(gain)
+            db_change = 20 * math.log10(self._boost_factor)
+            boosted_audio = audio + db_change
+            
+            # Create backup filename
+            base = src.stem
+            backup_name = f"{base}_original{src.suffix}"
+            backup_path = src.with_name(backup_name)
+            
+            # Make sure backup doesn't already exist
+            n = 1
+            while backup_path.exists():
+                backup_name = f"{base}_original({n}){src.suffix}"
+                backup_path = src.with_name(backup_name)
+                n += 1
+            
+            # Rename original to backup
+            src.rename(backup_path)
+            
+            # Export boosted version with original filename
+            if src.suffix.lower() in ('.mp3',):
+                boosted_audio.export(str(src), format="mp3", bitrate="192k")
+            else:
+                boosted_audio.export(str(src), format="wav")
+            
+            self.file_done.emit(src.name, True, f"Applied {self._boost_factor:.1f}x volume boost (original backup: {backup_name})")
+            
+        except Exception as e:
+            self.file_done.emit(src.name, False, str(e))
+        
+        self.progress.emit(1, 1, src.name)
+        self.finished.emit(False)
+
 # ========== Fingerprint worker ==========
 class FingerprintWorker(QObject):
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
@@ -3677,6 +3740,10 @@ class AudioBrowser(QMainWindow):
         vol_raw = self.settings.value(SETTINGS_KEY_VOLUME, 90)
         vol = int(vol_raw) if isinstance(vol_raw, (int, str)) else 90
         self.audio_output.setVolume(max(0.0, min(1.0, vol / 100.0)))
+        
+        # Volume boost (stored as 100-400 for 1.0x-4.0x)
+        boost_raw = self.settings.value(SETTINGS_KEY_VOLUME_BOOST, 100)
+        self.volume_boost = int(boost_raw) if isinstance(boost_raw, (int, str)) else 100
 
         # Provided names & duration cache
         self.provided_names: Dict[str, str] = {}
@@ -4227,6 +4294,10 @@ class AudioBrowser(QMainWindow):
         self.mono_action.triggered.connect(self._convert_to_mono)
         file_menu.addAction(self.mono_action)
         
+        self.export_boost_action = QAction("E&xport with Volume Boost", self)
+        self.export_boost_action.triggered.connect(self._export_with_volume_boost)
+        file_menu.addAction(self.export_boost_action)
+        
         file_menu.addSeparator()
         
         self.auto_gen_settings_action = QAction("Auto-Generation &Settings…", self)
@@ -4358,6 +4429,16 @@ class AudioBrowser(QMainWindow):
         self.volume_slider.setRange(0, 100); self.volume_slider.setValue(int(self.audio_output.volume() * 100))
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         player_bar.addWidget(self.volume_slider)
+        
+        player_bar.addWidget(QLabel("Boost"))
+        self.boost_slider = QSlider(Qt.Orientation.Horizontal); self.boost_slider.setFixedWidth(140)
+        self.boost_slider.setRange(100, 400); self.boost_slider.setValue(self.volume_boost)
+        self.boost_slider.valueChanged.connect(self._on_boost_changed)
+        self.boost_slider.setToolTip("Volume boost multiplier (1.0x - 4.0x)")
+        player_bar.addWidget(self.boost_slider)
+        self.boost_label = QLabel(f"{self.volume_boost / 100.0:.1f}x")
+        self.boost_label.setMinimumWidth(35)
+        player_bar.addWidget(self.boost_label)
 
         player_bar.addWidget(QLabel("Output"))
         self.output_device_combo = QComboBox(); self.output_device_combo.setFixedWidth(200)
@@ -4959,8 +5040,21 @@ class AudioBrowser(QMainWindow):
 
     # ----- Volume -----
     def _on_volume_changed(self, val: int):
-        self.audio_output.setVolume(max(0.0, min(1.0, val / 100.0)))
+        # Apply both volume and boost
+        base_volume = max(0.0, min(1.0, val / 100.0))
+        boost_factor = self.volume_boost / 100.0
+        effective_volume = min(1.0, base_volume * boost_factor)
+        self.audio_output.setVolume(effective_volume)
         self.settings.setValue(SETTINGS_KEY_VOLUME, int(val))
+    
+    def _on_boost_changed(self, val: int):
+        # Update boost value and label
+        self.volume_boost = val
+        self.boost_label.setText(f"{val / 100.0:.1f}x")
+        self.settings.setValue(SETTINGS_KEY_VOLUME_BOOST, int(val))
+        # Reapply volume with new boost
+        current_volume = self.volume_slider.value()
+        self._on_volume_changed(current_volume)
 
     # ----- Audio Output Device -----
     def _refresh_output_devices(self):
@@ -7356,6 +7450,93 @@ class AudioBrowser(QMainWindow):
 
         # Start the conversion
         self._mono_thread.start()
+        dlg.exec()
+
+    # ----- Export with Volume Boost -----
+    def _export_with_volume_boost(self):
+        if not HAVE_PYDUB:
+            QMessageBox.warning(self, "Missing dependency",
+                                "This feature requires the 'pydub' package and FFmpeg installed on your system.")
+            return
+        if not pydub_which("ffmpeg"):
+            QMessageBox.warning(self, "FFmpeg not found",
+                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+            return
+        
+        # Check if we have a currently selected audio file
+        if not self.current_audio_file or not self.current_audio_file.exists():
+            QMessageBox.information(self, "No File Selected", "Please select an audio file to boost.")
+            return
+        
+        # Get the current boost factor
+        boost_factor = self.volume_boost / 100.0
+        
+        # Confirm export
+        msg = (f"Export '{self.current_audio_file.name}' with {boost_factor:.1f}x volume boost?\n\n"
+               "• The original file will be renamed with '_original' suffix\n"
+               "• A new boosted version will replace the original filename\n"
+               f"• Current boost setting: {boost_factor:.1f}x")
+        if QMessageBox.question(self, "Export with Volume Boost", msg,
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+
+        self._stop_playback()
+
+        # Create progress dialog
+        dlg = QProgressDialog("Exporting with volume boost…", "Cancel", 0, 1, self)
+        dlg.setWindowTitle("Volume Boost Export")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        dlg.setMinimumDuration(0)
+        dlg.setValue(0)
+
+        # Create worker thread
+        self._boost_thread = QThread(self)
+        self._boost_worker = VolumeBoostWorker(str(self.current_audio_file), boost_factor)
+        self._boost_worker.moveToThread(self._boost_thread)
+
+        def on_progress(done: int, total: int, name: str):
+            dlg.setLabelText(f"Processing {name}")
+            dlg.setRange(0, total)
+            dlg.setValue(done)
+
+        def on_file_done(filename: str, success: bool, msg: str):
+            if success:
+                # Refresh the file system model and reload annotations
+                self.fs_model.setRootPath("")
+                self.fs_model.setRootPath(str(self.root_path))
+                self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+                # Restore folder selection after tree refresh
+                QTimer.singleShot(100, self._restore_folder_selection)
+                self._load_annotations_for_current()
+
+        def on_finished(canceled: bool):
+            dlg.close()
+            if not canceled:
+                QMessageBox.information(self, "Export Complete", 
+                                        f"Successfully exported '{self.current_audio_file.name}' with {boost_factor:.1f}x volume boost.")
+                # Reload the current file to update waveform display
+                if self.current_audio_file and self.current_audio_file.exists():
+                    self._play_file(self.current_audio_file)
+            
+            # Clean up
+            self._boost_worker.deleteLater()
+            self._boost_thread.quit()
+            self._boost_thread.wait()
+            self._boost_thread.deleteLater()
+            self._boost_worker = None
+            self._boost_thread = None
+
+        # Connect signals
+        self._boost_thread.started.connect(self._boost_worker.run)
+        self._boost_worker.progress.connect(on_progress)
+        self._boost_worker.file_done.connect(on_file_done)
+        self._boost_worker.finished.connect(on_finished)
+        dlg.canceled.connect(self._boost_worker.cancel)
+
+        # Start the export
+        self._boost_thread.start()
         dlg.exec()
 
     # ----- WAV→MP3 conversion (threaded with progress) -----

@@ -4,6 +4,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Volume Boost Feature**: Allow users to boost audio volume above normal playback levels
+  - New "Boost" slider control in player bar (range: 1.0x to 4.0x)
+  - Real-time volume boost during playback by combining volume and boost multipliers
+  - "Export with Volume Boost" menu item in File menu to save boosted audio
+  - Applies boost to audio file and saves as replacement (original backed up with '_original' suffix)
+  - Boost setting persisted across application sessions
+  - Automatic playback stop before file export to ensure file is not in use
+  - Works with both WAV and MP3 files using pydub audio processing
+
 ### Fixed
 - **Channel Muting Signal Recursion**: Fixed infinite signal recursion bug when toggling channel muting checkboxes
   - Removed redundant `_update_channel_muting_state()` call from `_on_channel_muting_changed()` that caused unwanted re-entry
