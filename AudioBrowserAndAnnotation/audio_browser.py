@@ -5043,7 +5043,7 @@ class AudioBrowser(QMainWindow):
         # Apply both volume and boost
         base_volume = max(0.0, min(1.0, val / 100.0))
         boost_factor = self.volume_boost / 100.0
-        effective_volume = min(1.0, base_volume * boost_factor)
+        effective_volume = base_volume * boost_factor
         self.audio_output.setVolume(effective_volume)
         self.settings.setValue(SETTINGS_KEY_VOLUME, int(val))
     
@@ -5796,8 +5796,6 @@ class AudioBrowser(QMainWindow):
         # Reload the current file with new channel settings
         if self.current_audio_file:
             self._play_file(self.current_audio_file, seek_to_ms=current_position if was_playing else None)
-            if was_playing:
-                self.player.play()
 
     def _update_channel_muting_state(self):
         """Update channel muting checkbox state based on current file."""

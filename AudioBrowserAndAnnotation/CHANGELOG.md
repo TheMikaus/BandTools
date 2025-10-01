@@ -15,6 +15,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Works with both WAV and MP3 files using pydub audio processing
 
 ### Fixed
+- **Volume Boost During Playback**: Fixed volume boost not applying correctly during real-time playback
+  - Removed `min(1.0)` cap on effective volume that prevented boost from exceeding 100%
+  - Boost now properly amplifies audio up to 4.0x (400%) as intended
+  - Volume boost slider now has full effect during playback, not just on export
+- **Channel Muting Playback Issues**: Fixed potential issues with channel muting during playback
+  - Removed redundant `player.play()` call in `_on_channel_muting_changed()` that could cause playback issues
+  - Channel muting now restarts playback cleanly with correct channel configuration
+  - Eliminated duplicate play command that occurred after `_play_file()` already started playback
 - **Channel Muting Signal Recursion**: Fixed infinite signal recursion bug when toggling channel muting checkboxes
   - Removed redundant `_update_channel_muting_state()` call from `_on_channel_muting_changed()` that caused unwanted re-entry
   - Added signal blocking when programmatically setting checkbox states for mono files to prevent triggering stateChanged events
