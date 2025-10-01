@@ -4,6 +4,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **Channel Muting Array Size Mismatch**: Fixed error when muting channels in stereo MP3 files
+  - Changed silent right channel to use `len(channels[1])` instead of `len(channels[0])`
+  - Prevents "attempt to assign array of size X to extended slice of size Y" errors
+  - Fixes issue where stereo channels with slightly different lengths (common in MP3 encoding) caused crashes
+  - Channel muting now works correctly for all stereo audio files
+
 ### Added
 - **Volume Boost Feature**: Allow users to boost audio volume above normal playback levels
   - New "Boost" slider control in player bar (range: 1.0x to 4.0x)
