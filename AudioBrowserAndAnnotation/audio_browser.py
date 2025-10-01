@@ -172,6 +172,7 @@ SETTINGS_KEY_FINGERPRINT_ALGORITHM = "fingerprint_algorithm"
 SETTINGS_KEY_AUTO_GEN_WAVEFORMS = "auto_generate_waveforms"
 SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generate_fingerprints"
 SETTINGS_KEY_AUTO_GEN_TIMING = "auto_generation_timing"  # "boot" or "folder_selection"
+SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
@@ -3725,8 +3726,26 @@ class AudioBrowser(QMainWindow):
         self._undo_index: int = 0
         self._undo_capacity: int = int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100))
 
-        # Media
-        self.audio_output = QAudioOutput()
+        # Media - Initialize with default or persisted audio device
+        self.media_instance = QMediaDevices()
+        
+        # Try to load persisted device or use system default
+        persisted_device_id = self.settings.value(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, "")
+        selected_device = None
+        
+        if persisted_device_id:
+            # Try to find the persisted device
+            for device in QMediaDevices.audioOutputs():
+                if device.id() == persisted_device_id:
+                    selected_device = device
+                    break
+        
+        # If no persisted device or device not found, use default
+        if selected_device is None:
+            selected_device = QMediaDevices.defaultAudioOutput()
+        
+        # Create audio output with selected device
+        self.audio_output = QAudioOutput(selected_device) if selected_device else QAudioOutput()
         self.player = QMediaPlayer()
         self.player.setAudioOutput(self.audio_output)
         self.player.errorOccurred.connect(self._on_media_error)
@@ -3734,7 +3753,6 @@ class AudioBrowser(QMainWindow):
         self.player.durationChanged.connect(self._on_duration_changed)
         
         # Listen for audio device changes
-        self.media_instance = QMediaDevices()
         self.media_instance.audioOutputsChanged.connect(self._refresh_output_devices)
 
         vol_raw = self.settings.value(SETTINGS_KEY_VOLUME, 90)
@@ -5060,7 +5078,7 @@ class AudioBrowser(QMainWindow):
     def _refresh_output_devices(self):
         """Populate the output device combo box with available audio devices."""
         current_device = self.audio_output.device()
-        current_description = current_device.description() if current_device else ""
+        current_device_id = current_device.id() if current_device else None
         
         self.output_device_combo.clear()
         devices = QMediaDevices.audioOutputs()
@@ -5068,7 +5086,8 @@ class AudioBrowser(QMainWindow):
         selected_index = 0
         for i, device in enumerate(devices):
             self.output_device_combo.addItem(device.description(), device)
-            if device.description() == current_description:
+            # Match by device ID for more reliable matching
+            if current_device_id and device.id() == current_device_id:
                 selected_index = i
         
         if not devices:
@@ -5086,6 +5105,10 @@ class AudioBrowser(QMainWindow):
         device = self.output_device_combo.itemData(index)
         if device is None:
             return
+        
+        # Persist the device selection
+        device_id = device.id()
+        self.settings.setValue(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, device_id)
             
         # Store current playback state
         was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
