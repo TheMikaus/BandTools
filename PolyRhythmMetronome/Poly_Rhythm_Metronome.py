@@ -14,6 +14,7 @@ Stereo Subdivision Metronome — Compact UI + Live Updates + DrumSynth + Stable 
 
 import sys, subprocess, importlib, traceback, math, time, uuid
 import json, os, threading, wave
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog, colorchooser
 from collections import deque
@@ -194,6 +195,25 @@ class StreamEngine:
         self.left_layers=[]; self.right_layers=[]; self.L_intervals=[]; self.R_intervals=[]; self.L_next=[]; self.R_next=[]
         self.measure_samples=0; self.sample_counter=0; self.accent_factor=DEFAULT_ACCENT_FACTOR; self.flash_enabled=False
         self.active=[]; self._sa_start_time=None
+    def _log_exception(self, context_msg: str):
+        """Log exception with timestamp and context information."""
+        try:
+            with open("metronome_log.txt", "a", encoding="utf-8") as f:
+                f.write("\n" + "="*70 + "\n")
+                f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
+                f.write(f"Context: {context_msg}\n")
+                f.write(f"Running: {self.running}\n")
+                f.write(f"Left layers: {len(self.left_layers)} (muted: {sum(1 for l in self.left_layers if l.get('mute', False))})\n")
+                f.write(f"Right layers: {len(self.right_layers)} (muted: {sum(1 for l in self.right_layers if l.get('mute', False))})\n")
+                f.write(f"Active sounds: {len(self.active)}\n")
+                f.write("-"*70 + "\n")
+                traceback.print_exc(file=f)
+                f.write("="*70 + "\n")
+        except Exception:
+            # Fallback if logging fails
+            print(f"Failed to write to log: {context_msg}", file=sys.stderr)
+            traceback.print_exc()
+    
     def _notify_error(self, msg:str):
         def cb():
             try: messagebox.showerror("Audio Error", msg)
@@ -293,8 +313,7 @@ class StreamEngine:
                 if blip["idx"]<data.shape[0]: new_active.append(blip)
             self.active=new_active; outdata[:]=block; self.sample_counter+=frames
         except Exception:
-            with open("metronome_log.txt","a",encoding="utf-8") as f:
-                f.write("=== Exception in sounddevice callback ===\n"); traceback.print_exc(file=f)
+            self._log_exception("Exception in sounddevice callback")
             outdata[:]=0; return
     def _sa_loop(self):
         try:
@@ -348,8 +367,7 @@ class StreamEngine:
                 except TypeError: h=sa.play_buffer(int16.tobytes(),2,2,sr)
                 handles.append(h); time.sleep(0.0005)
         except Exception:
-            with open("metronome_log.txt","a",encoding="utf-8") as f:
-                f.write("=== Exception in simpleaudio loop ===\n"); traceback.print_exc(file=f)
+            self._log_exception("Exception in simpleaudio loop")
             self._notify_error("Audio engine stopped due to an error.")
         finally:
             self.running=False
