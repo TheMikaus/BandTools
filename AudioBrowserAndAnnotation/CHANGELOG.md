@@ -5,6 +5,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Audio Device Auto-Selection and Persistence**: Improved audio output device management
+  - Application now automatically selects the default system audio device on startup
+  - User's audio device selection is now persisted between sessions
+  - Device matching uses device ID for more reliable identification
+  - Seamlessly handles device changes (plugging/unplugging audio devices)
+  - Settings stored using new `SETTINGS_KEY_AUDIO_OUTPUT_DEVICE` key
 - **Volume Boost Feature**: Allow users to boost audio volume above normal playback levels
   - New "Boost" slider control in player bar (range: 1.0x to 4.0x)
   - Real-time volume boost during playback by combining volume and boost multipliers
