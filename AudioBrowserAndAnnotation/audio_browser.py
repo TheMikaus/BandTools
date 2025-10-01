@@ -5425,7 +5425,7 @@ class AudioBrowser(QMainWindow):
                 # Split into individual channels
                 channels = audio.split_to_mono()
                 left_channel = channels[0] if left_enabled else AudioSegment.silent(duration=len(channels[0]))
-                right_channel = channels[1] if right_enabled and len(channels) > 1 else AudioSegment.silent(duration=len(channels[0]))
+                right_channel = channels[1] if right_enabled and len(channels) > 1 else AudioSegment.silent(duration=len(channels[1]))
                 
                 # Create stereo audio with muted channels
                 muted_audio = AudioSegment.from_mono_audiosegments(left_channel, right_channel)
