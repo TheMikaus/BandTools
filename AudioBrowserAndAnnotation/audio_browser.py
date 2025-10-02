@@ -1829,7 +1829,7 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     This includes:
     - .provided_names.json (file naming data)
     - .duration_cache.json (playback duration cache)
-    - .waveform_cache.json (waveform visualization cache)
+    - .waveforms/.waveform_cache.json (waveform visualization cache)
     - .audio_fingerprints.json (audio fingerprint data)
     - .audio_notes_<username>.json (user-specific annotation data)
     
@@ -1851,7 +1851,7 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     possible_files = [
         practice_folder / NAMES_JSON,
         practice_folder / DURATIONS_JSON,
-        practice_folder / WAVEFORM_JSON,
+        practice_folder / ".waveforms" / WAVEFORM_JSON,  # Waveform cache now in .waveforms subdirectory
         practice_folder / FINGERPRINTS_JSON,
     ]
     
