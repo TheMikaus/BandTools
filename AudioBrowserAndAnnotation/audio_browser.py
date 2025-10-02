@@ -2141,10 +2141,12 @@ class MonoConvertWorker(QObject):
     file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
     finished = pyqtSignal(bool)  # canceled?
 
-    def __init__(self, audio_path: str):
+    def __init__(self, audio_path: str, left_enabled: bool, right_enabled: bool):
         super().__init__()
         self._path = str(audio_path)
         self._cancel = False
+        self._left_enabled = left_enabled
+        self._right_enabled = right_enabled
 
     def cancel(self): 
         self._cancel = True
@@ -2152,6 +2154,11 @@ class MonoConvertWorker(QObject):
     def run(self):
         if self._cancel: 
             self.finished.emit(True)
+            return
+
+        if not self._left_enabled and not self._right_enabled:
+            self.file_done.emit(src.name, False, "Not exporting any audio. Aborting.")
+            self.finished.emit(False)
             return
             
         src = Path(self._path)
@@ -2166,15 +2173,21 @@ class MonoConvertWorker(QObject):
                 self.file_done.emit(src.name, False, "File is already mono")
                 self.finished.emit(False)
                 return
-            
-            # Convert to mono
-            mono_audio = audio.set_channels(1)
+
+            # Convert to mono respecting the muted channels
+            channels = audio.split_to_mono()
+            if not self._left_enabled:
+               mono_audio = channels[1] 
+            elif not self._right_enabled:
+                mono_audio = channels[0]
+            else:
+                mono_audio = audio.set_channels(1)
             
             # Create backup filename
             base = src.stem
             backup_name = f"{base}_stereo{src.suffix}"
             backup_path = src.with_name(backup_name)
-            
+
             # Make sure backup doesn't already exist
             n = 1
             while backup_path.exists():
@@ -2194,6 +2207,7 @@ class MonoConvertWorker(QObject):
             self.file_done.emit(src.name, True, f"Converted to mono (stereo backup: {backup_name})")
             
         except Exception as e:
+            # TODO: add appropriate logging for the exception
             self.file_done.emit(src.name, False, str(e))
         
         self.progress.emit(1, 1, src.name)
@@ -5717,11 +5731,16 @@ class AudioBrowser(QMainWindow):
             if audio.channels >= 2:
                 # Split into individual channels
                 channels = audio.split_to_mono()
-                left_channel = channels[0] if left_enabled else AudioSegment.silent(duration=len(channels[0]))
-                right_channel = channels[1] if right_enabled and len(channels) > 1 else AudioSegment.silent(duration=len(channels[1]))
+                
+                # decrease the volume by a large number of decibles
+                if not left_enabled:
+                    channels[0] = channels[0] - 100
+
+                if not right_enabled:
+                    channels[1] = channels[1] - 100
                 
                 # Create stereo audio with muted channels
-                muted_audio = AudioSegment.from_mono_audiosegments(left_channel, right_channel)
+                muted_audio = AudioSegment.from_mono_audiosegments(channels[0], channels[1])
             else:
                 # For mono files, just return original or silence
                 muted_audio = audio if (left_enabled or right_enabled) else AudioSegment.silent(duration=len(audio))
@@ -7908,10 +7927,14 @@ class AudioBrowser(QMainWindow):
         dlg.setAutoReset(False)
         dlg.setMinimumDuration(0)
         dlg.setValue(0)
+        
+        # Cache off the checkboxes. This is mostly for readability of MonoConverterWorker creation
+        left_enabled = self.left_channel_cb.isChecked()
+        right_enabled = self.right_channel_cb.isChecked()
 
         # Create worker thread
         self._mono_thread = QThread(self)
-        self._mono_worker = MonoConvertWorker(str(self.current_audio_file))
+        self._mono_worker = MonoConvertWorker(str(self.current_audio_file), left_enabled, right_enabled)
         self._mono_worker.moveToThread(self._mono_thread)
 
         def on_progress(done: int, total: int, name: str):
