@@ -5242,6 +5242,25 @@ class AudioBrowser(QMainWindow):
             partial_take_action = menu.addAction("Mark as Partial Take")
             partial_take_action.setToolTip("Mark this file as a partial take")
         
+        # Add separator before file operations
+        menu.addSeparator()
+        
+        # Add Export to Mono option (only for stereo files)
+        channels = self._get_cached_channel_count(file_path)
+        if channels >= 2:
+            export_mono_action = menu.addAction("Export to Mono")
+            export_mono_action.setToolTip("Convert this stereo file to mono")
+        else:
+            export_mono_action = None
+        
+        # Add Regenerate Waveform option
+        regenerate_waveform_action = menu.addAction("Regenerate Waveform")
+        regenerate_waveform_action.setToolTip("Clear cached waveform and regenerate it")
+        
+        # Add Regenerate Fingerprint option
+        regenerate_fingerprint_action = menu.addAction("Regenerate Fingerprint")
+        regenerate_fingerprint_action.setToolTip("Regenerate fingerprint for this file")
+        
         # Add separator before fingerprinting options
         menu.addSeparator()
         
@@ -5262,6 +5281,15 @@ class AudioBrowser(QMainWindow):
         elif result == partial_take_action:
             # Toggle partial take status
             self._toggle_partial_take_for_file(filename, file_path)
+        elif export_mono_action and result == export_mono_action:
+            # Export to mono
+            self._export_to_mono_for_file(file_path)
+        elif result == regenerate_waveform_action:
+            # Regenerate waveform
+            self._regenerate_waveform_for_file(file_path)
+        elif result == regenerate_fingerprint_action:
+            # Regenerate fingerprint
+            self._regenerate_fingerprint_for_file(file_path)
         elif result == fingerprint_action:
             # Toggle exclusion status
             new_status = toggle_file_fingerprint_exclusion(dirpath, filename)
@@ -5371,6 +5399,82 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show partial take formatting
         self._refresh_tree_display()
+
+    def _export_to_mono_for_file(self, file_path: Path):
+        """Export the selected file to mono from the context menu."""
+        # Temporarily set this as the current audio file so _convert_to_mono works
+        old_current = self.current_audio_file
+        self.current_audio_file = file_path
+        
+        try:
+            self._convert_to_mono()
+        finally:
+            # Restore the previous current file
+            self.current_audio_file = old_current
+
+    def _regenerate_waveform_for_file(self, file_path: Path):
+        """Regenerate waveform for a specific file from the context menu."""
+        try:
+            # Clear the waveform cache for this file
+            cache = load_waveform_cache(file_path.parent)
+            
+            # Remove mono cache entries
+            cache_key = f"{file_path.stem}"
+            if cache_key in cache:
+                del cache[cache_key]
+            
+            # Remove stereo cache entries
+            stereo_key = f"{file_path.stem}_stereo"
+            if stereo_key in cache:
+                del cache[stereo_key]
+            
+            # Save the updated cache
+            save_waveform_cache(file_path.parent, cache)
+            
+            # If this is the currently displayed file, regenerate the waveform
+            if self.current_audio_file and self.current_audio_file.resolve() == file_path.resolve():
+                # Force reload to regenerate waveform
+                self._play_file(file_path)
+                QMessageBox.information(self, "Waveform Regenerated", 
+                                      f"Waveform cache cleared and regenerated for '{file_path.name}'.")
+            else:
+                QMessageBox.information(self, "Waveform Cache Cleared", 
+                                      f"Waveform cache cleared for '{file_path.name}'.\n"
+                                      "The waveform will be regenerated when the file is played.")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to regenerate waveform: {e}")
+
+    def _regenerate_fingerprint_for_file(self, file_path: Path):
+        """Regenerate fingerprint for a specific file from the context menu."""
+        try:
+            # Load the fingerprint cache
+            cache = load_fingerprint_cache(file_path.parent)
+            
+            # Get all available algorithms
+            from collections import OrderedDict
+            algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
+            
+            # Decode audio
+            samples, sr, _, _ = decode_audio_samples(file_path, stereo=False)
+            
+            # Generate fingerprints for all algorithms
+            new_fingerprints = compute_multiple_fingerprints(samples, sr, algorithms_to_generate)
+            
+            # Update cache
+            files_cache = cache.setdefault("files", {})
+            files_cache[file_path.name] = new_fingerprints
+            
+            # Save the updated cache
+            save_fingerprint_cache(file_path.parent, cache)
+            
+            QMessageBox.information(self, "Fingerprint Regenerated", 
+                                  f"Fingerprints regenerated for '{file_path.name}'.\n"
+                                  f"Generated {len(new_fingerprints)} algorithm(s).")
+            
+            # Update UI
+            self._update_fingerprint_ui()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to regenerate fingerprint: {e}")
 
     def _refresh_tree_display(self):
         """Force refresh of the tree display to update visual indicators."""

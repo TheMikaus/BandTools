@@ -13,6 +13,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Seamlessly integrates with existing best/partial take functionality
   - Automatic file renaming with "_best_take" or "_partial_take" suffix when marked
   - Works alongside Library tab indicators and Annotations tab checkboxes
+- **Additional Context Menu Options**: Extended file tree context menu with file operation shortcuts
+  - "Export to Mono" option for stereo files to quickly convert to mono format
+  - "Regenerate Waveform" option to clear cached waveform and force regeneration
+  - "Regenerate Fingerprint" option to regenerate audio fingerprints for a specific file
+  - All options work on the right-clicked file without needing to select it first
+  - Export to Mono only appears for stereo files (automatically detected)
 - **Automatic File Renaming for Best/Partial Takes**: Files are now automatically renamed when marked as best or partial takes
   - Marking a file as "Best Take" appends "_best_take" suffix to the filename
   - Marking a file as "Partial Take" appends "_partial_take" suffix to the filename
