@@ -4,6 +4,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Changed
+- **Waveform Cache Organization**: Waveform cache files are now stored in a `.waveforms` subdirectory
+  - Central waveform cache (`.waveform_cache.json`) now stored in `.waveforms/` folder
+  - Individual waveform cache files (`.waveform_cache_{filename}.json`) now stored in `.waveforms/` folder
+  - `.waveforms/` directory is automatically created when needed
+  - Automatic migration: existing waveform files in audio directories are moved to `.waveforms/` on first access
+  - Cleaner file organization: waveform metadata separated from audio files
+  - No user action required: migration happens transparently
+
 ### Added
 - **Automatic File Renaming for Best/Partial Takes**: Files are now automatically renamed when marked as best or partial takes
   - Marking a file as "Best Take" appends "_best_take" suffix to the filename

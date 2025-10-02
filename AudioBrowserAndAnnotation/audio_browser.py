@@ -491,12 +491,65 @@ def save_json(path: Path, data):
     except Exception:
         pass
 
+def migrate_waveform_files_to_subfolder(dirpath: Path) -> None:
+    """
+    Migrate existing waveform files from the audio directory to the .waveforms subdirectory.
+    This includes:
+    - .waveform_cache.json (central cache)
+    - .waveform_cache_{filename}.json (individual mono caches)
+    - .waveform_cache_{filename}_stereo.json (individual stereo caches)
+    """
+    waveforms_dir = dirpath / ".waveforms"
+    
+    try:
+        # Find all waveform-related files in the directory
+        waveform_files = []
+        
+        # Central cache file
+        old_central_cache = dirpath / WAVEFORM_JSON
+        if old_central_cache.exists():
+            waveform_files.append(old_central_cache)
+        
+        # Individual cache files (both mono and stereo)
+        for file_path in dirpath.glob(".waveform_cache_*.json"):
+            waveform_files.append(file_path)
+        
+        # If there are files to migrate, create the directory and move them
+        if waveform_files:
+            waveforms_dir.mkdir(exist_ok=True)
+            
+            for old_file in waveform_files:
+                new_file = waveforms_dir / old_file.name
+                try:
+                    # Move the file (or copy if move fails)
+                    if not new_file.exists():
+                        old_file.rename(new_file)
+                except Exception:
+                    # If rename fails, try copy and delete
+                    try:
+                        import shutil
+                        shutil.copy2(old_file, new_file)
+                        old_file.unlink()
+                    except Exception:
+                        pass  # Silently fail - worst case we regenerate
+    except Exception:
+        pass  # Migration is not critical, fail silently
+
 def load_waveform_cache(dirpath: Path) -> Dict:
-    data = load_json(dirpath / WAVEFORM_JSON, None)
+    # Migrate old files if they exist
+    migrate_waveform_files_to_subfolder(dirpath)
+    
+    waveforms_dir = dirpath / ".waveforms"
+    data = load_json(waveforms_dir / WAVEFORM_JSON, None)
     return data if isinstance(data, dict) and "files" in data else {"version": 1, "files": {}}
 
 def save_waveform_cache(dirpath: Path, cache: Dict) -> None:
-    save_json(dirpath / WAVEFORM_JSON, cache)
+    waveforms_dir = dirpath / ".waveforms"
+    try:
+        waveforms_dir.mkdir(exist_ok=True)
+    except Exception:
+        pass  # If we can't create the directory, save_json will fail gracefully
+    save_json(waveforms_dir / WAVEFORM_JSON, cache)
 
 def bytes_to_human(n: int) -> str:
     units = ["B", "KB", "MB", "GB", "TB"]
@@ -1776,7 +1829,7 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     This includes:
     - .provided_names.json (file naming data)
     - .duration_cache.json (playback duration cache)
-    - .waveform_cache.json (waveform visualization cache)
+    - .waveforms/.waveform_cache.json (waveform visualization cache)
     - .audio_fingerprints.json (audio fingerprint data)
     - .audio_notes_<username>.json (user-specific annotation data)
     
@@ -1798,7 +1851,7 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     possible_files = [
         practice_folder / NAMES_JSON,
         practice_folder / DURATIONS_JSON,
-        practice_folder / WAVEFORM_JSON,
+        practice_folder / ".waveforms" / WAVEFORM_JSON,  # Waveform cache now in .waveforms subdirectory
         practice_folder / FINGERPRINTS_JSON,
     ]
     
@@ -2317,8 +2370,13 @@ class AutoWaveformWorker(QObject):
             try:
                 # Check if waveform cache files already exist
                 audio_path = Path(audio_file)
-                mono_cache_file = audio_path.parent / f".waveform_cache_{audio_path.stem}.json"
-                stereo_cache_file = audio_path.parent / f".waveform_cache_{audio_path.stem}_stereo.json"
+                waveforms_dir = audio_path.parent / ".waveforms"
+                try:
+                    waveforms_dir.mkdir(exist_ok=True)
+                except Exception:
+                    pass  # If we can't create the directory, continue and let file operations handle it
+                mono_cache_file = waveforms_dir / f".waveform_cache_{audio_path.stem}.json"
+                stereo_cache_file = waveforms_dir / f".waveform_cache_{audio_path.stem}_stereo.json"
                 
                 # Skip if both caches exist (don't regenerate existing waveforms)
                 if mono_cache_file.exists() and stereo_cache_file.exists():
