@@ -4,6 +4,23 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Automatic File Renaming for Best/Partial Takes**: Files are now automatically renamed when marked as best or partial takes
+  - Marking a file as "Best Take" appends "_best_take" suffix to the filename
+  - Marking a file as "Partial Take" appends "_partial_take" suffix to the filename
+  - Unmarking removes the respective suffix from the filename
+  - All metadata (annotations, provided names, durations) automatically updated after rename
+  - Works from both Library tab (clicking indicators) and Annotations tab (checkboxes)
+  - File system view refreshes automatically to show renamed files
+  - Error handling prevents data loss if rename fails (reverts checkbox state)
+
+### Changed
+- **Batch Rename Filename Formatting**: Improved filename standardization in batch rename
+  - Library names now converted to lowercase with spaces replaced by underscores
+  - New `sanitize_library_name()` function for consistent filename formatting
+  - Format: `##_lowercase_name_with_underscores.ext` (e.g., `01_my_song_name.wav`)
+  - Previous format used spaces which are now replaced with underscores for better file system compatibility
+
 ### Fixed
 - **Channel Muting Array Size Mismatch**: Fixed error when muting channels in stereo MP3 files
   - Changed silent right channel to use `len(channels[1])` instead of `len(channels[0])`
