@@ -14,6 +14,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - No user action required: migration happens transparently
 
 ### Added
+- **Open in Explorer Context Menu Option**: Added quick access to open files in file explorer
+  - Right-click on any audio file in the file tree to access "Open in Explorer" option
+  - Opens the system file manager with the selected file highlighted
+  - Windows: Uses `explorer /select` to highlight the file in Windows Explorer
+  - macOS: Uses `open -R` to reveal the file in Finder
+  - Linux: Opens the parent directory in the default file manager (xdg-open)
+  - Appears as the first option in the context menu for easy access
 - **Right-Click Context Menu for Best/Partial Takes**: Added quick access to mark files from the file tree
   - Right-click on any audio file in the file tree to open context menu
   - "Mark as Best Take" / "Unmark as Best Take" option to toggle best take status
