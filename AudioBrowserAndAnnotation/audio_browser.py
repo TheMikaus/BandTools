@@ -7939,7 +7939,7 @@ class AudioBrowser(QMainWindow):
         
         # Confirm conversion
         msg = (f"Convert '{self.current_audio_file.name}' to mono?\n\n"
-               "• The original stereo file will be renamed with '_stereo' suffix\n"
+               "• The original stereo file will be backed up to .backup folder with '_stereo' suffix\n"
                "• A new mono version will replace the original filename")
         if QMessageBox.question(self, "Convert to Mono", msg,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
