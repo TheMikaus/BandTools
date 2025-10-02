@@ -22,6 +22,11 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Previous format used spaces which are now replaced with underscores for better file system compatibility
 
 ### Fixed
+- **Mono Export and Volume Boost File Handle Issue**: Fixed mono export and volume boost export failing due to locked file handles
+  - Now properly releases media player file handle before attempting file rename operations
+  - Calls `_release_media_for_path()` to clear QMediaPlayer source and wait for OS to release file locks
+  - Prevents "Permission denied" or "file in use" errors on Windows during mono conversion and volume boost export
+  - Both "Convert to Mono" and "Export with Volume Boost" features now work correctly when file is selected
 - **Channel Muting Array Size Mismatch**: Fixed error when muting channels in stereo MP3 files
   - Changed silent right channel to use `len(channels[1])` instead of `len(channels[0])`
   - Prevents "attempt to assign array of size X to extended slice of size Y" errors

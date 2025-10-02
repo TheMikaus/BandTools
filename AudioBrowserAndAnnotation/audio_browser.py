@@ -7610,6 +7610,8 @@ class AudioBrowser(QMainWindow):
             return
 
         self._stop_playback()
+        # Release the file handle so we can rename it
+        self._release_media_for_path(self.current_audio_file)
 
         # Create progress dialog
         dlg = QProgressDialog("Converting to mono…", "Cancel", 0, 1, self)
@@ -7697,6 +7699,8 @@ class AudioBrowser(QMainWindow):
             return
 
         self._stop_playback()
+        # Release the file handle so we can rename it
+        self._release_media_for_path(self.current_audio_file)
 
         # Create progress dialog
         dlg = QProgressDialog("Exporting with volume boost…", "Cancel", 0, 1, self)
