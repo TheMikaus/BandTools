@@ -459,6 +459,12 @@ def sanitize(name: str) -> str:
     name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
     return re.sub(r"\s+", " ", name).strip()
 
+def sanitize_library_name(name: str) -> str:
+    """Sanitize a library name for use in filenames: lowercase and replace spaces with underscores."""
+    name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
+    name = re.sub(r"\s+", "_", name).strip()
+    return name.lower()
+
 def resource_path(name: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return base / name
@@ -5933,10 +5939,49 @@ class AudioBrowser(QMainWindow):
             return
         filename = file_item.text()
         
+        # Find the actual file path
+        old_path = self.root_path / filename
+        if not old_path.exists():
+            return
+        
         # Toggle best take for current set
         is_currently_best = self.file_best_takes.get(filename, False)
-        self.file_best_takes[filename] = not is_currently_best
-        self._save_notes()
+        new_best_state = not is_currently_best
+        self.file_best_takes[filename] = new_best_state
+        
+        # Calculate new filename with/without "_best_take" suffix
+        stem = old_path.stem
+        suffix = old_path.suffix
+        
+        # Remove existing "_best_take" suffix if present
+        if stem.endswith("_best_take"):
+            stem = stem[:-len("_best_take")]
+        
+        # Add "_best_take" suffix if now marked as best take
+        if new_best_state:
+            stem = f"{stem}_best_take"
+        
+        new_path = old_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if old_path != new_path:
+            success = self._rename_single_file(old_path, new_path)
+            if not success:
+                # Revert the state if rename failed
+                self.file_best_takes[filename] = is_currently_best
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_best_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
         
         # Refresh the entire table to update the display
         self._refresh_right_table()
@@ -5951,10 +5996,49 @@ class AudioBrowser(QMainWindow):
             return
         filename = file_item.text()
         
+        # Find the actual file path
+        old_path = self.root_path / filename
+        if not old_path.exists():
+            return
+        
         # Toggle partial take for current set
         is_currently_partial = self.file_partial_takes.get(filename, False)
-        self.file_partial_takes[filename] = not is_currently_partial
-        self._save_notes()
+        new_partial_state = not is_currently_partial
+        self.file_partial_takes[filename] = new_partial_state
+        
+        # Calculate new filename with/without "_partial_take" suffix
+        stem = old_path.stem
+        suffix = old_path.suffix
+        
+        # Remove existing "_partial_take" suffix if present
+        if stem.endswith("_partial_take"):
+            stem = stem[:-len("_partial_take")]
+        
+        # Add "_partial_take" suffix if now marked as partial take
+        if new_partial_state:
+            stem = f"{stem}_partial_take"
+        
+        new_path = old_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if old_path != new_path:
+            success = self._rename_single_file(old_path, new_path)
+            if not success:
+                # Revert the state if rename failed
+                self.file_partial_takes[filename] = is_currently_partial
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_partial_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
         
         # Refresh the entire table to update the display
         self._refresh_right_table()
@@ -6010,32 +6094,12 @@ class AudioBrowser(QMainWindow):
         # Handle double-clicks on the Best Take column (column 1) or Partial Take column (column 2)
         if column not in [1, 2]:
             return
-            
-        # Toggle best take or partial take for the current user/set on the clicked file
-        file_item = self.table.item(row, 0)
-        if not file_item:
-            return
-            
-        filename = file_item.text().strip()
-        if not filename:
-            return
-            
+        
+        # Delegate to the appropriate widget clicked handler
         if column == 1:  # Best Take column
-            # Toggle best take for current set (same logic as _on_best_take_widget_clicked)
-            is_currently_best = self.file_best_takes.get(filename, False)
-            self.file_best_takes[filename] = not is_currently_best
+            self._on_best_take_widget_clicked(row)
         elif column == 2:  # Partial Take column
-            # Toggle partial take for current set (same logic as _on_partial_take_widget_clicked)
-            is_currently_partial = self.file_partial_takes.get(filename, False)
-            self.file_partial_takes[filename] = not is_currently_partial
-            
-        self._save_notes()
-        
-        # Refresh the entire table to update the display
-        self._refresh_right_table()
-        
-        # Refresh the tree display to show best/partial take formatting
-        self._refresh_tree_display()
+            self._on_partial_take_widget_clicked(row)
 
     def _configure_annotation_table(self):
         self.annotation_table.clear()
@@ -6600,10 +6664,51 @@ class AudioBrowser(QMainWindow):
     def _on_best_take_changed(self, state):
         if not self.current_audio_file:
             return
-        fname = self.current_audio_file.name
+        
+        old_path = self.current_audio_file
+        fname = old_path.name
         is_checked = state == Qt.CheckState.Checked.value
+        
+        # Update the metadata
         self.file_best_takes[fname] = is_checked
-        self._save_notes()  # Save the annotation data including best_take
+        
+        # Calculate new filename with/without "_best_take" suffix
+        stem = old_path.stem
+        suffix = old_path.suffix
+        
+        # Remove existing "_best_take" suffix if present
+        if stem.endswith("_best_take"):
+            stem = stem[:-len("_best_take")]
+        
+        # Add "_best_take" suffix if checked
+        if is_checked:
+            stem = f"{stem}_best_take"
+        
+        new_path = old_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if old_path != new_path:
+            success = self._rename_single_file(old_path, new_path)
+            if not success:
+                # Revert the checkbox state if rename failed
+                self.best_take_cb.blockSignals(True)
+                self.best_take_cb.setChecked(not is_checked)
+                self.best_take_cb.blockSignals(False)
+                self.file_best_takes[fname] = not is_checked
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_best_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
+        
         self._refresh_right_table()  # Update the library table to show the green highlighting
         
         # Refresh the tree display to show best take formatting
@@ -6613,10 +6718,51 @@ class AudioBrowser(QMainWindow):
     def _on_partial_take_changed(self, state):
         if not self.current_audio_file:
             return
-        fname = self.current_audio_file.name
+        
+        old_path = self.current_audio_file
+        fname = old_path.name
         is_checked = state == Qt.CheckState.Checked.value
+        
+        # Update the metadata
         self.file_partial_takes[fname] = is_checked
-        self._save_notes()  # Save the annotation data including partial_take
+        
+        # Calculate new filename with/without "_partial_take" suffix
+        stem = old_path.stem
+        suffix = old_path.suffix
+        
+        # Remove existing "_partial_take" suffix if present
+        if stem.endswith("_partial_take"):
+            stem = stem[:-len("_partial_take")]
+        
+        # Add "_partial_take" suffix if checked
+        if is_checked:
+            stem = f"{stem}_partial_take"
+        
+        new_path = old_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if old_path != new_path:
+            success = self._rename_single_file(old_path, new_path)
+            if not success:
+                # Revert the checkbox state if rename failed
+                self.partial_take_cb.blockSignals(True)
+                self.partial_take_cb.setChecked(not is_checked)
+                self.partial_take_cb.blockSignals(False)
+                self.file_partial_takes[fname] = not is_checked
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_partial_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
+        
         self._refresh_right_table()  # Update the library table to show the highlighting
         
         # Refresh the tree display to show partial take formatting
@@ -7318,6 +7464,55 @@ class AudioBrowser(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Export Failed", f"Couldn't write file:\n{e}")
 
+    # ----- Helper for single file rename with metadata updates -----
+    def _rename_single_file(self, old_path: Path, new_path: Path) -> bool:
+        """
+        Rename a single file and update all associated metadata.
+        Returns True on success, False on failure.
+        """
+        if old_path.resolve() == new_path.resolve():
+            return True  # No rename needed
+        
+        if new_path.exists():
+            # File already exists with target name, cannot rename
+            return False
+        
+        try:
+            # Perform the rename
+            old_path.rename(new_path)
+            
+            # Update all metadata mappings
+            old_name = old_path.name
+            new_name = new_path.name
+            
+            # Update provided_names
+            if old_name in self.provided_names:
+                self.provided_names[new_name] = self.provided_names.pop(old_name)
+            
+            # Update played_durations
+            if old_name in self.played_durations:
+                self.played_durations[new_name] = self.played_durations.pop(old_name)
+            
+            # Update annotation sets
+            for s in self.annotation_sets:
+                files_map = s.setdefault("files", {})
+                if old_name in files_map and new_name not in files_map:
+                    files_map[new_name] = files_map.pop(old_name)
+            
+            # Update current_audio_file if it was the renamed file
+            if self.current_audio_file and self.current_audio_file.resolve() == old_path.resolve():
+                self.current_audio_file = new_path
+            
+            # Save all the updated metadata
+            self._save_names()
+            self._save_notes()
+            self._save_duration_cache()
+            
+            return True
+        except Exception as e:
+            log_print(f"Failed to rename {old_path.name} to {new_path.name}: {e}")
+            return False
+    
     # ----- Batch rename (##_<ProvidedName>) -----
     def _batch_rename(self):
         # Clear any selected file to avoid rename conflicts when file is in use
@@ -7333,7 +7528,7 @@ class AudioBrowser(QMainWindow):
         width = max(2, len(str(len(files))))
         plan, errors = [], []
         for i, p in enumerate(files, start=1):
-            base = sanitize(self.provided_names.get(p.name, "") or p.stem)
+            base = sanitize_library_name(self.provided_names.get(p.name, "") or p.stem)
             new_base = f"{str(i).zfill(width)}_{base}"
             target = p.with_name(f"{new_base}{p.suffix.lower()}")
             n = 1
