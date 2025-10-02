@@ -569,6 +569,22 @@ def _open_path_default(path: Path):
     except Exception as e:
         QMessageBox.warning(None, "Open Failed", f"Couldn't open:\n{e}")
 
+def _open_file_in_explorer(file_path: Path):
+    """Open file explorer/finder with the specified file selected."""
+    try:
+        if sys.platform.startswith("win"):
+            # Windows: Use explorer with /select flag to highlight the file
+            subprocess.run(["explorer", "/select,", str(file_path)])
+        elif sys.platform == "darwin":
+            # macOS: Use open with -R flag to reveal in Finder
+            subprocess.call(["open", "-R", str(file_path)])
+        else:
+            # Linux: Most file managers don't support file selection, so open the parent directory
+            # Try using the standard xdg-open on the parent directory
+            subprocess.call(["xdg-open", str(file_path.parent)])
+    except Exception as e:
+        QMessageBox.warning(None, "Open in Explorer Failed", f"Couldn't open file in explorer:\n{e}")
+
 def color_to_hex(c: QColor) -> str:
     return c.name(QColor.NameFormat.HexRgb)
 
@@ -5284,6 +5300,13 @@ class AudioBrowser(QMainWindow):
         # Create context menu
         menu = QMenu(self)
         
+        # Add Open in Explorer option
+        open_in_explorer_action = menu.addAction("Open in Explorer")
+        open_in_explorer_action.setToolTip("Open file manager with this file selected")
+        
+        # Add separator before marking options
+        menu.addSeparator()
+        
         # Add Best Take option
         if is_best_take:
             best_take_action = menu.addAction("Unmark as Best Take")
@@ -5333,7 +5356,10 @@ class AudioBrowser(QMainWindow):
         # Show menu and handle selection
         result = menu.exec(self.tree.mapToGlobal(position))
         
-        if result == best_take_action:
+        if result == open_in_explorer_action:
+            # Open file in explorer
+            _open_file_in_explorer(file_path)
+        elif result == best_take_action:
             # Toggle best take status
             self._toggle_best_take_for_file(filename, file_path)
         elif result == partial_take_action:
