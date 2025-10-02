@@ -5,6 +5,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Right-Click Context Menu for Best/Partial Takes**: Added quick access to mark files from the file tree
+  - Right-click on any audio file in the file tree to open context menu
+  - "Mark as Best Take" / "Unmark as Best Take" option to toggle best take status
+  - "Mark as Partial Take" / "Unmark as Partial Take" option to toggle partial take status
+  - Menu items dynamically update based on current file status
+  - Seamlessly integrates with existing best/partial take functionality
+  - Automatic file renaming with "_best_take" or "_partial_take" suffix when marked
+  - Works alongside Library tab indicators and Annotations tab checkboxes
 - **Automatic File Renaming for Best/Partial Takes**: Files are now automatically renamed when marked as best or partial takes
   - Marking a file as "Best Take" appends "_best_take" suffix to the filename
   - Marking a file as "Partial Take" appends "_partial_take" suffix to the filename

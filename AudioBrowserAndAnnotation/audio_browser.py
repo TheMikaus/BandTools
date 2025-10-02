@@ -5219,19 +5219,50 @@ class AudioBrowser(QMainWindow):
         # Check if file is currently excluded from fingerprinting
         is_excluded = self.file_proxy._is_file_excluded_cached(dirpath, filename)
         
+        # Check current best take and partial take status
+        is_best_take = self.file_best_takes.get(filename, False)
+        is_partial_take = self.file_partial_takes.get(filename, False)
+        
         # Create context menu
         menu = QMenu(self)
         
-        if is_excluded:
-            action = menu.addAction("Include in fingerprinting")
-            action.setToolTip("Include this file when matching fingerprints")
+        # Add Best Take option
+        if is_best_take:
+            best_take_action = menu.addAction("Unmark as Best Take")
+            best_take_action.setToolTip("Remove best take marking from this file")
         else:
-            action = menu.addAction("Exclude from fingerprinting")
-            action.setToolTip("Exclude this file when matching fingerprints")
+            best_take_action = menu.addAction("Mark as Best Take")
+            best_take_action.setToolTip("Mark this file as a best take")
+        
+        # Add Partial Take option
+        if is_partial_take:
+            partial_take_action = menu.addAction("Unmark as Partial Take")
+            partial_take_action.setToolTip("Remove partial take marking from this file")
+        else:
+            partial_take_action = menu.addAction("Mark as Partial Take")
+            partial_take_action.setToolTip("Mark this file as a partial take")
+        
+        # Add separator before fingerprinting options
+        menu.addSeparator()
+        
+        # Add fingerprinting exclusion option
+        if is_excluded:
+            fingerprint_action = menu.addAction("Include in fingerprinting")
+            fingerprint_action.setToolTip("Include this file when matching fingerprints")
+        else:
+            fingerprint_action = menu.addAction("Exclude from fingerprinting")
+            fingerprint_action.setToolTip("Exclude this file when matching fingerprints")
         
         # Show menu and handle selection
         result = menu.exec(self.tree.mapToGlobal(position))
-        if result == action:
+        
+        if result == best_take_action:
+            # Toggle best take status
+            self._toggle_best_take_for_file(filename, file_path)
+        elif result == partial_take_action:
+            # Toggle partial take status
+            self._toggle_partial_take_for_file(filename, file_path)
+        elif result == fingerprint_action:
             # Toggle exclusion status
             new_status = toggle_file_fingerprint_exclusion(dirpath, filename)
             
@@ -5246,6 +5277,100 @@ class AudioBrowser(QMainWindow):
             status_text = "excluded from" if new_status else "included in"
             QMessageBox.information(self, "Fingerprint Exclusion", 
                                   f"File '{filename}' is now {status_text} fingerprinting.")
+
+    def _toggle_best_take_for_file(self, filename: str, file_path: Path):
+        """Toggle best take status for a file from the context menu."""
+        # Toggle best take for current set
+        is_currently_best = self.file_best_takes.get(filename, False)
+        new_best_state = not is_currently_best
+        self.file_best_takes[filename] = new_best_state
+        
+        # Calculate new filename with/without "_best_take" suffix
+        stem = file_path.stem
+        suffix = file_path.suffix
+        
+        # Remove existing "_best_take" suffix if present
+        if stem.endswith("_best_take"):
+            stem = stem[:-len("_best_take")]
+        
+        # Add "_best_take" suffix if now marked as best take
+        if new_best_state:
+            stem = f"{stem}_best_take"
+        
+        new_path = file_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if file_path != new_path:
+            success = self._rename_single_file(file_path, new_path)
+            if not success:
+                # Revert the state if rename failed
+                self.file_best_takes[filename] = is_currently_best
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_best_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
+        
+        # Refresh the entire table to update the display
+        self._refresh_right_table()
+        
+        # Refresh the tree display to show best take formatting
+        self._refresh_tree_display()
+
+    def _toggle_partial_take_for_file(self, filename: str, file_path: Path):
+        """Toggle partial take status for a file from the context menu."""
+        # Toggle partial take for current set
+        is_currently_partial = self.file_partial_takes.get(filename, False)
+        new_partial_state = not is_currently_partial
+        self.file_partial_takes[filename] = new_partial_state
+        
+        # Calculate new filename with/without "_partial_take" suffix
+        stem = file_path.stem
+        suffix = file_path.suffix
+        
+        # Remove existing "_partial_take" suffix if present
+        if stem.endswith("_partial_take"):
+            stem = stem[:-len("_partial_take")]
+        
+        # Add "_partial_take" suffix if now marked as partial take
+        if new_partial_state:
+            stem = f"{stem}_partial_take"
+        
+        new_path = file_path.with_name(f"{stem}{suffix}")
+        
+        # Perform the rename if the name changed
+        if file_path != new_path:
+            success = self._rename_single_file(file_path, new_path)
+            if not success:
+                # Revert the state if rename failed
+                self.file_partial_takes[filename] = is_currently_partial
+                QMessageBox.warning(self, "Rename Failed", 
+                                  f"Could not rename file to add/remove '_partial_take' suffix.\n"
+                                  f"The file may be in use or the target name already exists.")
+                return
+            
+            # Refresh the file system model
+            self.fs_model.setRootPath("")
+            self.fs_model.setRootPath(str(self.root_path))
+            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
+            QTimer.singleShot(100, self._restore_folder_selection)
+        else:
+            # Even if no rename, save the metadata
+            self._save_notes()
+        
+        # Refresh the entire table to update the display
+        self._refresh_right_table()
+        
+        # Refresh the tree display to show partial take formatting
+        self._refresh_tree_display()
 
     def _refresh_tree_display(self):
         """Force refresh of the tree display to update visual indicators."""
