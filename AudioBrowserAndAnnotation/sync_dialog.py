@@ -13,20 +13,17 @@ from pathlib import Path
 from typing import List, Dict, Optional, Set
 import logging
 
-try:
-    from PyQt6.QtWidgets import (
-        QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-        QTableWidget, QTableWidgetItem, QCheckBox, QTextEdit,
-        QProgressDialog, QMessageBox, QInputDialog, QHeaderView,
-        QAbstractItemView
-    )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal
-    from PyQt6.QtGui import QColor
-except ImportError:
-    # Handle case where PyQt6 is not available (shouldn't happen in main app)
-    pass
-
 logger = logging.getLogger(__name__)
+
+# Import PyQt6 - these are required for the dialog to work
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+    QTableWidget, QTableWidgetItem, QCheckBox, QTextEdit,
+    QProgressDialog, QMessageBox, QInputDialog, QHeaderView,
+    QAbstractItemView
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QColor
 
 
 class SyncWorker(QThread):
