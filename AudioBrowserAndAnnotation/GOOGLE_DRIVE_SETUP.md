@@ -60,6 +60,7 @@ The AudioBrowser uses a simplified authentication approach that doesn't require 
    - Click "Create"
    - Click "Download JSON" to download the credentials file
    - Save this file as `credentials.json` in the AudioBrowserAndAnnotation directory
+   - **Note**: See `credentials.json.example` for the expected file format
 
 ### Method 2: Using Service Account (Alternative)
 
