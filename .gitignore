@@ -141,3 +141,11 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 metronome_autosave.json
+
+# Google Drive sync credentials (keep private!)
+credentials.json
+token.json
+service_account.json
+
+# Sync version files (local state)
+.sync_version.json

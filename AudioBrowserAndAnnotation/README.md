@@ -92,6 +92,58 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 
 The application uses an automatic version numbering system where the version increments with each commit. Check the [Releases page](https://github.com/TheMikaus/BandTools/releases) for the latest version.
 
-# Cloud based storage
-- Initial thoughts were to use Google drive's oAuth, but that seems to require me to register the app, and I dont' really want to do that, nor do I want to others to have to. So I cancelled that out for now.
-- Maybe allow a user to specify an FTP server?
+# Cloud Synchronization
+
+AudioBrowser now supports Google Drive synchronization for sharing practice sessions with your band members!
+
+## Google Drive Sync Features
+
+- **Manual Sync**: Click "☁ Sync" button in toolbar or File menu
+- **Version-Based Tracking**: Intelligent version tracking prevents conflicts
+- **Selective Sync**: Choose exactly which files to upload/download
+- **Automatic Annotation Sync**: Metadata files sync automatically (with your approval)
+- **Multi-User Support**: Each band member maintains their own annotations
+- **Safe Operations**: All changes require your confirmation before applying
+
+## Getting Started with Sync
+
+1. **Set up Google Drive API access** (one-time setup)
+   - See [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md) for detailed instructions
+   - Create OAuth credentials in Google Cloud Console
+   - Download `credentials.json` to AudioBrowserAndAnnotation directory
+
+2. **First Sync**
+   - Click "☁ Sync" button
+   - Authorize the app (opens browser)
+   - Select/create a Google Drive folder for your band
+   - Review and approve file changes
+
+3. **Regular Use**
+   - Click "☁ Sync" to check for updates
+   - Download: Get new recordings and annotations from band members
+   - Upload: Share your recordings and annotations with the band
+
+## What Gets Synced
+
+**Automatically Selected:**
+- Annotation files (`.audio_notes_*.json`)
+- Song names (`.provided_names.json`)
+- Duration cache (`.duration_cache.json`)
+- Audio fingerprints (`.audio_fingerprints.json`)
+- User colors (`.user_colors.json`)
+
+**You Choose:**
+- Audio files (`.wav`, `.mp3`) - Select which recordings to share
+
+**Never Synced:**
+- Backup folders (`.backup/`)
+- Waveform cache (`.waveforms/`)
+
+## Privacy and Security
+
+- Your band member's annotations are read-only - you can't modify them
+- You can only upload your own annotation files
+- All operations are logged for transparency
+- Your Google credentials are stored locally and never shared
+
+For complete setup instructions, see [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md).
