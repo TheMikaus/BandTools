@@ -7279,7 +7279,7 @@ class AudioBrowser(QMainWindow):
             self.table.blockSignals(True)
             for row in range(self.table.rowCount()):
                 it = self.table.item(row, 0)
-                if it and it.text() == file_name:
+                if it and self._strip_remote_prefix(it.text()) == file_name:
                     tgt = self.table.item(row, 1)
                     if tgt is None:
                         tgt = QTableWidgetItem(new_value)
