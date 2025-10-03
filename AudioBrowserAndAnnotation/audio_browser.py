@@ -181,7 +181,8 @@ WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
 FINGERPRINTS_JSON = ".audio_fingerprints.json"
 USER_COLORS_JSON = ".user_colors.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON}
+SONG_RENAMES_JSON = ".song_renames.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -1705,6 +1706,45 @@ def discover_directories_with_audio_files(root_path: Path) -> List[Path]:
     
     scan_directory(root_path)
     return directories_with_audio
+
+def find_files_with_song_name(root_path: Path, song_name: str) -> List[Dict[str, Any]]:
+    """
+    Find all files across all directories that have the given song name (provided name).
+    
+    Args:
+        root_path: Root directory to search from
+        song_name: The song name to search for (case-insensitive)
+    
+    Returns:
+        List of dicts with 'folder', 'filename', 'current_name' keys
+        Example: [
+            {"folder": Path("/path/to/folder1"), "filename": "01_recording.wav", "current_name": "Song Name"},
+            {"folder": Path("/path/to/folder2"), "filename": "02_take2.wav", "current_name": "Song Name"}
+        ]
+    """
+    matches = []
+    
+    # Discover all directories with audio files
+    directories = discover_directories_with_audio_files(root_path)
+    
+    # Normalize the search song name for comparison
+    search_name_lower = song_name.strip().lower()
+    
+    for folder_path in directories:
+        # Load provided names from this folder
+        names_json_path = folder_path / NAMES_JSON
+        provided_names = load_json(names_json_path, {}) or {}
+        
+        # Check each file's provided name
+        for filename, provided_name in provided_names.items():
+            if provided_name.strip().lower() == search_name_lower:
+                matches.append({
+                    "folder": folder_path,
+                    "filename": filename,
+                    "current_name": provided_name
+                })
+    
+    return matches
 
 def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None, reference_dir: Optional[Path] = None) -> Dict[str, List[Dict]]:
     """
@@ -3917,6 +3957,9 @@ class AudioBrowser(QMainWindow):
         # Provided names & duration cache
         self.provided_names: Dict[str, str] = {}
         self.played_durations: Dict[str, int] = self._load_duration_cache()
+        
+        # Song rename tracking for propagation across folders
+        self.song_renames: List[Dict[str, Any]] = []  # List of {old_name, new_name, timestamp}
 
         # Annotation sets
         self.annotation_sets: List[Dict[str, Any]] = []
@@ -3988,6 +4031,7 @@ class AudioBrowser(QMainWindow):
 
         # Load metadata
         self._load_names()
+        self._load_song_renames()
         self._load_notes()
         self._ensure_uids()
 
@@ -4310,7 +4354,7 @@ class AudioBrowser(QMainWindow):
         self.current_audio_file = None  # Clear current audio file before loading metadata
         self.played_durations = self._load_duration_cache()
         self.file_proxy.duration_cache = self.played_durations
-        self._load_names(); self._load_notes(); self._ensure_uids()
+        self._load_names(); self._load_song_renames(); self._load_notes(); self._ensure_uids()
         self._refresh_set_combo()
         self._refresh_right_table()
         self._load_annotations_for_current()
@@ -4375,6 +4419,19 @@ class AudioBrowser(QMainWindow):
     def _save_names(self):
         self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._names_json_path(), self.provided_names)
+
+    def _song_renames_json_path(self) -> Path:
+        """Return the path to the song renames JSON file."""
+        return self.current_practice_folder / SONG_RENAMES_JSON
+    
+    def _load_song_renames(self):
+        """Load song rename history from JSON."""
+        self.song_renames = load_json(self._song_renames_json_path(), []) or []
+    
+    def _save_song_renames(self):
+        """Save song rename history to JSON."""
+        self._create_backup_if_needed()  # Create backup before first modification
+        save_json(self._song_renames_json_path(), self.song_renames)
 
     # ----- Annotation sets load/save -----
     def _create_default_set(self, carry_notes: Optional[Dict[str, List[Dict]]] = None, carry_general: Optional[Dict[str, str]] = None, carry_folder_notes: str = ""):
@@ -7271,10 +7328,154 @@ class AudioBrowser(QMainWindow):
             return
         new_name = sanitize(self.provided_name_edit.text())
         fname = self.current_audio_file.name
-        if self.provided_names.get(fname, "") != new_name:
+        old_name = self.provided_names.get(fname, "")
+        
+        if old_name != new_name:
+            # Check if this is a song rename (old name exists and is being changed)
+            if old_name and new_name:
+                # Find all other files with the same old song name
+                matching_files = find_files_with_song_name(self.root_path, old_name)
+                
+                # Filter out the current file
+                other_files = [f for f in matching_files 
+                             if not (f["folder"] == self.current_practice_folder and f["filename"] == fname)]
+                
+                if other_files:
+                    # Ask user if they want to propagate the rename
+                    file_list = "\n".join([f"  • {f['folder'].name}/{f['filename']}" 
+                                          for f in other_files[:10]])
+                    if len(other_files) > 10:
+                        file_list += f"\n  ... and {len(other_files) - 10} more"
+                    
+                    reply = QMessageBox.question(
+                        self,
+                        "Propagate Song Rename?",
+                        f"Found {len(other_files)} other file(s) with the song name '{old_name}'.\n\n"
+                        f"Do you want to rename all instances to '{new_name}'?\n\n"
+                        f"Files:\n{file_list}",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        # Propagate the rename
+                        self._propagate_song_rename(old_name, new_name, matching_files)
+                        return  # _propagate_song_rename will save and update UI
+            
+            # Apply the rename to just this file
             self.provided_names[fname] = new_name
             self._save_names()
             self._update_library_provided_name_cell(fname, new_name)
+
+    def _propagate_song_rename(self, old_name: str, new_name: str, matching_files: List[Dict[str, Any]]):
+        """
+        Propagate a song rename to all matching files across all folders.
+        
+        Args:
+            old_name: The old song name
+            new_name: The new song name  
+            matching_files: List of dicts with 'folder', 'filename', 'current_name' keys
+        """
+        updated_count = 0
+        errors = []
+        
+        # Group files by folder for efficient processing
+        files_by_folder = {}
+        for file_info in matching_files:
+            folder = file_info["folder"]
+            if folder not in files_by_folder:
+                files_by_folder[folder] = []
+            files_by_folder[folder].append(file_info["filename"])
+        
+        # Update each folder's provided_names.json
+        for folder, filenames in files_by_folder.items():
+            try:
+                # Load the folder's provided names
+                names_json_path = folder / NAMES_JSON
+                provided_names = load_json(names_json_path, {}) or {}
+                
+                # Update all matching files in this folder
+                for filename in filenames:
+                    if filename in provided_names and provided_names[filename].strip().lower() == old_name.strip().lower():
+                        provided_names[filename] = new_name
+                        updated_count += 1
+                
+                # Save the updated provided names
+                save_json(names_json_path, provided_names)
+                
+            except Exception as e:
+                errors.append(f"{folder.name}: {e}")
+                log_print(f"ERROR: Failed to update provided names in {folder}: {e}")
+        
+        # Record the song rename in the current folder's history
+        rename_entry = {
+            "old_name": old_name,
+            "new_name": new_name,
+            "timestamp": datetime.now().isoformat(),
+            "files_updated": updated_count
+        }
+        self.song_renames.append(rename_entry)
+        self._save_song_renames()
+        
+        # Refresh the current folder's data
+        self._load_names()
+        self._update_library_provided_name_cell(self.current_audio_file.name, new_name)
+        self._refresh_right_table()
+        
+        # Show results
+        if errors:
+            error_text = "\n".join(errors[:10])
+            if len(errors) > 10:
+                error_text += f"\n... and {len(errors) - 10} more"
+            QMessageBox.warning(
+                self,
+                "Song Rename Completed with Errors",
+                f"Updated {updated_count} file(s) across {len(files_by_folder)} folder(s).\n\n"
+                f"Some folders failed:\n{error_text}"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Song Rename Complete",
+                f"Successfully renamed '{old_name}' to '{new_name}' in {updated_count} file(s) "
+                f"across {len(files_by_folder)} folder(s)."
+            )
+
+    def _apply_remote_song_renames(self):
+        """
+        Apply song renames from the downloaded .song_renames.json file.
+        This ensures that song renames propagate to users who sync from the cloud,
+        even for files that are no longer on the remote drive.
+        """
+        if not self.song_renames:
+            return
+        
+        # Track if we applied any renames
+        applied_any = False
+        
+        # Apply each rename in the history to the current folder
+        for rename_entry in self.song_renames:
+            old_name = rename_entry.get("old_name", "")
+            new_name = rename_entry.get("new_name", "")
+            
+            if not old_name or not new_name:
+                continue
+            
+            # Check if any files in the current folder have the old name
+            updated = False
+            for filename, provided_name in self.provided_names.items():
+                if provided_name.strip().lower() == old_name.strip().lower():
+                    self.provided_names[filename] = new_name
+                    updated = True
+                    applied_any = True
+            
+            if updated:
+                log_print(f"Applied remote song rename: '{old_name}' -> '{new_name}'")
+        
+        # Save if we applied any renames
+        if applied_any:
+            self._save_names()
+            log_print("Applied song renames from remote sync")
 
     def _update_library_provided_name_cell(self, file_name: str, new_value: str):
         try:
@@ -9637,6 +9838,8 @@ class AudioBrowser(QMainWindow):
                     # Refresh remote files list and UI
                     self._refresh_remote_files()
                     self._load_names()
+                    self._load_song_renames()
+                    self._apply_remote_song_renames()
                     self._load_notes()
                     self._refresh_right_table()
                     self._refresh_tree_display()

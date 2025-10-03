@@ -42,7 +42,7 @@ SYNC_EXCLUDED = {'.backup', '.backups', '.waveforms', '.git', '__pycache__'}
 
 # Annotation file patterns that user can modify
 ANNOTATION_PATTERNS = ['.audio_notes_', '.provided_names.json', '.duration_cache.json', 
-                       '.audio_fingerprints.json', '.user_colors.json']
+                       '.audio_fingerprints.json', '.user_colors.json', '.song_renames.json']
 
 
 class SyncVersion:
