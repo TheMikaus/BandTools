@@ -5,6 +5,17 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Song Name Rename Propagation**: Rename song names across all instances automatically
+  - When changing a song name (provided name), the application detects if other files share that name
+  - Prompts user to propagate the rename to all matching files across all practice folders
+  - Shows preview of affected files before applying changes
+  - Recursively searches entire directory tree for matching song names
+  - Updates `.provided_names.json` in all affected folders
+  - Tracks rename history in `.song_renames.json` for sync propagation
+  - Integrated with Google Drive sync - song renames sync to other users
+  - Applies remote song renames on download, updating local files automatically
+  - Works even for files no longer on the remote drive (rename history persists)
+  - Helps maintain consistent song naming across all practice sessions
 - **Remote File Indicators and Remote Deletion**: Visual indicators and remote file management for Google Drive sync
   - Files that exist on Google Drive are now prefixed with "R " in the Library table
   - Right-click context menu option to delete individual files from Google Drive (local files remain)
