@@ -133,7 +133,8 @@ if HAVE_PYDUB:
 # ========== Qt imports ==========
 from PyQt6.QtCore import (
     QItemSelection, QModelIndex, QSettings, QTimer, Qt, QUrl, QPoint, QSize,
-    pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel, QSortFilterProxyModel
+    pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel, QSortFilterProxyModel,
+    QFileSystemWatcher
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor, QPalette
@@ -3863,6 +3864,11 @@ class AudioBrowser(QMainWindow):
         self._backup_created_this_session: bool = False
         self._initialization_complete: bool = False
 
+        # File monitoring for external changes
+        self._file_watcher: Optional[QFileSystemWatcher] = None
+        self._watched_annotation_files: Dict[str, float] = {}  # path -> last_modified_time
+        self._ignore_next_change: set = set()  # Track files we're about to save to ignore our own changes
+        
         # Channel count cache for performance optimization
         self._channel_count_cache: Dict[Tuple[str, int, int], int] = {}
 
@@ -4003,6 +4009,9 @@ class AudioBrowser(QMainWindow):
         # Note: _sync_slider is only called by the timer (200ms interval), not on every position change
         # This prevents excessive UI updates during playback that can cause stuttering
 
+        # Initialize file watcher for annotation changes
+        self._setup_file_watcher()
+
         # Mark initialization as complete
         self._initialization_complete = True
 
@@ -4111,6 +4120,130 @@ class AudioBrowser(QMainWindow):
             # Mark as attempted even if failed to avoid repeated attempts
             self._backup_created_this_session = True
 
+    # ----- File monitoring for external changes -----
+    def _setup_file_watcher(self):
+        """Set up file system watcher to monitor annotation files for external changes."""
+        try:
+            if self._file_watcher is None:
+                self._file_watcher = QFileSystemWatcher(self)
+                self._file_watcher.fileChanged.connect(self._on_annotation_file_changed)
+            
+            # Update watched files for current folder
+            self._update_watched_files()
+            
+        except Exception as e:
+            log_print(f"Warning: Failed to setup file watcher: {e}")
+    
+    def _update_watched_files(self):
+        """Update the list of files being watched in the current practice folder."""
+        try:
+            if self._file_watcher is None:
+                return
+            
+            # Clear existing watches
+            existing_files = self._file_watcher.files()
+            if existing_files:
+                self._file_watcher.removePaths(existing_files)
+            self._watched_annotation_files.clear()
+            
+            # Find all annotation files in current practice folder
+            if not self.current_practice_folder or not self.current_practice_folder.exists():
+                return
+            
+            files_to_watch = []
+            for json_file in self.current_practice_folder.glob(".audio_notes_*.json"):
+                # Skip backup directories
+                if '.backup' in json_file.parts:
+                    continue
+                
+                file_path = str(json_file)
+                files_to_watch.append(file_path)
+                # Track initial modification time
+                try:
+                    self._watched_annotation_files[file_path] = json_file.stat().st_mtime
+                except Exception:
+                    pass
+            
+            # Also watch legacy file if it exists
+            legacy_file = self.current_practice_folder / NOTES_JSON
+            if legacy_file.exists() and '.backup' not in legacy_file.parts:
+                file_path = str(legacy_file)
+                files_to_watch.append(file_path)
+                try:
+                    self._watched_annotation_files[file_path] = legacy_file.stat().st_mtime
+                except Exception:
+                    pass
+            
+            # Add files to watch
+            if files_to_watch:
+                self._file_watcher.addPaths(files_to_watch)
+                log_print(f"File watcher: monitoring {len(files_to_watch)} annotation files")
+                
+        except Exception as e:
+            log_print(f"Warning: Failed to update watched files: {e}")
+    
+    def _on_annotation_file_changed(self, file_path: str):
+        """Handle notification that an annotation file has changed externally."""
+        try:
+            # Check if we should ignore this change (we just saved it)
+            if file_path in self._ignore_next_change:
+                self._ignore_next_change.discard(file_path)
+                return
+            
+            # Check if file is in a backup directory - ignore those
+            if '.backup' in Path(file_path).parts:
+                return
+            
+            # Verify the file actually changed (check modification time)
+            path_obj = Path(file_path)
+            if not path_obj.exists():
+                # File was deleted, just update our tracking
+                if file_path in self._watched_annotation_files:
+                    del self._watched_annotation_files[file_path]
+                return
+            
+            try:
+                new_mtime = path_obj.stat().st_mtime
+                old_mtime = self._watched_annotation_files.get(file_path, 0)
+                
+                # If modification time hasn't changed, ignore
+                if abs(new_mtime - old_mtime) < 0.1:  # Within 100ms tolerance
+                    return
+                
+                # Update our tracking
+                self._watched_annotation_files[file_path] = new_mtime
+                
+            except Exception:
+                # If we can't check mtime, proceed with notification
+                pass
+            
+            # Show dialog asking user if they want to reload
+            filename = path_obj.name
+            reply = QMessageBox.question(
+                self,
+                "External Annotation Change Detected",
+                f"The annotation file '{filename}' has been modified outside the application.\n\n"
+                f"Do you want to reload it to see the changes?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Reload annotations
+                log_print(f"Reloading annotations due to external change: {filename}")
+                self._load_notes()
+                self._refresh_set_combo()
+                self._refresh_right_table()
+                self._refresh_annotation_legend()
+                self._load_annotations_for_current()
+                self._refresh_tree_display()
+                self._update_folder_notes_ui()
+                self._refresh_important_table()
+                self.statusBar().showMessage(f"Reloaded annotations from {filename}", 3000)
+            
+        except Exception as e:
+            log_print(f"Warning: Error handling annotation file change: {e}")
+
     # ----- Settings & metadata -----
     def _has_stored_root(self) -> bool:
         """Check if a root directory is stored in settings and exists."""
@@ -4213,6 +4346,10 @@ class AudioBrowser(QMainWindow):
                 # Clear channel count cache when changing directories to avoid stale entries
                 self._channel_count_cache.clear()
             self.current_practice_folder = folder
+            
+            # Update file watcher for new folder
+            if self._initialization_complete:
+                self._update_watched_files()
             
             # Trigger auto-generation if enabled for folder selection and initialization is complete
             if (self._initialization_complete and 
@@ -4353,13 +4490,29 @@ class AudioBrowser(QMainWindow):
                 "updated": datetime.now().isoformat(timespec="seconds"),
                 "sets": internal_sets,
             }
-            save_json(self._notes_json_path(), payload)
+            # Mark the file we're about to save to ignore change notification
+            notes_path = self._notes_json_path()
+            self._ignore_next_change.add(str(notes_path))
+            save_json(notes_path, payload)
+            # Update our tracking of modification time
+            try:
+                self._watched_annotation_files[str(notes_path)] = notes_path.stat().st_mtime
+            except Exception:
+                pass
+            
             # Save external sets to their own files
             for s in self.annotation_sets:
                 sp = s.get("source_path")
                 if not sp: continue
                 try:
+                    # Mark this file too
+                    self._ignore_next_change.add(sp)
                     save_json(Path(sp), self._strip_set_for_payload(s))
+                    # Update tracking
+                    try:
+                        self._watched_annotation_files[sp] = Path(sp).stat().st_mtime
+                    except Exception:
+                        pass
                 except Exception:
                     pass
         except Exception as e:
