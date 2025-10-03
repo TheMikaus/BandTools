@@ -4404,6 +4404,8 @@ class AudioBrowser(QMainWindow):
             try:
                 legacy_data = load_json(legacy_notes_path, {})
                 if legacy_data:  # Only migrate if there's actual data
+                    # Mark file to ignore change notification during migration
+                    self._ignore_next_change.add(str(user_notes_path))
                     save_json(user_notes_path, legacy_data)
                     log_print(f"Migrated annotations from {legacy_notes_path.name} to {user_notes_path.name}")
             except Exception as e:
