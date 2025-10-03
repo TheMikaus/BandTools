@@ -5,6 +5,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **External Annotation File Change Monitoring**: Automatic detection of changes to annotation files made outside the application
+  - Monitors all annotation files (`.audio_notes_*.json`) in the current practice folder
+  - Displays notification dialog when external changes are detected
+  - Prompts user to reload the changed file or ignore the changes
+  - Automatically reloads and refreshes UI when user confirms
+  - Ignores changes made by the application itself to prevent false notifications
+  - Excludes backup folder changes (`.backup/`) from monitoring
+  - Uses Qt's QFileSystemWatcher for efficient file monitoring
+  - Updates watched files automatically when switching between practice folders
 - **Google Drive Sync Support**: Complete cloud synchronization system for practice sessions
   - Manual sync button in File menu and toolbar (☁ Sync)
   - OAuth 2.0 authentication with Google Drive API
