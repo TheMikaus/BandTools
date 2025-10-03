@@ -5,6 +5,21 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Google Drive Sync Support**: Complete cloud synchronization system for practice sessions
+  - Manual sync button in File menu and toolbar (☁ Sync)
+  - OAuth 2.0 authentication with Google Drive API
+  - Version-based sync tracking with `.sync_version.json` files
+  - Intelligent conflict resolution with user confirmation for all operations
+  - Automatic sync of annotation files (with user permission checks)
+  - User-selective sync for audio files (WAV/MP3) with checkbox approval
+  - Excludes backup and waveform cache directories from sync
+  - Multi-user annotation support - users can only modify their own annotations
+  - Comprehensive operation logging for transparency
+  - Detailed setup documentation in `GOOGLE_DRIVE_SETUP.md`
+  - Status dialog showing local vs remote version and file counts
+  - Separate upload and download review dialogs with file-by-file selection
+  - Smart annotation file handling - auto-selects metadata for download
+  - Progress feedback during sync operations with cancel support
 - **Reference Folder and Reference Song Support for Fingerprinting**: Enhanced fingerprint matching with reference-based weighting
   - Added "Reference Song" checkbox in Annotations tab to mark songs as reference versions
   - Added "Mark as Reference Song" / "Unmark as Reference Song" option in file tree context menu

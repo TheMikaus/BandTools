@@ -173,6 +173,7 @@ SETTINGS_KEY_AUTO_GEN_WAVEFORMS = "auto_generate_waveforms"
 SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generate_fingerprints"
 SETTINGS_KEY_AUTO_GEN_TIMING = "auto_generation_timing"  # "boot" or "folder_selection"
 SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
+SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 WAVEFORM_JSON = ".waveform_cache.json"
@@ -3970,6 +3971,10 @@ class AudioBrowser(QMainWindow):
         self._directories_to_process: List[Path] = []
         self._current_directory_index: int = 0
         self._follow_with_fingerprints: bool = False
+        
+        # Google Drive sync
+        self.gdrive_sync_manager = None  # Will be initialized when needed
+        self.gdrive_folder_name: Optional[str] = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER, "")
 
         # UI
         self._init_ui()
@@ -4474,6 +4479,12 @@ class AudioBrowser(QMainWindow):
         self.restore_backup_action.triggered.connect(self._restore_from_backup)
         file_menu.addAction(self.restore_backup_action)
         
+        file_menu.addSeparator()
+        
+        self.gdrive_sync_action = QAction("Sync with &Google Drive…", self)
+        self.gdrive_sync_action.triggered.connect(self._show_gdrive_sync)
+        file_menu.addAction(self.gdrive_sync_action)
+        
         # Help menu
         help_menu = menubar.addMenu("&Help")
         
@@ -4511,6 +4522,14 @@ class AudioBrowser(QMainWindow):
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
         wa = QWidgetAction(self); wa.setDefaultWidget(self.auto_switch_cb); tb.addAction(wa)
+        
+        tb.addSeparator()
+        
+        # Google Drive Sync button
+        gdrive_sync_btn = QAction("☁ Sync", self)
+        gdrive_sync_btn.setToolTip("Sync with Google Drive")
+        gdrive_sync_btn.triggered.connect(self._show_gdrive_sync)
+        tb.addAction(gdrive_sync_btn)
 
         # Create main widget to hold path label and splitter
         main_widget = QWidget()
@@ -9106,6 +9125,230 @@ class AudioBrowser(QMainWindow):
         layout.addLayout(button_layout)
         
         dialog.exec()
+
+    # ----- Google Drive Sync methods -----
+    def _ensure_gdrive_sync_available(self) -> bool:
+        """Ensure Google Drive sync dependencies are available."""
+        try:
+            # Try to import the sync module
+            import gdrive_sync
+            import sync_dialog
+            
+            # Check if Google API libraries are available
+            if not gdrive_sync.GDRIVE_AVAILABLE:
+                # Try to install them
+                success, error = _ensure_import("google-auth-oauthlib", "google-auth-oauthlib")
+                if not success:
+                    QMessageBox.warning(
+                        self, "Google Drive Sync",
+                        f"Google Drive sync requires additional packages.\n\n"
+                        f"Please install them with:\n"
+                        f"pip install google-auth-oauthlib google-api-python-client\n\n"
+                        f"Error: {error}"
+                    )
+                    return False
+                
+                success, error = _ensure_import("googleapiclient", "google-api-python-client")
+                if not success:
+                    QMessageBox.warning(
+                        self, "Google Drive Sync",
+                        f"Google Drive sync requires additional packages.\n\n"
+                        f"Please install them with:\n"
+                        f"pip install google-api-python-client\n\n"
+                        f"Error: {error}"
+                    )
+                    return False
+            
+            return True
+            
+        except ImportError as e:
+            QMessageBox.warning(
+                self, "Google Drive Sync",
+                f"Google Drive sync module not found.\n\n"
+                f"Error: {e}"
+            )
+            return False
+    
+    def _show_gdrive_sync(self):
+        """Show Google Drive sync dialog."""
+        try:
+            # Ensure sync is available
+            if not self._ensure_gdrive_sync_available():
+                return
+            
+            # Import sync modules
+            from gdrive_sync import GDriveSync, load_local_version, save_local_version, get_sync_files, compare_files
+            from sync_dialog import FolderSelectionDialog, SyncReviewDialog, SyncStatusDialog
+            
+            # Check for credentials file
+            credentials_path = Path(__file__).parent / "credentials.json"
+            token_path = Path(__file__).parent / "token.json"
+            
+            if not credentials_path.exists():
+                reply = QMessageBox.question(
+                    self, "Google Drive Setup Required",
+                    "Google Drive sync requires OAuth credentials.\n\n"
+                    "Would you like to view the setup instructions?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    # Show setup instructions
+                    setup_doc_path = Path(__file__).parent / "GOOGLE_DRIVE_SETUP.md"
+                    if setup_doc_path.exists():
+                        import webbrowser
+                        webbrowser.open(str(setup_doc_path))
+                    else:
+                        QMessageBox.information(
+                            self, "Setup Instructions",
+                            "Please see GOOGLE_DRIVE_SETUP.md for instructions on setting up Google Drive sync."
+                        )
+                return
+            
+            # Initialize or reuse sync manager
+            if self.gdrive_sync_manager is None:
+                self.gdrive_sync_manager = GDriveSync(credentials_path, token_path)
+            
+            # Authenticate
+            self.statusBar().showMessage("Authenticating with Google Drive...", 3000)
+            if not self.gdrive_sync_manager.authenticate():
+                QMessageBox.warning(
+                    self, "Authentication Failed",
+                    "Failed to authenticate with Google Drive.\n\n"
+                    "Please check your credentials and try again."
+                )
+                return
+            
+            # Check if we have a folder configured
+            if not self.gdrive_folder_name:
+                # Show folder selection dialog
+                folder_dialog = FolderSelectionDialog(self)
+                if folder_dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
+                
+                self.gdrive_folder_name = folder_dialog.folder_name
+                self.settings.setValue(SETTINGS_KEY_GDRIVE_FOLDER, self.gdrive_folder_name)
+            
+            # Select/create the remote folder
+            self.statusBar().showMessage(f"Connecting to folder: {self.gdrive_folder_name}...", 3000)
+            if not self.gdrive_sync_manager.select_remote_folder(self.gdrive_folder_name):
+                QMessageBox.warning(
+                    self, "Folder Error",
+                    f"Failed to access Google Drive folder: {self.gdrive_folder_name}"
+                )
+                return
+            
+            # Get version information
+            local_version_path = self.current_practice_folder / ".sync_version.json"
+            local_version = load_local_version(local_version_path)
+            remote_version = self.gdrive_sync_manager.get_remote_version()
+            
+            if remote_version is None:
+                QMessageBox.warning(
+                    self, "Sync Error",
+                    "Failed to read remote version information."
+                )
+                return
+            
+            # Show status dialog
+            remote_files = self.gdrive_sync_manager.list_remote_files()
+            local_files = get_sync_files(self.current_practice_folder)
+            
+            status_dialog = SyncStatusDialog(
+                local_version.version,
+                remote_version.version,
+                len(local_files),
+                len(remote_files),
+                self
+            )
+            status_dialog.exec()
+            
+            # Ask what to do
+            reply = QMessageBox.question(
+                self, "Sync Options",
+                "What would you like to do?\n\n"
+                "Yes: Download changes from Google Drive\n"
+                "No: Upload changes to Google Drive\n"
+                "Cancel: Close without syncing",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+            )
+            
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            
+            # Compare files
+            local_only, remote_only, both = compare_files(self.current_practice_folder, remote_files)
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Download from Google Drive
+                if not remote_only:
+                    QMessageBox.information(self, "No Changes", "No new files to download from Google Drive.")
+                    return
+                
+                sync_dialog = SyncReviewDialog(
+                    self.current_practice_folder,
+                    local_only,
+                    remote_only,
+                    self.gdrive_sync_manager,
+                    is_upload=False,
+                    current_user=getpass.getuser(),
+                    parent=self
+                )
+                
+                if sync_dialog.exec() == QDialog.DialogCode.Accepted:
+                    # Update local version
+                    local_version.version = remote_version.version
+                    save_local_version(local_version_path, local_version)
+                    
+                    self.statusBar().showMessage("Download complete!", 5000)
+                    log_print(f"Downloaded {len(sync_dialog.selected_operations)} files from Google Drive")
+                    
+                    # Refresh UI
+                    self._load_names()
+                    self._load_notes()
+                    self._refresh_right_table()
+                    self._refresh_tree_display()
+            
+            else:  # Upload to Google Drive
+                if not local_only:
+                    QMessageBox.information(self, "No Changes", "No new files to upload to Google Drive.")
+                    return
+                
+                sync_dialog = SyncReviewDialog(
+                    self.current_practice_folder,
+                    local_only,
+                    remote_only,
+                    self.gdrive_sync_manager,
+                    is_upload=True,
+                    current_user=getpass.getuser(),
+                    parent=self
+                )
+                
+                if sync_dialog.exec() == QDialog.DialogCode.Accepted:
+                    # Increment version and update remote
+                    remote_version.version += 1
+                    for op in sync_dialog.selected_operations:
+                        remote_version.add_operation(op['type'], op['name'])
+                    
+                    if self.gdrive_sync_manager.update_remote_version(remote_version):
+                        # Update local version to match
+                        local_version.version = remote_version.version
+                        save_local_version(local_version_path, local_version)
+                        
+                        self.statusBar().showMessage("Upload complete!", 5000)
+                        log_print(f"Uploaded {len(sync_dialog.selected_operations)} files to Google Drive")
+                    else:
+                        QMessageBox.warning(
+                            self, "Version Update Failed",
+                            "Failed to update version information on Google Drive."
+                        )
+        
+        except Exception as e:
+            log_print(f"Error in Google Drive sync: {e}")
+            QMessageBox.critical(
+                self, "Sync Error",
+                f"An error occurred during sync:\n\n{str(e)}"
+            )
 
     # ----- Auto-generation methods -----
     def _start_auto_generation_for_folder(self, folder_path: Path):
