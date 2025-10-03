@@ -5,6 +5,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Changed
+- **Hidden System Folders in File Tree**: The `.waveforms` folder is now hidden from the file tree display
+  - `.waveforms` folder no longer appears in the file browser
+  - Matches existing behavior for `.backup` and `.backups` folders
+  - Provides cleaner file organization by hiding system/cache directories
+- **Stereo Backup File Location**: Stereo backup files created during mono conversion are now stored in `.backup` folder
+  - When converting stereo files to mono, the original stereo file is now backed up to `.backup/{filename}_stereo.wav`
+  - Previously stereo backups were created in the same directory as the audio file
+  - Provides cleaner file organization by keeping all backups in dedicated backup folder
+  - `.backup` folder is automatically created if it doesn't exist
 - **Waveform Cache Organization**: Waveform cache files are now stored in a `.waveforms` subdirectory
   - Central waveform cache (`.waveform_cache.json`) now stored in `.waveforms/` folder
   - Individual waveform cache files (`.waveform_cache_{filename}.json`) now stored in `.waveforms/` folder

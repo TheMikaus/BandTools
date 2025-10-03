@@ -2199,16 +2199,20 @@ class MonoConvertWorker(QObject):
             else:
                 mono_audio = audio.set_channels(1)
             
-            # Create backup filename
+            # Create backup directory if it doesn't exist
+            backup_dir = src.parent / ".backup"
+            backup_dir.mkdir(exist_ok=True)
+            
+            # Create backup filename in .backup folder
             base = src.stem
             backup_name = f"{base}_stereo{src.suffix}"
-            backup_path = src.with_name(backup_name)
+            backup_path = backup_dir / backup_name
 
             # Make sure backup doesn't already exist
             n = 1
             while backup_path.exists():
                 backup_name = f"{base}_stereo({n}){src.suffix}"
-                backup_path = src.with_name(backup_name)
+                backup_path = backup_dir / backup_name
                 n += 1
             
             # Rename original to backup
@@ -3148,15 +3152,15 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup and .backups folders from the file tree."""
+        """Filter out .backup, .backups, and .waveforms folders from the file tree."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
         
-        # Hide directories that start with .backup
+        # Hide directories that start with .backup or are named .waveforms
         if file_info.isDir():
             folder_name = file_info.fileName()
-            if folder_name.startswith('.backup'):
+            if folder_name.startswith('.backup') or folder_name == '.waveforms':
                 return False
         
         return True
@@ -7935,7 +7939,7 @@ class AudioBrowser(QMainWindow):
         
         # Confirm conversion
         msg = (f"Convert '{self.current_audio_file.name}' to mono?\n\n"
-               "• The original stereo file will be renamed with '_stereo' suffix\n"
+               "• The original stereo file will be backed up to .backup folder with '_stereo' suffix\n"
                "• A new mono version will replace the original filename")
         if QMessageBox.question(self, "Convert to Mono", msg,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
