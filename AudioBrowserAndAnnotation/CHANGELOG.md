@@ -5,6 +5,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Remote File Indicators and Remote Deletion**: Visual indicators and remote file management for Google Drive sync
+  - Files that exist on Google Drive are now prefixed with "R " in the Library table
+  - Right-click context menu option to delete individual files from Google Drive (local files remain)
+  - File menu option to delete the entire remote folder from Google Drive
+  - Remote file list automatically refreshes after sync operations
+  - Delete operations are tracked in version file with 'delete' operation type
+  - Strong confirmation dialogs prevent accidental deletion of remote files/folders
+  - Local files are never affected by remote deletions
 - **External Annotation File Change Monitoring**: Automatic detection of changes to annotation files made outside the application
   - Monitors all annotation files (`.audio_notes_*.json`) in the current practice folder
   - Displays notification dialog when external changes are detected

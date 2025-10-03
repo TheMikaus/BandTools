@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging, math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Set
 from datetime import datetime
 from array import array
 
@@ -3981,6 +3981,7 @@ class AudioBrowser(QMainWindow):
         # Google Drive sync
         self.gdrive_sync_manager = None  # Will be initialized when needed
         self.gdrive_folder_name: Optional[str] = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER, "")
+        self.remote_files: Set[str] = set()  # Track which files exist on remote
 
         # UI
         self._init_ui()
@@ -4639,6 +4640,10 @@ class AudioBrowser(QMainWindow):
         self.gdrive_sync_action = QAction("Sync with &Google Drive…", self)
         self.gdrive_sync_action.triggered.connect(self._show_gdrive_sync)
         file_menu.addAction(self.gdrive_sync_action)
+        
+        self.gdrive_delete_folder_action = QAction("Delete Remote Folder from Google Drive…", self)
+        self.gdrive_delete_folder_action.triggered.connect(self._delete_remote_folder)
+        file_menu.addAction(self.gdrive_delete_folder_action)
         
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -5611,6 +5616,13 @@ class AudioBrowser(QMainWindow):
             fingerprint_action = menu.addAction("Exclude from fingerprinting")
             fingerprint_action.setToolTip("Exclude this file when matching fingerprints")
         
+        # Add Google Drive remote delete option (if file is on remote)
+        delete_remote_action = None
+        if filename in self.remote_files:
+            menu.addSeparator()
+            delete_remote_action = menu.addAction("Delete from Google Drive")
+            delete_remote_action.setToolTip("Delete this file from Google Drive (local file will remain)")
+        
         # Show menu and handle selection
         result = menu.exec(self.tree.mapToGlobal(position))
         
@@ -5650,6 +5662,9 @@ class AudioBrowser(QMainWindow):
             status_text = "excluded from" if new_status else "included in"
             QMessageBox.information(self, "Fingerprint Exclusion", 
                                   f"File '{filename}' is now {status_text} fingerprinting.")
+        elif delete_remote_action and result == delete_remote_action:
+            # Delete from remote
+            self._delete_file_from_remote(filename)
 
     def _toggle_best_take_for_file(self, filename: str, file_path: Path):
         """Toggle best take status for a file from the context menu."""
@@ -6501,11 +6516,19 @@ class AudioBrowser(QMainWindow):
                 })
         return partial_take_sets
 
+    def _strip_remote_prefix(self, filename: str) -> str:
+        """Remove 'R ' prefix from filename if present."""
+        if filename.startswith("R "):
+            return filename[2:]
+        return filename
+    
     def _refresh_right_table(self):
         files = self._list_audio_in_current_dir()
         self.table.blockSignals(True); self.table.setRowCount(len(files))
         for row, p in enumerate(files):
-            item_file = QTableWidgetItem(p.name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
+            # Add "R " prefix if file exists on remote
+            display_name = f"R {p.name}" if p.name in self.remote_files else p.name
+            item_file = QTableWidgetItem(display_name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
             
             # Get all best takes for this file from all visible annotation sets
             best_take_sets = self._get_all_best_takes_for_file(p.name)
@@ -6543,7 +6566,7 @@ class AudioBrowser(QMainWindow):
         file_item = self.table.item(row, 0)
         if not file_item:
             return
-        filename = file_item.text()
+        filename = self._strip_remote_prefix(file_item.text())
         
         # Find the actual file path
         old_path = self.root_path / filename
@@ -6600,7 +6623,7 @@ class AudioBrowser(QMainWindow):
         file_item = self.table.item(row, 0)
         if not file_item:
             return
-        filename = file_item.text()
+        filename = self._strip_remote_prefix(file_item.text())
         
         # Find the actual file path
         old_path = self.root_path / filename
@@ -6655,7 +6678,7 @@ class AudioBrowser(QMainWindow):
     def _on_table_item_changed(self, item: QTableWidgetItem):
         row = item.row(); file_item = self.table.item(row, 0)
         if not file_item: return
-        filename = file_item.text()
+        filename = self._strip_remote_prefix(file_item.text())
         
         if item.column() == 3:  # Provided Name (editable) - now column 3
             self.provided_names[filename] = sanitize(item.text())
@@ -6676,7 +6699,7 @@ class AudioBrowser(QMainWindow):
             item = self.table.item(row, 0)
             if not item:
                 return
-            fname = item.text().strip()
+            fname = self._strip_remote_prefix(item.text().strip())
             if not fname:
                 return
             from pathlib import Path as _P
@@ -9282,6 +9305,154 @@ class AudioBrowser(QMainWindow):
         dialog.exec()
 
     # ----- Google Drive Sync methods -----
+    def _refresh_remote_files(self):
+        """Refresh the list of files that exist on remote drive."""
+        if self.gdrive_sync_manager and self.gdrive_sync_manager.remote_folder_id:
+            try:
+                self.remote_files = self.gdrive_sync_manager.get_remote_file_names()
+                log_print(f"Remote files refreshed: {len(self.remote_files)} files")
+            except Exception as e:
+                log_print(f"Error refreshing remote files: {e}")
+                self.remote_files = set()
+        else:
+            self.remote_files = set()
+    
+    def _delete_file_from_remote(self, filename: str):
+        """Delete a file from Google Drive remote folder."""
+        if not self.gdrive_sync_manager or not self.gdrive_sync_manager.remote_folder_id:
+            QMessageBox.warning(
+                self, "Not Connected",
+                "Not connected to Google Drive. Please sync first."
+            )
+            return
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self, "Delete from Google Drive",
+            f"Delete '{filename}' from Google Drive?\n\n"
+            f"The local file will remain on your computer.\n"
+            f"This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        try:
+            from gdrive_sync import load_local_version, save_local_version
+            
+            # Delete the file
+            if self.gdrive_sync_manager.delete_remote_file(filename):
+                # Update version tracking
+                local_version_path = self.current_practice_folder / ".sync_version.json"
+                local_version = load_local_version(local_version_path)
+                
+                # Get remote version and increment it
+                remote_version = self.gdrive_sync_manager.get_remote_version()
+                if remote_version:
+                    remote_version.version += 1
+                    remote_version.add_operation('delete', filename)
+                    
+                    # Update remote version
+                    self.gdrive_sync_manager.update_remote_version(remote_version)
+                    
+                    # Update local version to match
+                    local_version.version = remote_version.version
+                    local_version.add_operation('delete', filename)
+                    save_local_version(local_version_path, local_version)
+                
+                # Refresh remote files list and UI
+                self._refresh_remote_files()
+                self._refresh_right_table()
+                
+                self.statusBar().showMessage(f"Deleted '{filename}' from Google Drive", 5000)
+                log_print(f"Deleted file from Google Drive: {filename}")
+            else:
+                QMessageBox.warning(
+                    self, "Delete Failed",
+                    f"Failed to delete '{filename}' from Google Drive.\n"
+                    f"Check the logs for details."
+                )
+        except Exception as e:
+            log_print(f"Error deleting file from remote: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred while deleting from Google Drive:\n\n{str(e)}"
+            )
+    
+    def _delete_remote_folder(self):
+        """Delete the entire remote folder from Google Drive."""
+        if not self.gdrive_sync_manager or not self.gdrive_sync_manager.remote_folder_id:
+            QMessageBox.warning(
+                self, "Not Connected",
+                "Not connected to Google Drive.\n\n"
+                "Please sync with Google Drive first to establish a connection."
+            )
+            return
+        
+        # Strong confirmation
+        reply = QMessageBox.warning(
+            self, "Delete Remote Folder",
+            f"Delete the entire '{self.gdrive_folder_name}' folder from Google Drive?\n\n"
+            f"⚠️ WARNING: This will permanently delete ALL files in the remote folder!\n\n"
+            f"Local files on your computer will NOT be affected.\n"
+            f"This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Double confirmation
+        folder_name = self.gdrive_folder_name
+        typed_name, ok = QInputDialog.getText(
+            self, "Confirm Deletion",
+            f"To confirm deletion, type the folder name:\n\n{folder_name}"
+        )
+        
+        if not ok or typed_name != folder_name:
+            QMessageBox.information(
+                self, "Cancelled",
+                "Folder deletion cancelled."
+            )
+            return
+        
+        try:
+            if self.gdrive_sync_manager.delete_remote_folder():
+                # Clear local state
+                self.remote_files = set()
+                
+                # Clear local version file
+                from gdrive_sync import save_local_version, SyncVersion
+                local_version_path = self.current_practice_folder / ".sync_version.json"
+                save_local_version(local_version_path, SyncVersion(version=0))
+                
+                # Refresh UI
+                self._refresh_right_table()
+                
+                self.statusBar().showMessage(f"Deleted remote folder '{folder_name}' from Google Drive", 5000)
+                log_print(f"Deleted remote folder from Google Drive: {folder_name}")
+                
+                QMessageBox.information(
+                    self, "Folder Deleted",
+                    f"The '{folder_name}' folder has been deleted from Google Drive.\n\n"
+                    f"Local files remain on your computer.\n"
+                    f"You can create a new remote folder by syncing again."
+                )
+            else:
+                QMessageBox.warning(
+                    self, "Delete Failed",
+                    f"Failed to delete the remote folder from Google Drive.\n"
+                    f"Check the logs for details."
+                )
+        except Exception as e:
+            log_print(f"Error deleting remote folder: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred while deleting the remote folder:\n\n{str(e)}"
+            )
+    
     def _ensure_gdrive_sync_available(self) -> bool:
         """Ensure Google Drive sync dependencies are available."""
         try:
@@ -9393,6 +9564,9 @@ class AudioBrowser(QMainWindow):
                 )
                 return
             
+            # Refresh remote files list
+            self._refresh_remote_files()
+            
             # Get version information
             local_version_path = self.current_practice_folder / ".sync_version.json"
             local_version = load_local_version(local_version_path)
@@ -9458,7 +9632,8 @@ class AudioBrowser(QMainWindow):
                     self.statusBar().showMessage("Download complete!", 5000)
                     log_print(f"Downloaded {len(sync_dialog.selected_operations)} files from Google Drive")
                     
-                    # Refresh UI
+                    # Refresh remote files list and UI
+                    self._refresh_remote_files()
                     self._load_names()
                     self._load_notes()
                     self._refresh_right_table()
@@ -9492,6 +9667,10 @@ class AudioBrowser(QMainWindow):
                         
                         self.statusBar().showMessage("Upload complete!", 5000)
                         log_print(f"Uploaded {len(sync_dialog.selected_operations)} files to Google Drive")
+                        
+                        # Refresh remote files list and UI
+                        self._refresh_remote_files()
+                        self._refresh_right_table()
                     else:
                         QMessageBox.warning(
                             self, "Version Update Failed",
