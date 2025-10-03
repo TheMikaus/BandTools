@@ -455,6 +455,36 @@ class GDriveSync:
             logger.error(f"Error deleting remote file {remote_name}: {e}")
             return False
     
+    def delete_remote_folder(self) -> bool:
+        """
+        Delete entire remote folder and all its contents.
+        
+        Returns:
+            True if successful
+        """
+        if not self.service or not self.remote_folder_id:
+            return False
+        
+        try:
+            self.service.files().delete(fileId=self.remote_folder_id).execute()
+            logger.info(f"Deleted remote folder: {self.remote_folder_id}")
+            self.remote_folder_id = None
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting remote folder: {e}")
+            return False
+    
+    def get_remote_file_names(self) -> Set[str]:
+        """
+        Get set of filenames that exist on remote.
+        
+        Returns:
+            Set of filenames (not full paths)
+        """
+        remote_files = self.list_remote_files()
+        return {f['name'] for f in remote_files if should_sync_file(f['name'])}
+    
     def can_user_modify(self, filename: str) -> bool:
         """
         Check if current user can modify a file.
