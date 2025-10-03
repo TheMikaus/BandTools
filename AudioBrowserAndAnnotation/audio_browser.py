@@ -1704,7 +1704,7 @@ def discover_directories_with_audio_files(root_path: Path) -> List[Path]:
     scan_directory(root_path)
     return directories_with_audio
 
-def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]:
+def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None, reference_dir: Optional[Path] = None) -> Dict[str, List[Dict]]:
     """
     Collect fingerprints from multiple folders and organize by filename.
     
@@ -1716,14 +1716,15 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
         algorithm: Which fingerprint algorithm to use (e.g., 'spectral', 'lightweight')
                   Only fingerprints generated with this algorithm will be collected
         exclude_dir: Optional directory to exclude from collection
+        reference_dir: Optional reference directory (files from here get higher weight)
     
     Returns:
-        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name}
+        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name, is_reference_folder, is_reference_song}
         All fingerprints in the result were generated using the same algorithm.
         Format: {
             "song1.mp3": [
-                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name"},
-                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}, "provided_name": "Song Name"}
+                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name", "is_reference_folder": True, "is_reference_song": False},
+                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}, "provided_name": "Song Name", "is_reference_folder": False, "is_reference_song": True}
             ]
         }
     """
@@ -1737,9 +1738,27 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
         files_data = cache.get("files", {})
         excluded_files = cache.get("excluded_files", [])
         
+        # Check if this is the reference folder
+        is_reference_folder = reference_dir and folder_path.resolve() == reference_dir.resolve()
+        
         # Load provided names from this folder
         names_json_path = folder_path / NAMES_JSON
         provided_names = load_json(names_json_path, {}) or {}
+        
+        # Load annotations to check for reference song status
+        # Try to find any user's annotations file (check common username patterns)
+        reference_songs_in_folder = {}
+        try:
+            # Look for annotation files in the folder
+            for annotations_file in folder_path.glob(".annotations_*.json"):
+                annotations_data = load_json(annotations_file, {})
+                if isinstance(annotations_data, dict) and "sets" in annotations_data:
+                    for ann_set in annotations_data.get("sets", []):
+                        for fname, file_meta in ann_set.get("files", {}).items():
+                            if file_meta.get("reference_song", False):
+                                reference_songs_in_folder[fname] = True
+        except Exception:
+            pass  # Silently ignore errors reading annotation files
         
         for filename, file_data in files_data.items():
             # Skip files that are marked as excluded
@@ -1757,11 +1776,16 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
                 if not provided_name:
                     provided_name = Path(filename).stem
                 
+                # Check if this file is marked as a reference song
+                is_reference_song = reference_songs_in_folder.get(filename, False)
+                
                 fingerprint_map[filename].append({
                     "fingerprint": fingerprint,
                     "folder": folder_path,
                     "data": file_data,
-                    "provided_name": provided_name
+                    "provided_name": provided_name,
+                    "is_reference_folder": is_reference_folder,
+                    "is_reference_song": is_reference_song
                 })
     
     return fingerprint_map
@@ -1769,7 +1793,11 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
 def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float) -> Optional[Tuple[str, float, Path, str]]:
     """
     Find the best match for a target fingerprint across multiple folders.
-    Prioritizes matches that appear in only one folder (unique identification).
+    Prioritizes matches in the following order:
+    1. Files marked as reference songs (anywhere)
+    2. Files from reference folder
+    3. Files appearing in only one folder (unique identification)
+    4. Highest similarity score
     
     Args:
         target_fingerprint: The fingerprint to match against
@@ -1779,37 +1807,55 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     Returns:
         Tuple of (filename, similarity_score, source_folder, provided_name) or None if no match above threshold
     """
-    best_matches = []  # List of (filename, score, folder, folder_count, provided_name)
+    # Weight boost for reference sources (10% boost to similarity score)
+    REFERENCE_BOOST = 0.10
+    
+    best_matches = []  # List of (filename, weighted_score, raw_score, folder, folder_count, provided_name, is_reference)
     
     for filename, fingerprint_entries in fingerprint_map.items():
         folder_count = len(fingerprint_entries)
         
         # Find best score for this filename across all its instances
         best_score_for_file = 0.0
+        best_weighted_score = 0.0
         best_folder_for_file = None
         best_provided_name = None
+        is_from_reference = False
         
         for entry in fingerprint_entries:
             score = compare_fingerprints(target_fingerprint, entry["fingerprint"])
-            if score > best_score_for_file:
-                best_score_for_file = score
+            
+            # Apply weighting based on reference status
+            weighted_score = score
+            entry_is_reference = entry.get("is_reference_song", False) or entry.get("is_reference_folder", False)
+            
+            if entry_is_reference:
+                # Boost the score for reference songs and reference folder files
+                weighted_score = min(1.0, score + REFERENCE_BOOST)
+            
+            if weighted_score > best_weighted_score:
+                best_weighted_score = weighted_score
+                best_score_for_file = score  # Keep raw score for reporting
                 best_folder_for_file = entry["folder"]
                 best_provided_name = entry["provided_name"]
+                is_from_reference = entry_is_reference
         
-        if best_score_for_file >= threshold:
-            best_matches.append((filename, best_score_for_file, best_folder_for_file, folder_count, best_provided_name))
+        if best_weighted_score >= threshold:
+            best_matches.append((filename, best_weighted_score, best_score_for_file, best_folder_for_file, folder_count, best_provided_name, is_from_reference))
     
     if not best_matches:
         return None
     
     # Sort by priority: 
-    # 1. Files appearing in only one folder (folder_count=1) get priority
-    # 2. Then by similarity score (descending)
-    # 3. Then by filename for consistency
-    best_matches.sort(key=lambda x: (-1 if x[3] == 1 else 0, x[1], x[0]), reverse=True)
+    # 1. Reference songs/folders get highest priority (is_from_reference=True)
+    # 2. Files appearing in only one folder (folder_count=1) get next priority
+    # 3. Then by weighted similarity score (descending)
+    # 4. Then by filename for consistency
+    best_matches.sort(key=lambda x: (-1 if x[6] else 0, -1 if x[4] == 1 else 0, x[1], x[0]), reverse=True)
     
     best_match = best_matches[0]
-    return (best_match[0], best_match[1], best_match[2], best_match[4])
+    # Return: filename, raw_score (not weighted), folder, provided_name
+    return (best_match[0], best_match[2], best_match[3], best_match[5])
 
 # ========== Backup System ==========
 def create_backup_folder_name(practice_folder: Path) -> Path:
@@ -3874,6 +3920,7 @@ class AudioBrowser(QMainWindow):
         self.file_general: Dict[str, str] = {}
         self.file_best_takes: Dict[str, bool] = {}  # Track best takes per file in current set
         self.file_partial_takes: Dict[str, bool] = {}  # Track partial takes per file in current set
+        self.file_reference_songs: Dict[str, bool] = {}  # Track reference songs per file in current set
         self.folder_notes: str = ""
 
         # Show-all toggle
@@ -4203,7 +4250,7 @@ class AudioBrowser(QMainWindow):
 
     def _load_notes(self):
         self.annotation_sets = []
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.folder_notes = ""
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.folder_notes = ""
 
         
         # Check for migration from legacy file
@@ -4244,6 +4291,7 @@ class AudioBrowser(QMainWindow):
                             "general": str(meta.get("general", "") or ""),
                             "best_take": bool(meta.get("best_take", False)),
                             "partial_take": bool(meta.get("partial_take", False)),
+                            "reference_song": bool(meta.get("reference_song", False)),
                             "notes": [{
                                 "uid": int(n.get("uid", 0) or 0),
                                 "ms": int(n.get("ms", 0)),
@@ -4314,27 +4362,29 @@ class AudioBrowser(QMainWindow):
 
     def _load_current_set_into_fields(self):
         aset = self._get_current_set()
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
         if aset:
             for fname, meta in aset.get("files", {}).items():
                 self.file_general[fname] = str(meta.get("general", "") or "")
                 self.file_best_takes[fname] = bool(meta.get("best_take", False))
                 self.file_partial_takes[fname] = bool(meta.get("partial_take", False))
+                self.file_reference_songs[fname] = bool(meta.get("reference_song", False))
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
-            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}
+            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
         self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
         if not aset: return
         files = {}
-        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys())
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys()) | set(self.file_reference_songs.keys())
         for fname in all_files:
             files[fname] = {
                 "general": self.file_general.get(fname, ""),
                 "best_take": self.file_best_takes.get(fname, False),
                 "partial_take": self.file_partial_takes.get(fname, False),
+                "reference_song": self.file_reference_songs.get(fname, False),
                 "notes": self.notes_by_file.get(fname, []),
             }
         aset["files"] = files
@@ -4796,6 +4846,13 @@ class AudioBrowser(QMainWindow):
         self.partial_take_cb.stateChanged.connect(self._on_partial_take_changed)
         pn_row.addWidget(self.partial_take_cb)
         
+        # Reference Song checkbox in annotation tab
+        self.reference_song_cb = QCheckBox("Reference Song")
+        self.reference_song_cb.setToolTip("Mark this as a reference song for fingerprinting (weighted higher in matching)")
+        self.reference_song_cb.setEnabled(False)
+        self.reference_song_cb.stateChanged.connect(self._on_reference_song_changed)
+        pn_row.addWidget(self.reference_song_cb)
+        
         ann_layout.addLayout(pn_row)
 
         # --- Waveform controls ---
@@ -5254,7 +5311,7 @@ class AudioBrowser(QMainWindow):
         idx = next((i for i in indexes if i.column() == 0), None)
         if not idx:
             self._stop_playback(); self.now_playing.setText("No selection"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_reference_song_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
             self._update_mono_button_state()
             return
@@ -5264,7 +5321,7 @@ class AudioBrowser(QMainWindow):
             folder_path = Path(fi.absoluteFilePath())
             self._set_current_practice_folder(folder_path)
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_right_table()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_reference_song_field(); self._refresh_right_table()
             # Note: Keep _refresh_right_table() here since folder selection means directory change
             self._update_mono_button_state()
             return
@@ -5288,7 +5345,7 @@ class AudioBrowser(QMainWindow):
                 self._update_channel_muting_state()
         else:
             self._stop_playback(); self.now_playing.setText(fi.fileName()); self.current_audio_file = None
-            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field()
+            self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_reference_song_field()
             # Note: _refresh_right_table() removed - not needed for selection changes within same directory
             self._update_mono_button_state()
             self._update_channel_muting_state()
@@ -5311,9 +5368,10 @@ class AudioBrowser(QMainWindow):
         # Check if file is currently excluded from fingerprinting
         is_excluded = self.file_proxy._is_file_excluded_cached(dirpath, filename)
         
-        # Check current best take and partial take status
+        # Check current best take, partial take, and reference song status
         is_best_take = self.file_best_takes.get(filename, False)
         is_partial_take = self.file_partial_takes.get(filename, False)
+        is_reference_song = self.file_reference_songs.get(filename, False)
         
         # Create context menu
         menu = QMenu(self)
@@ -5340,6 +5398,14 @@ class AudioBrowser(QMainWindow):
         else:
             partial_take_action = menu.addAction("Mark as Partial Take")
             partial_take_action.setToolTip("Mark this file as a partial take")
+        
+        # Add Reference Song option
+        if is_reference_song:
+            reference_song_action = menu.addAction("Unmark as Reference Song")
+            reference_song_action.setToolTip("Remove reference song marking from this file")
+        else:
+            reference_song_action = menu.addAction("Mark as Reference Song")
+            reference_song_action.setToolTip("Mark this file as a reference song for fingerprinting")
         
         # Add separator before file operations
         menu.addSeparator()
@@ -5383,6 +5449,9 @@ class AudioBrowser(QMainWindow):
         elif result == partial_take_action:
             # Toggle partial take status
             self._toggle_partial_take_for_file(filename, file_path)
+        elif result == reference_song_action:
+            # Toggle reference song status
+            self._toggle_reference_song_for_file(filename, file_path)
         elif export_mono_action and result == export_mono_action:
             # Export to mono
             self._export_to_mono_for_file(file_path)
@@ -5501,6 +5570,30 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show partial take formatting
         self._refresh_tree_display()
+
+    def _toggle_reference_song_for_file(self, filename: str, file_path: Path):
+        """Toggle reference song status for a file from the context menu."""
+        # Toggle reference song for current set
+        is_currently_reference = self.file_reference_songs.get(filename, False)
+        new_reference_state = not is_currently_reference
+        self.file_reference_songs[filename] = new_reference_state
+        
+        # Save the metadata (no filename change for reference songs)
+        self._save_notes()
+        
+        # Refresh UI to show reference status
+        self._refresh_right_table()
+        self._refresh_tree_display()
+        
+        # If this is the currently selected file, update the checkbox
+        if self.current_audio_file and self.current_audio_file.name == filename:
+            self._refresh_reference_song_field()
+        
+        # Show confirmation message
+        status_text = "marked as" if new_reference_state else "unmarked as"
+        QMessageBox.information(self, "Reference Song", 
+                              f"File '{filename}' is now {status_text} a reference song.\n"
+                              "Reference songs are weighted higher in fingerprint matching.")
 
     def _export_to_mono_for_file(self, file_path: Path):
         """Export the selected file to mono from the context menu."""
@@ -5883,6 +5976,7 @@ class AudioBrowser(QMainWindow):
             self._refresh_provided_name_field()
             self._refresh_best_take_field()
             self._refresh_partial_take_field()
+            self._refresh_reference_song_field()
             try: 
                 self.waveform.set_audio_file(path)
                 self._update_stereo_button_state()  # Update stereo button after waveform is loaded
@@ -5907,6 +6001,7 @@ class AudioBrowser(QMainWindow):
             self._refresh_provided_name_field()
             self._refresh_best_take_field()
             self._refresh_partial_take_field()
+            self._refresh_reference_song_field()
             try: 
                 self.waveform.set_audio_file(self.current_audio_file)
                 self._update_stereo_button_state()  # Update stereo button after waveform is loaded
@@ -6009,6 +6104,7 @@ class AudioBrowser(QMainWindow):
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
         self._refresh_partial_take_field()
+        self._refresh_reference_song_field()
 
     def _update_mono_button_state(self):
         """Update the mono conversion button enabled/disabled state based on current selection."""
@@ -6535,6 +6631,7 @@ class AudioBrowser(QMainWindow):
         self._refresh_provided_name_field()
         self._refresh_best_take_field()
         self._refresh_partial_take_field()
+        self._refresh_reference_song_field()
 
     def _append_annotation_row(self, entry: Dict, *, set_id: Optional[str]=None, set_name: Optional[str]=None, editable: bool=True):
         ms = int(entry.get("ms", 0))
@@ -7104,6 +7201,24 @@ class AudioBrowser(QMainWindow):
         # Refresh the tree display to show partial take formatting
         self._refresh_tree_display()
 
+    # Reference song checkbox on Annotations tab
+    def _on_reference_song_changed(self, state):
+        if not self.current_audio_file:
+            return
+        
+        fname = self.current_audio_file.name
+        is_checked = state == Qt.CheckState.Checked.value
+        
+        # Update the metadata (no filename change for reference songs)
+        self.file_reference_songs[fname] = is_checked
+        
+        # Save the metadata
+        self._save_notes()
+        
+        # Update UI to show reference status
+        self._refresh_right_table()
+        self._refresh_tree_display()
+
     def _refresh_provided_name_field(self):
         if not self.current_audio_file:
             self.provided_name_edit.setText("")
@@ -7134,6 +7249,17 @@ class AudioBrowser(QMainWindow):
         self.partial_take_cb.blockSignals(True)  # Prevent triggering the change handler
         self.partial_take_cb.setChecked(self.file_partial_takes.get(fname, False))
         self.partial_take_cb.blockSignals(False)
+
+    def _refresh_reference_song_field(self):
+        if not self.current_audio_file:
+            self.reference_song_cb.setChecked(False)
+            self.reference_song_cb.setEnabled(False)
+            return
+        fname = self.current_audio_file.name
+        self.reference_song_cb.setEnabled(True)
+        self.reference_song_cb.blockSignals(True)  # Prevent triggering the change handler
+        self.reference_song_cb.setChecked(self.file_reference_songs.get(fname, False))
+        self.reference_song_cb.blockSignals(False)
 
     # Autosave handlers
     def _on_general_changed(self):
@@ -7489,7 +7615,7 @@ class AudioBrowser(QMainWindow):
             return
             
         # Collect fingerprints from all available folders (excluding current)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir, reference_dir=self.fingerprint_reference_dir)
         
         if not fingerprint_map:
             QMessageBox.warning(self, "No Reference Fingerprints", 
@@ -8331,7 +8457,7 @@ class AudioBrowser(QMainWindow):
                 all_fingerprint_folders.append(self.fingerprint_reference_dir)
         
         # Count total fingerprints available for matching (excluding current folder)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir, reference_dir=self.fingerprint_reference_dir)
         total_available_songs = len(fingerprint_map)
         unique_songs = sum(1 for song_entries in fingerprint_map.values() if len(song_entries) == 1)
         
@@ -8413,7 +8539,7 @@ class AudioBrowser(QMainWindow):
         
         total_songs = 0
         unique_songs = 0
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir, reference_dir=self.fingerprint_reference_dir)
         
         for folder in all_fingerprint_folders:
             cache = load_fingerprint_cache(folder)
@@ -8633,7 +8759,7 @@ class AudioBrowser(QMainWindow):
             return
         
         # Collect fingerprints from all available folders (excluding current)
-        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir)
+        fingerprint_map = collect_fingerprints_from_folders(all_fingerprint_folders, self.fingerprint_algorithm, exclude_dir=current_dir, reference_dir=self.fingerprint_reference_dir)
         
         if not fingerprint_map:
             QMessageBox.warning(self, "No Reference Fingerprints", 

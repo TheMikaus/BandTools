@@ -4,6 +4,18 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Reference Folder and Reference Song Support for Fingerprinting**: Enhanced fingerprint matching with reference-based weighting
+  - Added "Reference Song" checkbox in Annotations tab to mark songs as reference versions
+  - Added "Mark as Reference Song" / "Unmark as Reference Song" option in file tree context menu
+  - Reference songs are given higher weight (+10% similarity boost) during fingerprint matching
+  - Files from the designated reference folder (if set) also receive the same weighting boost
+  - Reference songs marked in any folder are weighted equally to songs in the reference folder
+  - Prioritization order: Reference songs/folder → Unique songs → Highest similarity
+  - Reference status is stored in annotation data per file and persists across sessions
+  - Helps ensure correct song identification by prioritizing known-good reference recordings
+  - Works seamlessly with existing cross-folder fingerprint matching system
+
 ### Changed
 - **Hidden System Folders in File Tree**: The `.waveforms` folder is now hidden from the file tree display
   - `.waveforms` folder no longer appears in the file browser

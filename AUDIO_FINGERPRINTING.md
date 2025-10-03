@@ -157,22 +157,25 @@ Discovers all subdirectories that contain fingerprint cache files.
 - **Parameters**: Root directory to search
 - **Returns**: List of directories containing `.audio_fingerprints.json` files
 
-#### `collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
-**Updated function** - now requires algorithm parameter and automatically skips excluded files.
+#### `collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, exclude_dir: Optional[Path] = None, reference_dir: Optional[Path] = None) -> Dict[str, List[Dict]]`
+**Updated function** - now supports reference folder detection and reference song marking.
 Collects fingerprints from multiple folders for a specific algorithm and organizes by filename.
 - **Parameters**: 
   - `folder_paths`: List of directories to scan for fingerprints
   - `algorithm`: Which algorithm's fingerprints to collect
   - `exclude_dir`: Optional directory to exclude from collection
-- **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information (excluded files are automatically skipped)
+  - `reference_dir`: Optional reference directory (files from here receive higher matching weight)
+- **Returns**: Dictionary mapping filename to list of fingerprint entries with folder information, reference flags, and reference song status (excluded files are automatically skipped)
 
-#### `find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict, threshold: float) -> Optional[Tuple[str, float, Path]]`
-Finds the best match for a target fingerprint across multiple folders, prioritizing unique songs.
+#### `find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict, threshold: float) -> Optional[Tuple[str, float, Path, str]]`
+Finds the best match for a target fingerprint across multiple folders with reference-based weighting.
 - **Parameters**:
   - `target_fingerprint`: The fingerprint to match against
   - `fingerprint_map`: Dictionary from `collect_fingerprints_from_folders`
   - `threshold`: Minimum similarity threshold (0.0 to 1.0)
-- **Returns**: Tuple of (filename, similarity_score, source_folder) or None
+- **Returns**: Tuple of (filename, similarity_score, source_folder, provided_name) or None
+- **Priority order**: Reference songs/folder → Unique songs → Highest similarity
+- **Reference boost**: +10% similarity boost for reference songs and reference folder files
 
 ### UI Methods
 
@@ -198,9 +201,12 @@ Updates UI elements to reflect current fingerprint state and available practice 
 ## Configuration
 
 ### Settings (stored in QSettings)
-- `fingerprint_reference_dir`: Path to reference folder (optional - used as fallback if no practice folders found)
+- `fingerprint_reference_dir`: Path to reference folder (optional - files from this folder receive +10% similarity boost during matching)
 - `fingerprint_match_threshold`: Matching threshold (0.0-1.0, default 0.7)
 - `fingerprint_algorithm`: Selected fingerprinting algorithm (default "spectral")
+
+### Annotation Data (per file, per set)
+- `reference_song`: Boolean flag indicating if a song is marked as a reference song (receives +10% similarity boost during matching, same as reference folder files)
 
 ### Constants
 - `FINGERPRINTS_JSON = ".audio_fingerprints.json"`: Cache filename
