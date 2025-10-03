@@ -4346,6 +4346,8 @@ class AudioBrowser(QMainWindow):
                 self._backup_created_this_session = False
                 # Clear channel count cache when changing directories to avoid stale entries
                 self._channel_count_cache.clear()
+                # Clear remote files list since it's folder-specific
+                self.remote_files = set()
             self.current_practice_folder = folder
             
             # Update file watcher for new folder
