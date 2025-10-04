@@ -50,6 +50,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Automatically loads session state when switching practice folders
   - Helps track which files have been reviewed during practice sessions
   - State is saved immediately when checkboxes are toggled
+- **Multi-Select Batch Operations**: Perform actions on multiple files at once
+  - Library table now supports multi-selection (Ctrl+Click, Shift+Click)
+  - Selection behavior set to select entire rows for clarity
+  - Batch operations toolbar with three buttons:
+    - "Mark Selected as Best Take" - Mark multiple files as best take
+    - "Mark Selected as Partial Take" - Mark multiple files as partial take
+    - "Mark Selected as Reviewed" - Mark multiple files as reviewed
+  - Batch buttons enabled/disabled based on selection
+  - Confirmation dialogs before performing batch operations
+  - Reduces repetitive actions when processing large practice sessions
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders

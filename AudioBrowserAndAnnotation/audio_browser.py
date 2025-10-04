@@ -5137,12 +5137,40 @@ class AudioBrowser(QMainWindow):
         hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
+        # Enable multi-selection with Ctrl+Click and Shift+Click
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.itemChanged.connect(self._on_table_item_changed)
         lib_layout.addWidget(self.table, 1)
         self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
 
         self.table.cellClicked.connect(self._on_library_cell_clicked)
         self.table.cellDoubleClicked.connect(self._on_library_cell_double_clicked)
+        
+        # Batch operations toolbar
+        batch_toolbar = QHBoxLayout()
+        batch_toolbar.addWidget(QLabel("Batch operations:"))
+        
+        self.batch_mark_best_btn = QPushButton("Mark Selected as Best Take")
+        self.batch_mark_best_btn.setEnabled(False)
+        self.batch_mark_best_btn.clicked.connect(self._batch_mark_best_take)
+        batch_toolbar.addWidget(self.batch_mark_best_btn)
+        
+        self.batch_mark_partial_btn = QPushButton("Mark Selected as Partial Take")
+        self.batch_mark_partial_btn.setEnabled(False)
+        self.batch_mark_partial_btn.clicked.connect(self._batch_mark_partial_take)
+        batch_toolbar.addWidget(self.batch_mark_partial_btn)
+        
+        self.batch_mark_reviewed_btn = QPushButton("Mark Selected as Reviewed")
+        self.batch_mark_reviewed_btn.setEnabled(False)
+        self.batch_mark_reviewed_btn.clicked.connect(self._batch_mark_reviewed)
+        batch_toolbar.addWidget(self.batch_mark_reviewed_btn)
+        
+        batch_toolbar.addStretch(1)
+        lib_layout.addLayout(batch_toolbar)
+        
+        # Update batch buttons based on selection
+        self.table.itemSelectionChanged.connect(self._update_batch_buttons)
         
         # Add legend for annotation set colors
         self.legend_widget = self._create_annotation_legend()
@@ -8450,6 +8478,89 @@ class AudioBrowser(QMainWindow):
         
         # Clear the provided name field if there's a current file
         self._refresh_provided_name_field()
+
+    def _update_batch_buttons(self):
+        """Enable/disable batch operation buttons based on selection."""
+        selected_rows = self.table.selectionModel().selectedRows()
+        has_selection = len(selected_rows) > 0
+        self.batch_mark_best_btn.setEnabled(has_selection)
+        self.batch_mark_partial_btn.setEnabled(has_selection)
+        self.batch_mark_reviewed_btn.setEnabled(has_selection)
+
+    def _get_selected_filenames(self) -> List[str]:
+        """Get list of filenames for selected rows in Library table."""
+        selected_rows = self.table.selectionModel().selectedRows()
+        filenames = []
+        for row_index in selected_rows:
+            row = row_index.row()
+            item = self.table.item(row, 0)
+            if item:
+                filename = self._strip_remote_prefix(item.text())
+                filenames.append(filename)
+        return filenames
+
+    def _batch_mark_best_take(self):
+        """Mark all selected files as best take."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Batch Mark Best Take",
+            f"Mark {len(filenames)} selected file(s) as Best Take?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Mark each file
+        for filename in filenames:
+            file_path = self.current_practice_folder / filename
+            if file_path.exists():
+                self._toggle_best_take_for_file(filename, file_path)
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Best Take.")
+
+    def _batch_mark_partial_take(self):
+        """Mark all selected files as partial take."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Batch Mark Partial Take",
+            f"Mark {len(filenames)} selected file(s) as Partial Take?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Mark each file
+        for filename in filenames:
+            file_path = self.current_practice_folder / filename
+            if file_path.exists():
+                self._toggle_partial_take_for_file(filename, file_path)
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Partial Take.")
+
+    def _batch_mark_reviewed(self):
+        """Mark all selected files as reviewed."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        # Mark all as reviewed
+        for filename in filenames:
+            self.reviewed_files.add(filename)
+        
+        self._save_session_state()
+        self._refresh_right_table()
+        self._update_session_status()
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Reviewed.")
         
         # Show confirmation message
         QMessageBox.information(self, "Cleared", f"Removed {cleared_count} provided name(s).")
