@@ -4786,6 +4786,12 @@ class AudioBrowser(QMainWindow):
         # Help menu
         help_menu = menubar.addMenu("&Help")
         
+        help_shortcuts_action = QAction("&Keyboard Shortcuts", self)
+        help_shortcuts_action.triggered.connect(self._show_keyboard_shortcuts_dialog)
+        help_menu.addAction(help_shortcuts_action)
+        
+        help_menu.addSeparator()
+        
         help_about_action = QAction("&About", self)
         help_about_action.triggered.connect(self._show_about_dialog)
         help_menu.addAction(help_about_action)
@@ -10103,6 +10109,104 @@ class AudioBrowser(QMainWindow):
         layout.addLayout(button_layout)
         
         dialog.exec()
+
+    def _show_keyboard_shortcuts_dialog(self):
+        """Show keyboard shortcuts dialog with all available shortcuts."""
+        # Check if dialog already exists and is visible
+        if hasattr(self, '_shortcuts_dialog') and self._shortcuts_dialog is not None:
+            # Bring existing dialog to front
+            self._shortcuts_dialog.raise_()
+            self._shortcuts_dialog.activateWindow()
+            return
+        
+        shortcuts_html = """
+        <h2>Keyboard Shortcuts</h2>
+        
+        <h3>Playback Controls</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>Space</b></td><td>Play/Pause toggle</td></tr>
+        <tr><td><b>Left Arrow</b></td><td>Skip backward by 5 seconds</td></tr>
+        <tr><td><b>Right Arrow</b></td><td>Skip forward by 5 seconds</td></tr>
+        <tr><td><b>0-9</b></td><td>Jump to 0%, 10%, 20%, ... 90% of current song</td></tr>
+        </table>
+        
+        <h3>Navigation</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>Up Arrow</b></td><td>Navigate to previous file in directory</td></tr>
+        <tr><td><b>Down Arrow</b></td><td>Navigate to next file in directory</td></tr>
+        <tr><td><b>Ctrl+F</b></td><td>Focus file tree filter box</td></tr>
+        <tr><td><b>Alt+Up</b></td><td>Navigate up one folder level</td></tr>
+        </table>
+        
+        <h3>Tab Navigation</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>Ctrl+Tab</b></td><td>Cycle through tabs forward</td></tr>
+        <tr><td><b>Ctrl+Shift+Tab</b></td><td>Cycle through tabs backward</td></tr>
+        <tr><td><b>Ctrl+1/2/3/4</b></td><td>Jump directly to specific tab (Player/Library/Annotations/Fingerprinting)</td></tr>
+        </table>
+        
+        <h3>Annotations</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>N</b></td><td>Add annotation at current playback position (focuses annotation input)</td></tr>
+        <tr><td><b>Delete</b></td><td>Delete selected annotation (when annotation table has focus)</td></tr>
+        </table>
+        
+        <h3>File Markers</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>B</b></td><td>Toggle Best Take marker for current file</td></tr>
+        <tr><td><b>P</b></td><td>Toggle Partial Take marker for current file</td></tr>
+        </table>
+        
+        <h3>Clip Markers</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>[</b></td><td>Set clip start marker at current position</td></tr>
+        <tr><td><b>]</b></td><td>Set clip end marker at current position</td></tr>
+        </table>
+        
+        <h3>File Operations</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>F2</b></td><td>Rename currently selected file (focuses provided name field)</td></tr>
+        </table>
+        
+        <h3>Undo/Redo</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>Ctrl+Z</b></td><td>Undo last action</td></tr>
+        <tr><td><b>Ctrl+Y</b> or <b>Ctrl+Shift+Z</b></td><td>Redo last undone action</td></tr>
+        </table>
+        
+        <p><em><b>Note:</b> Most shortcuts intelligently avoid conflicts with text input fields.</em></p>
+        """
+        
+        # Create a non-modal dialog for keyboard shortcuts
+        self._shortcuts_dialog = QDialog(self)
+        self._shortcuts_dialog.setWindowTitle(f"{APP_NAME} - Keyboard Shortcuts")
+        self._shortcuts_dialog.resize(700, 600)
+        
+        # Make it non-modal so users can reference shortcuts while using the app
+        self._shortcuts_dialog.setModal(False)
+        
+        layout = QVBoxLayout(self._shortcuts_dialog)
+        
+        # Add text display area
+        text_edit = QTextEdit()
+        text_edit.setHtml(shortcuts_html)
+        text_edit.setReadOnly(True)
+        text_edit.setFont(self.font())  # Use application font
+        layout.addWidget(text_edit)
+        
+        # Add close button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self._shortcuts_dialog.accept)
+        button_layout.addWidget(close_button)
+        layout.addLayout(button_layout)
+        
+        # Clean up reference when dialog is closed
+        self._shortcuts_dialog.finished.connect(lambda: setattr(self, '_shortcuts_dialog', None))
+        
+        # Show dialog non-modally
+        self._shortcuts_dialog.show()
 
     # ----- Google Drive Sync methods -----
     def _refresh_remote_files(self):

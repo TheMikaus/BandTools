@@ -5,6 +5,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Keyboard Shortcuts Dialog**: Added Help menu item to view all available keyboard shortcuts
+  - New "Keyboard Shortcuts" menu item in Help menu
+  - Non-modal dialog allows viewing shortcuts while using the application
+  - Shortcuts organized by category: Playback Controls, Navigation, Tab Navigation, Annotations, File Markers, Clip Markers, File Operations, Undo/Redo
+  - Dialog remains accessible - re-opening brings existing window to front
+  - Provides quick reference for users to discover and learn keyboard shortcuts
 - **Comprehensive Keyboard Shortcuts**: Global keyboard shortcuts for faster workflow
   - `Space` - Play/Pause toggle (works anywhere except text fields)
   - `Left/Right Arrow` - Skip backward/forward by 5 seconds
