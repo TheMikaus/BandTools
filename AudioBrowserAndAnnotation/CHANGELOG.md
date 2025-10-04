@@ -28,6 +28,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Auto-expands tree when filtering to show all matches
   - `Ctrl+F` keyboard shortcut to focus filter box
   - `Esc` key clears the filter (using built-in clear button)
+- **Enhanced Context Menu for File Tree**: Additional right-click options for faster workflow
+  - "▶ Play" - Play the selected file directly from context menu
+  - "📝 Add annotation at 0:00" - Add annotation at file start
+  - "✏ Quick rename..." - Edit provided name via dialog
+  - "📋 Copy filename to provided name" - Use actual filename as provided name
+  - "🔍 Jump to in Library tab" - Switch to Library tab and select file
+  - "🔍 Jump to in Annotations tab" - Switch to Annotations tab for file
+  - All existing options preserved (Best Take, Partial Take, Export, etc.)
+  - Icons added to menu items for better visual recognition
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders

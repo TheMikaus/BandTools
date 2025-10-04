@@ -5661,8 +5661,37 @@ class AudioBrowser(QMainWindow):
         # Create context menu
         menu = QMenu(self)
         
+        # Add Play option
+        play_action = menu.addAction("▶ Play")
+        play_action.setToolTip("Play this file")
+        
+        # Add annotation option
+        add_annotation_action = menu.addAction("📝 Add annotation at 0:00")
+        add_annotation_action.setToolTip("Add an annotation at the start of this file")
+        
+        menu.addSeparator()
+        
+        # Add Quick rename option
+        quick_rename_action = menu.addAction("✏ Quick rename...")
+        quick_rename_action.setToolTip("Edit the provided name for this file")
+        
+        # Add Copy filename to provided name
+        copy_filename_action = menu.addAction("📋 Copy filename to provided name")
+        copy_filename_action.setToolTip("Use the actual filename as the provided name")
+        
+        menu.addSeparator()
+        
+        # Add Jump to options
+        jump_library_action = menu.addAction("🔍 Jump to in Library tab")
+        jump_library_action.setToolTip("Switch to Library tab and select this file")
+        
+        jump_annotations_action = menu.addAction("🔍 Jump to in Annotations tab")
+        jump_annotations_action.setToolTip("Switch to Annotations tab and show annotations for this file")
+        
+        menu.addSeparator()
+        
         # Add Open in Explorer option
-        open_in_explorer_action = menu.addAction("Open in Explorer")
+        open_in_explorer_action = menu.addAction("📁 Open in Explorer")
         open_in_explorer_action.setToolTip("Open file manager with this file selected")
         
         # Add separator before marking options
@@ -5732,7 +5761,25 @@ class AudioBrowser(QMainWindow):
         # Show menu and handle selection
         result = menu.exec(self.tree.mapToGlobal(position))
         
-        if result == open_in_explorer_action:
+        if result == play_action:
+            # Play the file
+            self._play_file(file_path)
+        elif result == add_annotation_action:
+            # Add annotation at 0:00
+            self._add_annotation_at_position(file_path, 0)
+        elif result == quick_rename_action:
+            # Quick rename - show dialog to edit provided name
+            self._quick_rename_file(filename, file_path)
+        elif result == copy_filename_action:
+            # Copy filename to provided name
+            self._copy_filename_to_provided_name(filename, file_path)
+        elif result == jump_library_action:
+            # Jump to Library tab and select this file
+            self._jump_to_library_tab(filename)
+        elif result == jump_annotations_action:
+            # Jump to Annotations tab and show this file's annotations
+            self._jump_to_annotations_tab(filename, file_path)
+        elif result == open_in_explorer_action:
             # Open file in explorer
             _open_file_in_explorer(file_path)
         elif result == best_take_action:
@@ -5928,6 +5975,81 @@ class AudioBrowser(QMainWindow):
         QMessageBox.information(self, "Reference Song", 
                               f"File '{filename}' is now {status_text} a reference song.\n"
                               "Reference songs are weighted higher in fingerprint matching.")
+
+    def _add_annotation_at_position(self, file_path: Path, position_ms: int):
+        """Add an annotation at a specific position in the file."""
+        # Play the file first to load it
+        self._play_file(file_path)
+        
+        # Switch to Annotations tab
+        self.tabs.setCurrentIndex(2)
+        
+        # Set the captured time
+        self.pending_note_start_ms = position_ms
+        self._update_captured_time_label()
+        
+        # Focus the note input
+        self.note_input.setFocus()
+
+    def _quick_rename_file(self, filename: str, file_path: Path):
+        """Show dialog to quickly rename the provided name for a file."""
+        # Get current provided name
+        current_name = self.provided_names_by_file.get(filename, "")
+        
+        # Show input dialog
+        new_name, ok = QInputDialog.getText(
+            self, "Quick Rename", 
+            f"Enter new name for '{filename}':",
+            QLineEdit.EchoMode.Normal,
+            current_name
+        )
+        
+        if ok and new_name.strip():
+            # Update the provided name
+            self.provided_names_by_file[filename] = new_name.strip()
+            self._push_undo({"type": "provided_name", "file": filename, "old": current_name, "new": new_name.strip()})
+            self._schedule_save_names()
+            self._refresh_right_table()
+            QMessageBox.information(self, "Renamed", f"Updated provided name to: {new_name.strip()}")
+
+    def _copy_filename_to_provided_name(self, filename: str, file_path: Path):
+        """Copy the actual filename (without extension) to the provided name."""
+        # Get filename without extension
+        stem = file_path.stem
+        
+        # Remove common suffixes
+        for suffix in ["_best_take", "_partial_take"]:
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+        
+        # Update the provided name
+        old_name = self.provided_names_by_file.get(filename, "")
+        self.provided_names_by_file[filename] = stem
+        self._push_undo({"type": "provided_name", "file": filename, "old": old_name, "new": stem})
+        self._schedule_save_names()
+        self._refresh_right_table()
+        QMessageBox.information(self, "Copied", f"Set provided name to: {stem}")
+
+    def _jump_to_library_tab(self, filename: str):
+        """Jump to Library tab and select the specified file."""
+        # Switch to Library tab
+        self.tabs.setCurrentIndex(1)
+        
+        # Find and select the file in the table
+        for row in range(self.right_table.rowCount()):
+            item = self.right_table.item(row, 0)  # Filename column
+            if item and item.text() == filename:
+                self.right_table.selectRow(row)
+                self.right_table.scrollToItem(item)
+                break
+
+    def _jump_to_annotations_tab(self, filename: str, file_path: Path):
+        """Jump to Annotations tab and show annotations for the specified file."""
+        # Play the file to load its annotations
+        self._play_file(file_path)
+        
+        # Switch to Annotations tab
+        self.tabs.setCurrentIndex(2)
 
     def _export_to_mono_for_file(self, file_path: Path):
         """Export the selected file to mono from the context menu."""
