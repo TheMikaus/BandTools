@@ -177,6 +177,7 @@ SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
+SESSION_STATE_JSON = ".session_state.json"
 WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
 FINGERPRINTS_JSON = ".audio_fingerprints.json"
@@ -3984,6 +3985,10 @@ class AudioBrowser(QMainWindow):
         
         # Song rename tracking for propagation across folders
         self.song_renames: List[Dict[str, Any]] = []  # List of {old_name, new_name, timestamp}
+        
+        # Session state tracking
+        self.session_state: Dict[str, Any] = {}  # {filename: {reviewed: bool, last_position_ms: int}}
+        self.reviewed_files: set = set()  # Set of filenames marked as reviewed
 
         # Annotation sets
         self.annotation_sets: List[Dict[str, Any]] = []
@@ -4392,6 +4397,10 @@ class AudioBrowser(QMainWindow):
         # Always use current_practice_folder for provided names to ensure consistency
         # whether a folder or audio file is selected
         return self.current_practice_folder / NAMES_JSON
+    
+    def _session_state_json_path(self) -> Path:
+        # Session state is per practice folder
+        return self.current_practice_folder / SESSION_STATE_JSON
     def _notes_json_path(self) -> Path: 
         # Always use current_practice_folder for annotations to ensure consistency
         # whether a folder or audio file is selected
@@ -4417,6 +4426,10 @@ class AudioBrowser(QMainWindow):
                 # Clear remote files list since it's folder-specific
                 self.remote_files = set()
             self.current_practice_folder = folder
+            
+            # Load session state for this folder
+            self._load_session_state()
+            self._update_session_status()
             
             # Update file watcher for new folder
             if self._initialization_complete:
@@ -4669,6 +4682,48 @@ class AudioBrowser(QMainWindow):
     def _save_duration_cache(self):
         self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._dur_json_path(), self.played_durations)
+
+    def _load_session_state(self):
+        """Load session state from JSON file."""
+        state = load_json(self._session_state_json_path(), {}) or {}
+        self.session_state = state.get("files", {})
+        self.reviewed_files = set(filename for filename, data in self.session_state.items() 
+                                   if data.get("reviewed", False))
+    
+    def _save_session_state(self):
+        """Save session state to JSON file."""
+        # Update session state from reviewed files
+        for filename in self.reviewed_files:
+            if filename not in self.session_state:
+                self.session_state[filename] = {}
+            self.session_state[filename]["reviewed"] = True
+        
+        # Remove reviewed flag from files not in reviewed_files set
+        for filename in list(self.session_state.keys()):
+            if filename not in self.reviewed_files and "reviewed" in self.session_state.get(filename, {}):
+                if self.session_state[filename].get("reviewed"):
+                    self.session_state[filename]["reviewed"] = False
+        
+        state = {"files": self.session_state}
+        save_json(self._session_state_json_path(), state)
+    
+    def _on_reviewed_toggled(self, filename: str, checked: bool):
+        """Handle reviewed checkbox toggle."""
+        if checked:
+            self.reviewed_files.add(filename)
+        else:
+            self.reviewed_files.discard(filename)
+        self._save_session_state()
+        self._update_session_status()
+    
+    def _update_session_status(self):
+        """Update status bar with session progress."""
+        total_files = len(self._list_audio_in_current_dir())
+        reviewed_count = len(self.reviewed_files)
+        if total_files > 0:
+            self.statusBar().showMessage(f"Session: Reviewed {reviewed_count} of {total_files} files")
+        else:
+            self.statusBar().clearMessage()
 
     # ----- UI -----
     def _init_ui(self):
@@ -5073,12 +5128,13 @@ class AudioBrowser(QMainWindow):
         
         lib_layout.addWidget(self.fp_group)
         
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
         self.table.itemChanged.connect(self._on_table_item_changed)
@@ -6869,10 +6925,21 @@ class AudioBrowser(QMainWindow):
                 item_file.setBackground(light_color)
                 item_name.setBackground(light_color)
             
+            # Create reviewed checkbox
+            reviewed_widget = QWidget()
+            reviewed_layout = QHBoxLayout(reviewed_widget)
+            reviewed_layout.setContentsMargins(0, 0, 0, 0)
+            reviewed_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            reviewed_cb = QCheckBox()
+            reviewed_cb.setChecked(p.name in self.reviewed_files)
+            reviewed_cb.toggled.connect(lambda checked, filename=p.name: self._on_reviewed_toggled(filename, checked))
+            reviewed_layout.addWidget(reviewed_cb)
+            
             self.table.setItem(row, 0, item_file)
-            self.table.setCellWidget(row, 1, best_take_widget)  # Use setCellWidget for custom widget
-            self.table.setCellWidget(row, 2, partial_take_widget)  # Use setCellWidget for custom widget  
-            self.table.setItem(row, 3, item_name)
+            self.table.setCellWidget(row, 1, reviewed_widget)  # Reviewed checkbox
+            self.table.setCellWidget(row, 2, best_take_widget)  # Use setCellWidget for custom widget
+            self.table.setCellWidget(row, 3, partial_take_widget)  # Use setCellWidget for custom widget  
+            self.table.setItem(row, 4, item_name)
         self.table.blockSignals(False)
 
     def _on_best_take_widget_clicked(self, row: int):

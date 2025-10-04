@@ -43,6 +43,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Saves expanded/collapsed state in settings and restores on startup
   - Reduces visual clutter when not actively using fingerprinting features
   - All fingerprinting functionality remains fully accessible when expanded
+- **Session State Management**: Track review progress and file status
+  - Added "Reviewed" checkbox column in Library table to mark files as reviewed
+  - Session state persists per practice folder in `.session_state.json`
+  - Status bar shows progress: "Session: Reviewed X of Y files"
+  - Automatically loads session state when switching practice folders
+  - Helps track which files have been reviewed during practice sessions
+  - State is saved immediately when checkboxes are toggled
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders
