@@ -5,6 +5,21 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **A-B Loop Markers for Targeted Practice**: Set loop points for practicing specific sections
+  - Visual A-B loop markers on waveform (cyan/blue color with "A" and "B" labels)
+  - `L` - Set loop start marker (A point) at current playback position
+  - `Shift+L` - Set loop end marker (B point) at current playback position
+  - `Ctrl+L` - Clear loop markers
+  - Loop region automatically plays when Loop checkbox is enabled
+  - Loop markers saved per file in `.loop_markers.json`
+  - Semi-transparent cyan highlight shows active loop region
+  - Distinct from clip export markers (yellow) for clarity
+- **Playback Speed Control**: Adjust playback speed for practice
+  - Speed slider in player bar (range: 0.5x to 2.0x)
+  - Real-time speed adjustment during playback
+  - Speed setting persisted across sessions
+  - Useful for learning difficult sections at slower speeds
+  - Uses Qt's built-in playback rate control
 - **Keyboard Shortcuts Dialog**: Added Help menu item to view all available keyboard shortcuts
   - New "Keyboard Shortcuts" menu item in Help menu
   - Non-modal dialog allows viewing shortcuts while using the application

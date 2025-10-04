@@ -2717,6 +2717,10 @@ class WaveformView(QWidget):
         # Clip selection region
         self._clip_start_ms: Optional[int] = None
         self._clip_end_ms: Optional[int] = None
+        
+        # A-B Loop markers (separate from clip export markers)
+        self._loop_start_ms: Optional[int] = None
+        self._loop_end_ms: Optional[int] = None
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -2744,6 +2748,12 @@ class WaveformView(QWidget):
         self._clip_start_ms = start_ms
         self._clip_end_ms = end_ms
         self.update()
+    
+    def set_loop_markers(self, start_ms: Optional[int], end_ms: Optional[int]):
+        """Set the A-B loop markers to be displayed on the waveform."""
+        self._loop_start_ms = start_ms
+        self._loop_end_ms = end_ms
+        self.update()
 
     def clear(self):
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
@@ -2752,6 +2762,7 @@ class WaveformView(QWidget):
         self._multi = {}; self._selected = None; self._hover = None
         self._dragging_marker = False
         self._clip_start_ms = None; self._clip_end_ms = None
+        self._loop_start_ms = None; self._loop_end_ms = None
         self._has_stereo_data = False
         self.update()
 
@@ -3137,6 +3148,60 @@ class WaveformView(QWidget):
                 end_x = self._ms_to_x(self._clip_end_ms)
                 if 0 <= end_x <= self.width():  # Only draw if visible
                     painter.drawLine(int(end_x), 0, int(end_x), self.height())
+        
+        # A-B Loop markers (cyan/blue color to distinguish from clip markers)
+        if self._loop_start_ms is not None and self._loop_end_ms is not None:
+            loop_start_x = self._ms_to_x(self._loop_start_ms)
+            loop_end_x = self._ms_to_x(self._loop_end_ms)
+            if loop_start_x < self.width() and loop_end_x > 0:  # Only draw if visible
+                # Ensure proper order
+                left_x = min(loop_start_x, loop_end_x)
+                right_x = max(loop_start_x, loop_end_x)
+                # Clamp to widget bounds
+                left_x = max(0, left_x)
+                right_x = min(self.width(), right_x)
+                
+                if right_x > left_x:  # Only draw if there's a visible region
+                    # Draw semi-transparent cyan highlight
+                    loop_color = QColor("#00bfff")  # Deep sky blue
+                    loop_color.setAlpha(40)  # Semi-transparent
+                    painter.fillRect(int(left_x), 0, int(right_x - left_x), self.height(), loop_color)
+                    
+                    # Draw border lines for the loop region
+                    border_pen = QPen(QColor("#00bfff"))
+                    border_pen.setWidth(3)
+                    painter.setPen(border_pen)
+                    painter.drawLine(int(left_x), 0, int(left_x), self.height())
+                    painter.drawLine(int(right_x), 0, int(right_x), self.height())
+                    
+                    # Draw "A" and "B" labels at the top of the markers
+                    painter.setPen(QPen(QColor("#00bfff")))
+                    painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                    painter.drawText(int(left_x) + 5, 15, "A")
+                    painter.drawText(int(right_x) - 15, 15, "B")
+        elif self._loop_start_ms is not None or self._loop_end_ms is not None:
+            # Draw single cyan line when only start or end is specified
+            border_pen = QPen(QColor("#00bfff"))
+            border_pen.setWidth(3)
+            painter.setPen(border_pen)
+            
+            if self._loop_start_ms is not None:
+                loop_start_x = self._ms_to_x(self._loop_start_ms)
+                if 0 <= loop_start_x <= self.width():  # Only draw if visible
+                    painter.drawLine(int(loop_start_x), 0, int(loop_start_x), self.height())
+                    # Draw "A" label
+                    painter.setPen(QPen(QColor("#00bfff")))
+                    painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                    painter.drawText(int(loop_start_x) + 5, 15, "A")
+            
+            if self._loop_end_ms is not None:
+                loop_end_x = self._ms_to_x(self._loop_end_ms)
+                if 0 <= loop_end_x <= self.width():  # Only draw if visible
+                    painter.drawLine(int(loop_end_x), 0, int(loop_end_x), self.height())
+                    # Draw "B" label
+                    painter.setPen(QPen(QColor("#00bfff")))
+                    painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                    painter.drawText(int(loop_end_x) - 15, 15, "B")
 
         # Playhead
         dur = self._effective_duration()
@@ -3920,6 +3985,11 @@ class AudioBrowser(QMainWindow):
         self._subsection_end_ms: Optional[int] = None
         self._subsection_loops: bool = False
         self._subsection_playing: bool = False
+        # A-B Loop markers (for practice looping, separate from clip export markers)
+        self.loop_start_ms: Optional[int] = None
+        self.loop_end_ms: Optional[int] = None
+        # Playback speed for practice
+        self.playback_speed: float = 1.0
         self.annotation_filter: str = 'all'
         self._programmatic_selection = False
         self._uid_counter: int = 1
@@ -3978,6 +4048,13 @@ class AudioBrowser(QMainWindow):
         # Volume boost (stored as 100-400 for 1.0x-4.0x)
         boost_raw = self.settings.value(SETTINGS_KEY_VOLUME_BOOST, 100)
         self.volume_boost = int(boost_raw) if isinstance(boost_raw, (int, str)) else 100
+        
+        # Load playback speed from settings
+        speed_raw = self.settings.value("playback_speed", 1.0)
+        try:
+            self.playback_speed = float(speed_raw) if speed_raw is not None else 1.0
+        except (ValueError, TypeError):
+            self.playback_speed = 1.0
 
         # Provided names & duration cache
         self.provided_names: Dict[str, str] = {}
@@ -4959,6 +5036,18 @@ class AudioBrowser(QMainWindow):
 
         self.auto_progress_cb = QCheckBox("Auto-progress"); player_bar.addWidget(self.auto_progress_cb)
         self.loop_cb = QCheckBox("Loop"); player_bar.addWidget(self.loop_cb)
+        
+        # Playback speed control
+        player_bar.addWidget(QLabel("Speed"))
+        self.speed_slider = QSlider(Qt.Orientation.Horizontal); self.speed_slider.setFixedWidth(120)
+        self.speed_slider.setRange(50, 200)  # 0.5x to 2.0x
+        self.speed_slider.setValue(int(self.playback_speed * 100))  # Set from loaded settings
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        self.speed_slider.setToolTip("Playback speed (0.5x - 2.0x)")
+        player_bar.addWidget(self.speed_slider)
+        self.speed_label = QLabel(f"{self.playback_speed:.1f}x")
+        self.speed_label.setMinimumWidth(35)
+        player_bar.addWidget(self.speed_label)
 
         right_layout.addLayout(player_bar)
 
@@ -5617,6 +5706,14 @@ class AudioBrowser(QMainWindow):
         # Reapply volume with new boost
         current_volume = self.volume_slider.value()
         self._on_volume_changed(current_volume)
+    
+    def _on_speed_changed(self, val: int):
+        """Handle playback speed slider changes."""
+        self.playback_speed = val / 100.0
+        self.speed_label.setText(f"{self.playback_speed:.1f}x")
+        self.settings.setValue("playback_speed", self.playback_speed)
+        # Apply the speed change to the player
+        self.player.setPlaybackRate(self.playback_speed)
 
     # ----- Audio Output Device -----
     def _refresh_output_devices(self):
@@ -6546,6 +6643,7 @@ class AudioBrowser(QMainWindow):
                 self._update_stereo_button_state()  # Update button state even on error
                 self._update_channel_muting_state()  # Update channel muting state even on error
             self._update_waveform_annotations()
+            self._load_loop_markers()  # Load loop markers for this file
         else:
             # Defer expensive operations when not on annotations tab and not auto-switching
             # Use QTimer.singleShot to defer waveform and annotation loading
@@ -6571,6 +6669,7 @@ class AudioBrowser(QMainWindow):
                 self._update_stereo_button_state()  # Update button state even on error
                 self._update_channel_muting_state()  # Update channel muting state even on error
             self._update_waveform_annotations()
+            self._load_loop_markers()  # Load loop markers for this file
 
     def _highlight_file_in_tree(self, path: Path):
         """Highlight the specified file in the tree view, ensuring it's visible and selected.
@@ -6789,6 +6888,17 @@ class AudioBrowser(QMainWindow):
         pos = self.player.position(); dur = max(1, self.player.duration())
         self.position_slider.blockSignals(True); self.position_slider.setValue(pos); self.position_slider.blockSignals(False)
         self.time_label.setText(f"{human_time_ms(pos)} / {human_time_ms(dur)}")
+        
+        # Handle A-B loop when loop is enabled and both loop markers are set
+        if (self.loop_cb.isChecked() and 
+            self.loop_start_ms is not None and 
+            self.loop_end_ms is not None):
+            # Ensure markers are in order
+            loop_start = min(self.loop_start_ms, self.loop_end_ms)
+            loop_end = max(self.loop_start_ms, self.loop_end_ms)
+            # If playback has reached or passed the loop end point, jump back to start
+            if pos >= loop_end:
+                self.player.setPosition(int(loop_start))
 
     def _user_scrubbing(self, on: bool): self._user_is_scrubbing = on
 
@@ -7736,6 +7846,39 @@ class AudioBrowser(QMainWindow):
                 event.accept()
                 return
         
+        # L - Set loop start marker (A point)
+        if key == Qt.Key.Key_L and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.loop_start_ms = current_pos
+                self._update_loop_markers_on_waveform()
+                self._save_loop_markers()
+                event.accept()
+                return
+        
+        # Shift+L - Set loop end marker (B point)
+        if key == Qt.Key.Key_L and modifiers == Qt.KeyboardModifier.ShiftModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.loop_end_ms = current_pos
+                self._update_loop_markers_on_waveform()
+                self._save_loop_markers()
+                event.accept()
+                return
+        
+        # Ctrl+L - Clear loop markers
+        if key == Qt.Key.Key_L and modifiers == Qt.KeyboardModifier.ControlModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self.loop_start_ms = None
+                self.loop_end_ms = None
+                self._update_loop_markers_on_waveform()
+                self._save_loop_markers()
+                event.accept()
+                return
+        
         # Ctrl+Tab / Ctrl+Shift+Tab - Cycle through tabs
         if key == Qt.Key.Key_Tab and modifiers & Qt.KeyboardModifier.ControlModifier:
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
@@ -8305,6 +8448,78 @@ class AudioBrowser(QMainWindow):
             self.clip_sel_start_ms, self.clip_sel_end_ms = e, s
         # Update waveform visual selection
         self.waveform.set_clip_selection(self.clip_sel_start_ms, self.clip_sel_end_ms)
+    
+    def _update_loop_markers_on_waveform(self):
+        """Update the loop markers display on the waveform."""
+        self.waveform.set_loop_markers(self.loop_start_ms, self.loop_end_ms)
+        # Update status to show loop region
+        if self.loop_start_ms is not None and self.loop_end_ms is not None:
+            start_str = human_time_ms(int(self.loop_start_ms))
+            end_str = human_time_ms(int(self.loop_end_ms))
+            duration_ms = abs(self.loop_end_ms - self.loop_start_ms)
+            duration_str = human_time_ms(int(duration_ms))
+            print(f"Loop region set: A={start_str}, B={end_str}, Duration={duration_str}")
+        elif self.loop_start_ms is not None:
+            print(f"Loop start (A) set at {human_time_ms(int(self.loop_start_ms))}")
+        elif self.loop_end_ms is not None:
+            print(f"Loop end (B) set at {human_time_ms(int(self.loop_end_ms))}")
+        else:
+            print("Loop markers cleared")
+    
+    def _loop_markers_json_path(self) -> Path:
+        """Return the path to the loop markers JSON file."""
+        return self._get_audio_file_dir() / ".loop_markers.json"
+    
+    def _save_loop_markers(self):
+        """Save loop markers for the current file to metadata."""
+        if not self.current_audio_file:
+            return
+        
+        # Load loop markers metadata
+        loop_json_path = self._loop_markers_json_path()
+        metadata = load_json(loop_json_path, {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        
+        filename = self.current_audio_file.name
+        
+        # Store loop markers
+        if self.loop_start_ms is not None or self.loop_end_ms is not None:
+            metadata[filename] = {
+                "loop_start_ms": self.loop_start_ms,
+                "loop_end_ms": self.loop_end_ms
+            }
+        else:
+            # Remove loop markers if both are None
+            metadata.pop(filename, None)
+        
+        save_json(loop_json_path, metadata)
+    
+    def _load_loop_markers(self):
+        """Load loop markers for the current file from metadata."""
+        if not self.current_audio_file:
+            self.loop_start_ms = None
+            self.loop_end_ms = None
+            self._update_loop_markers_on_waveform()
+            return
+        
+        # Load loop markers metadata
+        loop_json_path = self._loop_markers_json_path()
+        metadata = load_json(loop_json_path, {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        
+        filename = self.current_audio_file.name
+        file_meta = metadata.get(filename, {})
+        
+        if isinstance(file_meta, dict):
+            self.loop_start_ms = file_meta.get("loop_start_ms")
+            self.loop_end_ms = file_meta.get("loop_end_ms")
+        else:
+            self.loop_start_ms = None
+            self.loop_end_ms = None
+        
+        self._update_loop_markers_on_waveform()
 
     def _on_clip_play_clicked(self):
         if not self.current_audio_file: return
@@ -10157,10 +10372,18 @@ class AudioBrowser(QMainWindow):
         <tr><td><b>P</b></td><td>Toggle Partial Take marker for current file</td></tr>
         </table>
         
-        <h3>Clip Markers</h3>
+        <h3>Clip Markers (for Export)</h3>
         <table cellpadding="5" border="0">
         <tr><td><b>[</b></td><td>Set clip start marker at current position</td></tr>
         <tr><td><b>]</b></td><td>Set clip end marker at current position</td></tr>
+        </table>
+        
+        <h3>A-B Loop Markers (for Practice)</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>L</b></td><td>Set loop start marker (A point) at current position</td></tr>
+        <tr><td><b>Shift+L</b></td><td>Set loop end marker (B point) at current position</td></tr>
+        <tr><td><b>Ctrl+L</b></td><td>Clear loop markers</td></tr>
+        <tr><td colspan="2"><em>Enable "Loop" checkbox to loop between A and B markers</em></td></tr>
         </table>
         
         <h3>File Operations</h3>
