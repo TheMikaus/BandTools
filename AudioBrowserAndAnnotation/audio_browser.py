@@ -9546,8 +9546,8 @@ class AudioBrowser(QMainWindow):
             
             # Delete the file
             if self.gdrive_sync_manager.delete_remote_file(filename):
-                # Update version tracking
-                local_version_path = self.current_practice_folder / ".sync_version.json"
+                # Update version tracking (using root_path)
+                local_version_path = self.root_path / ".sync_version.json"
                 local_version = load_local_version(local_version_path)
                 
                 # Get remote version and increment it
@@ -9626,9 +9626,9 @@ class AudioBrowser(QMainWindow):
                 # Clear local state
                 self.remote_files = set()
                 
-                # Clear local version file
+                # Clear local version file (using root_path)
                 from gdrive_sync import save_local_version, SyncVersion
-                local_version_path = self.current_practice_folder / ".sync_version.json"
+                local_version_path = self.root_path / ".sync_version.json"
                 save_local_version(local_version_path, SyncVersion(version=0))
                 
                 # Refresh UI
@@ -9770,8 +9770,8 @@ class AudioBrowser(QMainWindow):
             # Refresh remote files list
             self._refresh_remote_files()
             
-            # Get version information
-            local_version_path = self.current_practice_folder / ".sync_version.json"
+            # Get version information from root_path
+            local_version_path = self.root_path / ".sync_version.json"
             local_version = load_local_version(local_version_path)
             remote_version = self.gdrive_sync_manager.get_remote_version()
             
@@ -9784,7 +9784,7 @@ class AudioBrowser(QMainWindow):
             
             # Show status dialog
             remote_files = self.gdrive_sync_manager.list_remote_files()
-            local_files = get_sync_files(self.current_practice_folder)
+            local_files = get_sync_files(self.root_path)
             
             status_dialog = SyncStatusDialog(
                 local_version.version,
@@ -9808,8 +9808,8 @@ class AudioBrowser(QMainWindow):
             if reply == QMessageBox.StandardButton.Cancel:
                 return
             
-            # Compare files
-            local_only, remote_only, both = compare_files(self.current_practice_folder, remote_files)
+            # Compare files (using root_path for entire practice directory)
+            local_only, remote_only, both = compare_files(self.root_path, remote_files)
             
             if reply == QMessageBox.StandardButton.Yes:
                 # Download from Google Drive
@@ -9818,7 +9818,7 @@ class AudioBrowser(QMainWindow):
                     return
                 
                 sync_dialog = SyncReviewDialog(
-                    self.current_practice_folder,
+                    self.root_path,
                     local_only,
                     remote_only,
                     self.gdrive_sync_manager,
@@ -9850,7 +9850,7 @@ class AudioBrowser(QMainWindow):
                     return
                 
                 sync_dialog = SyncReviewDialog(
-                    self.current_practice_folder,
+                    self.root_path,
                     local_only,
                     remote_only,
                     self.gdrive_sync_manager,
