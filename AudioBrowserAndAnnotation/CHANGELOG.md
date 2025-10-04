@@ -5,6 +5,20 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Comprehensive Keyboard Shortcuts**: Global keyboard shortcuts for faster workflow
+  - `Space` - Play/Pause toggle (works anywhere except text fields)
+  - `Left/Right Arrow` - Skip backward/forward by 5 seconds
+  - `Up/Down Arrow` - Navigate to previous/next file in directory
+  - `N` - Add annotation at current playback position (focuses annotation input)
+  - `B` - Toggle Best Take marker for current file
+  - `P` - Toggle Partial Take marker for current file
+  - `0-9` - Jump to 0%, 10%, 20%, ... 90% of current song
+  - `[` - Set clip start marker at current position
+  - `]` - Set clip end marker at current position
+  - `Ctrl+Tab` / `Ctrl+Shift+Tab` - Cycle through tabs forward/backward
+  - `Ctrl+1/2/3/4` - Jump directly to specific tab
+  - `F2` - Rename currently selected file (focuses provided name field)
+  - All shortcuts intelligently avoid conflicts with text input fields
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders

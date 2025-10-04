@@ -6425,6 +6425,39 @@ class AudioBrowser(QMainWindow):
             log_print(f"Error during auto-progression: {e}")
             # Don't let auto-progression errors crash the application
 
+    def _navigate_to_adjacent_file(self, direction: int):
+        """Navigate to the previous (direction=-1) or next (direction=1) file in the current directory.
+        
+        This method is called when the user presses Up/Down arrow keys to navigate through files.
+        It will find the adjacent file alphabetically and play it, ensuring the file is highlighted
+        in the tree view so users can see what is currently selected.
+        """
+        if not self.current_audio_file: 
+            return
+            
+        files = [p for p in self._list_audio_in_current_dir()]
+        if not files: 
+            return
+            
+        try:
+            # Sort files alphabetically for consistent ordering
+            files.sort(key=lambda p: p.name.lower())
+            cur = self.current_audio_file.resolve()
+            
+            # Find the current file and navigate to the adjacent one
+            for i, p in enumerate(files):
+                if p.resolve() == cur:
+                    target_index = i + direction
+                    if 0 <= target_index < len(files):
+                        target_file = files[target_index]
+                        log_print(f"Navigating from '{cur.name}' to '{target_file.name}'")
+                        self._play_file(target_file)
+                    else:
+                        log_print(f"Navigation: reached {'start' if direction < 0 else 'end'} of file list")
+                    break
+        except Exception as e:
+            log_print(f"Error during file navigation: {e}")
+
     # ----- Slider/time -----
     _user_is_scrubbing = False
     def _on_duration_changed(self, dur: int):
@@ -7264,11 +7297,164 @@ class AudioBrowser(QMainWindow):
 
     def keyPressEvent(self, event):
         """Handle key press events for the main window."""
-        if event.key() == Qt.Key.Key_Delete:
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # Delete key for annotation deletion
+        if key == Qt.Key.Key_Delete:
             # Check if annotation table has focus and selected items
             if (self.annotation_table.hasFocus() and 
                 self.annotation_table.selectionModel().selectedRows()):
                 self._delete_selected_with_confirmation()
+                event.accept()
+                return
+        
+        # Space - Play/Pause (already handled in WaveformWidget, but add here for global access)
+        if key == Qt.Key.Key_Space and modifiers == Qt.KeyboardModifier.NoModifier:
+            # Don't trigger if user is typing in a text field
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self._toggle_play_pause()
+                event.accept()
+                return
+        
+        # Left/Right Arrow - Skip backward/forward by 5 seconds
+        if key == Qt.Key.Key_Left and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                new_pos = max(0, current_pos - 5000)  # Skip back 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Right and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                duration = self.player.duration()
+                new_pos = min(duration, current_pos + 5000)  # Skip forward 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        # Up/Down Arrow - Previous/Next file in list
+        if key == Qt.Key.Key_Up and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=-1)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Down and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=1)
+                event.accept()
+                return
+        
+        # M - Toggle mute (placeholder - would need audio output muting)
+        # N - Add annotation at current playback position
+        if key == Qt.Key.Key_N and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self.note_input.setFocus()
+                if self.pending_note_start_ms is None:
+                    self.pending_note_start_ms = int(self.player.position())
+                    self._update_captured_time_label()
+                event.accept()
+                return
+        
+        # B - Mark as best take
+        if key == Qt.Key.Key_B and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_best_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # P - Mark as partial take
+        if key == Qt.Key.Key_P and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_partial_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # 0-9 - Jump to 0%, 10%, 20%, ... 90% of current song
+        if key >= Qt.Key.Key_0 and key <= Qt.Key.Key_9 and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                digit = key - Qt.Key.Key_0
+                duration = self.player.duration()
+                if duration > 0:
+                    position = int(duration * digit / 10)
+                    self.player.setPosition(position)
+                event.accept()
+                return
+        
+        # [ - Set clip start marker
+        if key == Qt.Key.Key_BracketLeft and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_start_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # ] - Set clip end marker
+        if key == Qt.Key.Key_BracketRight and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_end_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # Ctrl+Tab / Ctrl+Shift+Tab - Cycle through tabs
+        if key == Qt.Key.Key_Tab and modifiers & Qt.KeyboardModifier.ControlModifier:
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                # Previous tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index - 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            else:
+                # Next tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index + 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            event.accept()
+            return
+        
+        # Ctrl+1/2/3/4 - Jump directly to specific tabs
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_1:
+                self.tabs.setCurrentIndex(0)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_2:
+                self.tabs.setCurrentIndex(1)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_3:
+                self.tabs.setCurrentIndex(2)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_4:
+                if self.tabs.count() > 3:
+                    self.tabs.setCurrentIndex(3)
+                event.accept()
+                return
+        
+        # F2 - Rename currently selected file's provided name
+        if key == Qt.Key.Key_F2 and modifiers == Qt.KeyboardModifier.NoModifier:
+            if self.current_audio_file:
+                # Focus the provided name field in Library tab
+                self.tabs.setCurrentIndex(1)  # Switch to Library tab
+                self.provided_name_edit.setFocus()
+                self.provided_name_edit.selectAll()
                 event.accept()
                 return
         
