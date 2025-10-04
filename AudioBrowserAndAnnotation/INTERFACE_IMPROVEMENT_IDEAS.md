@@ -406,35 +406,42 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 3.4 Looping & Practice Sections
+### 3.4 Looping & Practice Sections ✅ **IMPLEMENTED** (A-B Loop Markers, Playback Speed)
 
 **Current State:**
-- Basic loop checkbox exists
-- Loops entire song
+- A-B loop markers allow setting specific practice sections
+- Playback speed control (0.5x to 2.0x) for slow practice
+- Loop markers saved per song
 
-**Improvement Ideas:**
+**Implemented Features:**
 
 1. **Section Looping:**
-   - Set A-B loop points on waveform
-   - Loop specific section (verse, chorus, bridge)
-   - Keyboard shortcuts to adjust loop points during playback
-   - Save loop points per song
+   - ✅ Set A-B loop points on waveform with keyboard shortcuts (L, Shift+L)
+   - ✅ Loop specific section (verse, chorus, bridge)
+   - ✅ Visual markers on waveform (cyan "A" and "B" labels)
+   - ✅ Save loop points per song in `.loop_markers.json`
 
 2. **Slow Playback:**
-   - Playback speed slider (0.5x to 2.0x)
-   - Maintain pitch when slowing down (time stretching)
-   - Useful for learning fast passages
+   - ✅ Playback speed slider (0.5x to 2.0x)
+   - ⚠️ Uses Qt's native speed control (pitch changes with speed - pitch preservation not yet implemented)
+   - ✅ Useful for learning fast passages
+
+**Future Enhancements:**
 
 3. **Practice Marks:**
-   - Mark "trouble spots" on waveform
-   - "Focus practice" mode: Play only trouble spots in loop
-   - Countdown before loop starts
-   - Configurable loop count
+   - 💡 Mark "trouble spots" on waveform
+   - 💡 "Focus practice" mode: Play only trouble spots in loop
+   - 💡 Countdown before loop starts
+   - 💡 Configurable loop count
 
 4. **Multi-Take Loop Comparison:**
-   - Loop same section across multiple takes simultaneously
-   - Quickly A/B compare different performances
-   - Vote on best version of specific section
+   - 💡 Loop same section across multiple takes simultaneously
+   - 💡 Quickly A/B compare different performances
+   - 💡 Vote on best version of specific section
+
+5. **Pitch-Preserved Time Stretching:**
+   - 💡 Maintain pitch when slowing down playback (requires audio processing library like pydub or librosa)
+   - 💡 More natural sound for slow practice
 
 **Why:** Targeted practice on difficult sections improves faster than full run-throughs.
 
@@ -644,7 +651,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
-2. **A-B loop sections** for targeted practice (Section 3.4)
+2. ✅ **A-B loop sections** for targeted practice (Section 3.4) - **IMPLEMENTED**
 3. **Practice statistics dashboard** (Section 3.1)
 4. **Improved auto-labeling preview** (Section 2.2)
 5. **Annotation categories/tags** (Section 2.4)
