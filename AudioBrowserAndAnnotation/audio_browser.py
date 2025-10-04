@@ -177,6 +177,7 @@ SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
+SESSION_STATE_JSON = ".session_state.json"
 WAVEFORM_JSON = ".waveform_cache.json"
 DURATIONS_JSON = ".duration_cache.json"
 FINGERPRINTS_JSON = ".audio_fingerprints.json"
@@ -3238,9 +3239,18 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         
         # Cache for fingerprint exclusion data to avoid repeated disk I/O
         self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
+        
+        # Text filter for file tree
+        self._text_filter = ""
+        self.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+
+    def set_text_filter(self, text: str):
+        """Set the text filter for file names."""
+        self._text_filter = text.strip()
+        self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup, .backups, and .waveforms folders from the file tree."""
+        """Filter out .backup, .backups, and .waveforms folders, and apply text filter."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
@@ -3250,6 +3260,21 @@ class FileInfoProxyModel(QSortFilterProxyModel):
             folder_name = file_info.fileName()
             if folder_name.startswith('.backup') or folder_name == '.waveforms':
                 return False
+            # Always show directories when text filter is active (to show matching files within)
+            if self._text_filter:
+                return True
+        
+        # Apply text filter to files
+        if self._text_filter and not file_info.isDir():
+            filename = file_info.fileName().lower()
+            filter_text = self._text_filter.lower()
+            # Support simple fuzzy matching - check if all filter characters appear in order
+            filter_pos = 0
+            for char in filename:
+                if filter_pos < len(filter_text) and char == filter_text[filter_pos]:
+                    filter_pos += 1
+            if filter_pos < len(filter_text):
+                return False  # Not all filter characters found
         
         return True
 
@@ -3960,6 +3985,10 @@ class AudioBrowser(QMainWindow):
         
         # Song rename tracking for propagation across folders
         self.song_renames: List[Dict[str, Any]] = []  # List of {old_name, new_name, timestamp}
+        
+        # Session state tracking
+        self.session_state: Dict[str, Any] = {}  # {filename: {reviewed: bool, last_position_ms: int}}
+        self.reviewed_files: set = set()  # Set of filenames marked as reviewed
 
         # Annotation sets
         self.annotation_sets: List[Dict[str, Any]] = []
@@ -4368,6 +4397,10 @@ class AudioBrowser(QMainWindow):
         # Always use current_practice_folder for provided names to ensure consistency
         # whether a folder or audio file is selected
         return self.current_practice_folder / NAMES_JSON
+    
+    def _session_state_json_path(self) -> Path:
+        # Session state is per practice folder
+        return self.current_practice_folder / SESSION_STATE_JSON
     def _notes_json_path(self) -> Path: 
         # Always use current_practice_folder for annotations to ensure consistency
         # whether a folder or audio file is selected
@@ -4393,6 +4426,10 @@ class AudioBrowser(QMainWindow):
                 # Clear remote files list since it's folder-specific
                 self.remote_files = set()
             self.current_practice_folder = folder
+            
+            # Load session state for this folder
+            self._load_session_state()
+            self._update_session_status()
             
             # Update file watcher for new folder
             if self._initialization_complete:
@@ -4646,6 +4683,48 @@ class AudioBrowser(QMainWindow):
         self._create_backup_if_needed()  # Create backup before first modification
         save_json(self._dur_json_path(), self.played_durations)
 
+    def _load_session_state(self):
+        """Load session state from JSON file."""
+        state = load_json(self._session_state_json_path(), {}) or {}
+        self.session_state = state.get("files", {})
+        self.reviewed_files = set(filename for filename, data in self.session_state.items() 
+                                   if data.get("reviewed", False))
+    
+    def _save_session_state(self):
+        """Save session state to JSON file."""
+        # Update session state from reviewed files
+        for filename in self.reviewed_files:
+            if filename not in self.session_state:
+                self.session_state[filename] = {}
+            self.session_state[filename]["reviewed"] = True
+        
+        # Remove reviewed flag from files not in reviewed_files set
+        for filename in list(self.session_state.keys()):
+            if filename not in self.reviewed_files and "reviewed" in self.session_state.get(filename, {}):
+                if self.session_state[filename].get("reviewed"):
+                    self.session_state[filename]["reviewed"] = False
+        
+        state = {"files": self.session_state}
+        save_json(self._session_state_json_path(), state)
+    
+    def _on_reviewed_toggled(self, filename: str, checked: bool):
+        """Handle reviewed checkbox toggle."""
+        if checked:
+            self.reviewed_files.add(filename)
+        else:
+            self.reviewed_files.discard(filename)
+        self._save_session_state()
+        self._update_session_status()
+    
+    def _update_session_status(self):
+        """Update status bar with session progress."""
+        total_files = len(self._list_audio_in_current_dir())
+        reviewed_count = len(self.reviewed_files)
+        if total_files > 0:
+            self.statusBar().showMessage(f"Session: Reviewed {reviewed_count} of {total_files} files")
+        else:
+            self.statusBar().clearMessage()
+
     # ----- UI -----
     def _init_ui(self):
         self.resize(1360, 900); self.setStatusBar(QStatusBar(self))
@@ -4765,6 +4844,27 @@ class AudioBrowser(QMainWindow):
 
         splitter = QSplitter(self); main_layout.addWidget(splitter)
 
+        # Left panel with filter box and tree
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(4)
+        
+        # Filter box above tree
+        filter_layout = QHBoxLayout()
+        filter_layout.setContentsMargins(4, 4, 4, 4)
+        filter_label = QLabel("Filter:")
+        filter_layout.addWidget(filter_label)
+        self.tree_filter_edit = QLineEdit()
+        self.tree_filter_edit.setPlaceholderText("Type to filter files...")
+        self.tree_filter_edit.setClearButtonEnabled(True)
+        self.tree_filter_edit.textChanged.connect(self._on_tree_filter_changed)
+        filter_layout.addWidget(self.tree_filter_edit, 1)
+        self.filter_match_label = QLabel("")
+        self.filter_match_label.setStyleSheet("color: gray; font-size: 10pt;")
+        filter_layout.addWidget(self.filter_match_label)
+        left_layout.addLayout(filter_layout)
+
         # Tree model
         self.fs_model = QFileSystemModel(self)
         self.fs_model.setResolveSymlinks(True); self.fs_model.setReadOnly(True)
@@ -4806,7 +4906,9 @@ class AudioBrowser(QMainWindow):
         # Add context menu for fingerprint exclusion
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
-        splitter.addWidget(self.tree)
+        left_layout.addWidget(self.tree)
+        
+        splitter.addWidget(left_panel)
 
         # Right panel
         right = QWidget(); splitter.addWidget(right)
@@ -4900,16 +5002,30 @@ class AudioBrowser(QMainWindow):
         # Library tab
         self.lib_tab = QWidget(); lib_layout = QVBoxLayout(self.lib_tab)
         
-        # Fingerprinting section
-        fp_group = QWidget()
-        fp_layout = QVBoxLayout(fp_group)
-        fp_layout.setContentsMargins(10, 10, 10, 10)
+        # Fingerprinting section - Collapsible
         colors = get_consistent_stylesheet_colors()
-        fp_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
-        
-        fp_title = QLabel("Audio Fingerprinting")
-        fp_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
-        fp_layout.addWidget(fp_title)
+        self.fp_group = QGroupBox("Audio Fingerprinting")
+        self.fp_group.setCheckable(True)
+        self.fp_group.setChecked(bool(self.settings.value("fingerprint_section_expanded", True)))
+        self.fp_group.toggled.connect(self._on_fingerprint_section_toggled)
+        self.fp_group.setStyleSheet(f"""
+            QGroupBox {{
+                background-color: {colors['bg_light']};
+                border: 1px solid {colors['border']};
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+                font-size: 14px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }}
+        """)
+        fp_layout = QVBoxLayout(self.fp_group)
+        fp_layout.setContentsMargins(10, 10, 10, 10)
         
         # Reference folder selection
         ref_row = QHBoxLayout()
@@ -5010,22 +5126,51 @@ class AudioBrowser(QMainWindow):
         self.auto_label_buttons_widget.setVisible(False)  # Initially hidden
         fp_layout.addWidget(self.auto_label_buttons_widget)
         
-        lib_layout.addWidget(fp_group)
+        lib_layout.addWidget(self.fp_group)
         
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
+        # Enable multi-selection with Ctrl+Click and Shift+Click
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.itemChanged.connect(self._on_table_item_changed)
         lib_layout.addWidget(self.table, 1)
         self.table.itemSelectionChanged.connect(self._stop_if_no_file_selected)
 
         self.table.cellClicked.connect(self._on_library_cell_clicked)
         self.table.cellDoubleClicked.connect(self._on_library_cell_double_clicked)
+        
+        # Batch operations toolbar
+        batch_toolbar = QHBoxLayout()
+        batch_toolbar.addWidget(QLabel("Batch operations:"))
+        
+        self.batch_mark_best_btn = QPushButton("Mark Selected as Best Take")
+        self.batch_mark_best_btn.setEnabled(False)
+        self.batch_mark_best_btn.clicked.connect(self._batch_mark_best_take)
+        batch_toolbar.addWidget(self.batch_mark_best_btn)
+        
+        self.batch_mark_partial_btn = QPushButton("Mark Selected as Partial Take")
+        self.batch_mark_partial_btn.setEnabled(False)
+        self.batch_mark_partial_btn.clicked.connect(self._batch_mark_partial_take)
+        batch_toolbar.addWidget(self.batch_mark_partial_btn)
+        
+        self.batch_mark_reviewed_btn = QPushButton("Mark Selected as Reviewed")
+        self.batch_mark_reviewed_btn.setEnabled(False)
+        self.batch_mark_reviewed_btn.clicked.connect(self._batch_mark_reviewed)
+        batch_toolbar.addWidget(self.batch_mark_reviewed_btn)
+        
+        batch_toolbar.addStretch(1)
+        lib_layout.addLayout(batch_toolbar)
+        
+        # Update batch buttons based on selection
+        self.table.itemSelectionChanged.connect(self._update_batch_buttons)
         
         # Add legend for annotation set colors
         self.legend_widget = self._create_annotation_legend()
@@ -5614,8 +5759,37 @@ class AudioBrowser(QMainWindow):
         # Create context menu
         menu = QMenu(self)
         
+        # Add Play option
+        play_action = menu.addAction("▶ Play")
+        play_action.setToolTip("Play this file")
+        
+        # Add annotation option
+        add_annotation_action = menu.addAction("📝 Add annotation at 0:00")
+        add_annotation_action.setToolTip("Add an annotation at the start of this file")
+        
+        menu.addSeparator()
+        
+        # Add Quick rename option
+        quick_rename_action = menu.addAction("✏ Quick rename...")
+        quick_rename_action.setToolTip("Edit the provided name for this file")
+        
+        # Add Copy filename to provided name
+        copy_filename_action = menu.addAction("📋 Copy filename to provided name")
+        copy_filename_action.setToolTip("Use the actual filename as the provided name")
+        
+        menu.addSeparator()
+        
+        # Add Jump to options
+        jump_library_action = menu.addAction("🔍 Jump to in Library tab")
+        jump_library_action.setToolTip("Switch to Library tab and select this file")
+        
+        jump_annotations_action = menu.addAction("🔍 Jump to in Annotations tab")
+        jump_annotations_action.setToolTip("Switch to Annotations tab and show annotations for this file")
+        
+        menu.addSeparator()
+        
         # Add Open in Explorer option
-        open_in_explorer_action = menu.addAction("Open in Explorer")
+        open_in_explorer_action = menu.addAction("📁 Open in Explorer")
         open_in_explorer_action.setToolTip("Open file manager with this file selected")
         
         # Add separator before marking options
@@ -5685,7 +5859,25 @@ class AudioBrowser(QMainWindow):
         # Show menu and handle selection
         result = menu.exec(self.tree.mapToGlobal(position))
         
-        if result == open_in_explorer_action:
+        if result == play_action:
+            # Play the file
+            self._play_file(file_path)
+        elif result == add_annotation_action:
+            # Add annotation at 0:00
+            self._add_annotation_at_position(file_path, 0)
+        elif result == quick_rename_action:
+            # Quick rename - show dialog to edit provided name
+            self._quick_rename_file(filename, file_path)
+        elif result == copy_filename_action:
+            # Copy filename to provided name
+            self._copy_filename_to_provided_name(filename, file_path)
+        elif result == jump_library_action:
+            # Jump to Library tab and select this file
+            self._jump_to_library_tab(filename)
+        elif result == jump_annotations_action:
+            # Jump to Annotations tab and show this file's annotations
+            self._jump_to_annotations_tab(filename, file_path)
+        elif result == open_in_explorer_action:
             # Open file in explorer
             _open_file_in_explorer(file_path)
         elif result == best_take_action:
@@ -5724,6 +5916,45 @@ class AudioBrowser(QMainWindow):
         elif delete_remote_action and result == delete_remote_action:
             # Delete from remote
             self._delete_file_from_remote(filename)
+
+    def _on_tree_filter_changed(self, text: str):
+        """Handle changes to the file tree filter text."""
+        self.file_proxy.set_text_filter(text)
+        
+        # Count matching files
+        if text.strip():
+            match_count = self._count_visible_files()
+            self.filter_match_label.setText(f"{match_count} file(s)")
+        else:
+            self.filter_match_label.setText("")
+        
+        # Expand all if filtering, collapse if not
+        if text.strip():
+            self.tree.expandAll()
+        else:
+            self.tree.collapseAll()
+    
+    def _count_visible_files(self) -> int:
+        """Count the number of visible (filtered) files in the tree."""
+        count = 0
+        root_index = self.tree.rootIndex()
+        
+        def count_recursive(parent_index):
+            nonlocal count
+            row_count = self.file_proxy.rowCount(parent_index)
+            for row in range(row_count):
+                index = self.file_proxy.index(row, 0, parent_index)
+                if not index.isValid():
+                    continue
+                src_index = self.file_proxy.mapToSource(index)
+                file_info = self.fs_model.fileInfo(src_index)
+                if file_info.isFile():
+                    count += 1
+                elif file_info.isDir():
+                    count_recursive(index)
+        
+        count_recursive(root_index)
+        return count
 
     def _toggle_best_take_for_file(self, filename: str, file_path: Path):
         """Toggle best take status for a file from the context menu."""
@@ -5842,6 +6073,81 @@ class AudioBrowser(QMainWindow):
         QMessageBox.information(self, "Reference Song", 
                               f"File '{filename}' is now {status_text} a reference song.\n"
                               "Reference songs are weighted higher in fingerprint matching.")
+
+    def _add_annotation_at_position(self, file_path: Path, position_ms: int):
+        """Add an annotation at a specific position in the file."""
+        # Play the file first to load it
+        self._play_file(file_path)
+        
+        # Switch to Annotations tab
+        self.tabs.setCurrentIndex(2)
+        
+        # Set the captured time
+        self.pending_note_start_ms = position_ms
+        self._update_captured_time_label()
+        
+        # Focus the note input
+        self.note_input.setFocus()
+
+    def _quick_rename_file(self, filename: str, file_path: Path):
+        """Show dialog to quickly rename the provided name for a file."""
+        # Get current provided name
+        current_name = self.provided_names_by_file.get(filename, "")
+        
+        # Show input dialog
+        new_name, ok = QInputDialog.getText(
+            self, "Quick Rename", 
+            f"Enter new name for '{filename}':",
+            QLineEdit.EchoMode.Normal,
+            current_name
+        )
+        
+        if ok and new_name.strip():
+            # Update the provided name
+            self.provided_names_by_file[filename] = new_name.strip()
+            self._push_undo({"type": "provided_name", "file": filename, "old": current_name, "new": new_name.strip()})
+            self._schedule_save_names()
+            self._refresh_right_table()
+            QMessageBox.information(self, "Renamed", f"Updated provided name to: {new_name.strip()}")
+
+    def _copy_filename_to_provided_name(self, filename: str, file_path: Path):
+        """Copy the actual filename (without extension) to the provided name."""
+        # Get filename without extension
+        stem = file_path.stem
+        
+        # Remove common suffixes
+        for suffix in ["_best_take", "_partial_take"]:
+            if stem.endswith(suffix):
+                stem = stem[:-len(suffix)]
+        
+        # Update the provided name
+        old_name = self.provided_names_by_file.get(filename, "")
+        self.provided_names_by_file[filename] = stem
+        self._push_undo({"type": "provided_name", "file": filename, "old": old_name, "new": stem})
+        self._schedule_save_names()
+        self._refresh_right_table()
+        QMessageBox.information(self, "Copied", f"Set provided name to: {stem}")
+
+    def _jump_to_library_tab(self, filename: str):
+        """Jump to Library tab and select the specified file."""
+        # Switch to Library tab
+        self.tabs.setCurrentIndex(1)
+        
+        # Find and select the file in the table
+        for row in range(self.right_table.rowCount()):
+            item = self.right_table.item(row, 0)  # Filename column
+            if item and item.text() == filename:
+                self.right_table.selectRow(row)
+                self.right_table.scrollToItem(item)
+                break
+
+    def _jump_to_annotations_tab(self, filename: str, file_path: Path):
+        """Jump to Annotations tab and show annotations for the specified file."""
+        # Play the file to load its annotations
+        self._play_file(file_path)
+        
+        # Switch to Annotations tab
+        self.tabs.setCurrentIndex(2)
 
     def _export_to_mono_for_file(self, file_path: Path):
         """Export the selected file to mono from the context menu."""
@@ -6425,6 +6731,39 @@ class AudioBrowser(QMainWindow):
             log_print(f"Error during auto-progression: {e}")
             # Don't let auto-progression errors crash the application
 
+    def _navigate_to_adjacent_file(self, direction: int):
+        """Navigate to the previous (direction=-1) or next (direction=1) file in the current directory.
+        
+        This method is called when the user presses Up/Down arrow keys to navigate through files.
+        It will find the adjacent file alphabetically and play it, ensuring the file is highlighted
+        in the tree view so users can see what is currently selected.
+        """
+        if not self.current_audio_file: 
+            return
+            
+        files = [p for p in self._list_audio_in_current_dir()]
+        if not files: 
+            return
+            
+        try:
+            # Sort files alphabetically for consistent ordering
+            files.sort(key=lambda p: p.name.lower())
+            cur = self.current_audio_file.resolve()
+            
+            # Find the current file and navigate to the adjacent one
+            for i, p in enumerate(files):
+                if p.resolve() == cur:
+                    target_index = i + direction
+                    if 0 <= target_index < len(files):
+                        target_file = files[target_index]
+                        log_print(f"Navigating from '{cur.name}' to '{target_file.name}'")
+                        self._play_file(target_file)
+                    else:
+                        log_print(f"Navigation: reached {'start' if direction < 0 else 'end'} of file list")
+                    break
+        except Exception as e:
+            log_print(f"Error during file navigation: {e}")
+
     # ----- Slider/time -----
     _user_is_scrubbing = False
     def _on_duration_changed(self, dur: int):
@@ -6614,10 +6953,21 @@ class AudioBrowser(QMainWindow):
                 item_file.setBackground(light_color)
                 item_name.setBackground(light_color)
             
+            # Create reviewed checkbox
+            reviewed_widget = QWidget()
+            reviewed_layout = QHBoxLayout(reviewed_widget)
+            reviewed_layout.setContentsMargins(0, 0, 0, 0)
+            reviewed_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            reviewed_cb = QCheckBox()
+            reviewed_cb.setChecked(p.name in self.reviewed_files)
+            reviewed_cb.toggled.connect(lambda checked, filename=p.name: self._on_reviewed_toggled(filename, checked))
+            reviewed_layout.addWidget(reviewed_cb)
+            
             self.table.setItem(row, 0, item_file)
-            self.table.setCellWidget(row, 1, best_take_widget)  # Use setCellWidget for custom widget
-            self.table.setCellWidget(row, 2, partial_take_widget)  # Use setCellWidget for custom widget  
-            self.table.setItem(row, 3, item_name)
+            self.table.setCellWidget(row, 1, reviewed_widget)  # Reviewed checkbox
+            self.table.setCellWidget(row, 2, best_take_widget)  # Use setCellWidget for custom widget
+            self.table.setCellWidget(row, 3, partial_take_widget)  # Use setCellWidget for custom widget  
+            self.table.setItem(row, 4, item_name)
         self.table.blockSignals(False)
 
     def _on_best_take_widget_clicked(self, row: int):
@@ -7264,13 +7614,173 @@ class AudioBrowser(QMainWindow):
 
     def keyPressEvent(self, event):
         """Handle key press events for the main window."""
-        if event.key() == Qt.Key.Key_Delete:
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # Delete key for annotation deletion
+        if key == Qt.Key.Key_Delete:
             # Check if annotation table has focus and selected items
             if (self.annotation_table.hasFocus() and 
                 self.annotation_table.selectionModel().selectedRows()):
                 self._delete_selected_with_confirmation()
                 event.accept()
                 return
+        
+        # Space - Play/Pause (already handled in WaveformWidget, but add here for global access)
+        if key == Qt.Key.Key_Space and modifiers == Qt.KeyboardModifier.NoModifier:
+            # Don't trigger if user is typing in a text field
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self._toggle_play_pause()
+                event.accept()
+                return
+        
+        # Left/Right Arrow - Skip backward/forward by 5 seconds
+        if key == Qt.Key.Key_Left and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                new_pos = max(0, current_pos - 5000)  # Skip back 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Right and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                duration = self.player.duration()
+                new_pos = min(duration, current_pos + 5000)  # Skip forward 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        # Up/Down Arrow - Previous/Next file in list
+        if key == Qt.Key.Key_Up and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=-1)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Down and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=1)
+                event.accept()
+                return
+        
+        # M - Toggle mute (placeholder - would need audio output muting)
+        # N - Add annotation at current playback position
+        if key == Qt.Key.Key_N and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self.note_input.setFocus()
+                if self.pending_note_start_ms is None:
+                    self.pending_note_start_ms = int(self.player.position())
+                    self._update_captured_time_label()
+                event.accept()
+                return
+        
+        # B - Mark as best take
+        if key == Qt.Key.Key_B and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_best_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # P - Mark as partial take
+        if key == Qt.Key.Key_P and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_partial_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # 0-9 - Jump to 0%, 10%, 20%, ... 90% of current song
+        if key >= Qt.Key.Key_0 and key <= Qt.Key.Key_9 and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                digit = key - Qt.Key.Key_0
+                duration = self.player.duration()
+                if duration > 0:
+                    position = int(duration * digit / 10)
+                    self.player.setPosition(position)
+                event.accept()
+                return
+        
+        # [ - Set clip start marker
+        if key == Qt.Key.Key_BracketLeft and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_start_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # ] - Set clip end marker
+        if key == Qt.Key.Key_BracketRight and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_end_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # Ctrl+Tab / Ctrl+Shift+Tab - Cycle through tabs
+        if key == Qt.Key.Key_Tab and modifiers & Qt.KeyboardModifier.ControlModifier:
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                # Previous tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index - 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            else:
+                # Next tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index + 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            event.accept()
+            return
+        
+        # Ctrl+1/2/3/4 - Jump directly to specific tabs
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_1:
+                self.tabs.setCurrentIndex(0)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_2:
+                self.tabs.setCurrentIndex(1)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_3:
+                self.tabs.setCurrentIndex(2)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_4:
+                if self.tabs.count() > 3:
+                    self.tabs.setCurrentIndex(3)
+                event.accept()
+                return
+        
+        # F2 - Rename currently selected file's provided name
+        if key == Qt.Key.Key_F2 and modifiers == Qt.KeyboardModifier.NoModifier:
+            if self.current_audio_file:
+                # Focus the provided name field in Library tab
+                self.tabs.setCurrentIndex(1)  # Switch to Library tab
+                self.provided_name_edit.setFocus()
+                self.provided_name_edit.selectAll()
+                event.accept()
+                return
+        
+        # Ctrl+F - Focus search/filter box
+        if key == Qt.Key.Key_F and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.tree_filter_edit.setFocus()
+            self.tree_filter_edit.selectAll()
+            event.accept()
+            return
         
         # Call parent implementation for other keys
         super().keyPressEvent(event)
@@ -7968,6 +8478,89 @@ class AudioBrowser(QMainWindow):
         
         # Clear the provided name field if there's a current file
         self._refresh_provided_name_field()
+
+    def _update_batch_buttons(self):
+        """Enable/disable batch operation buttons based on selection."""
+        selected_rows = self.table.selectionModel().selectedRows()
+        has_selection = len(selected_rows) > 0
+        self.batch_mark_best_btn.setEnabled(has_selection)
+        self.batch_mark_partial_btn.setEnabled(has_selection)
+        self.batch_mark_reviewed_btn.setEnabled(has_selection)
+
+    def _get_selected_filenames(self) -> List[str]:
+        """Get list of filenames for selected rows in Library table."""
+        selected_rows = self.table.selectionModel().selectedRows()
+        filenames = []
+        for row_index in selected_rows:
+            row = row_index.row()
+            item = self.table.item(row, 0)
+            if item:
+                filename = self._strip_remote_prefix(item.text())
+                filenames.append(filename)
+        return filenames
+
+    def _batch_mark_best_take(self):
+        """Mark all selected files as best take."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Batch Mark Best Take",
+            f"Mark {len(filenames)} selected file(s) as Best Take?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Mark each file
+        for filename in filenames:
+            file_path = self.current_practice_folder / filename
+            if file_path.exists():
+                self._toggle_best_take_for_file(filename, file_path)
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Best Take.")
+
+    def _batch_mark_partial_take(self):
+        """Mark all selected files as partial take."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        reply = QMessageBox.question(
+            self, "Batch Mark Partial Take",
+            f"Mark {len(filenames)} selected file(s) as Partial Take?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Mark each file
+        for filename in filenames:
+            file_path = self.current_practice_folder / filename
+            if file_path.exists():
+                self._toggle_partial_take_for_file(filename, file_path)
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Partial Take.")
+
+    def _batch_mark_reviewed(self):
+        """Mark all selected files as reviewed."""
+        filenames = self._get_selected_filenames()
+        if not filenames:
+            return
+        
+        # Mark all as reviewed
+        for filename in filenames:
+            self.reviewed_files.add(filename)
+        
+        self._save_session_state()
+        self._refresh_right_table()
+        self._update_session_status()
+        
+        QMessageBox.information(self, "Batch Complete", 
+                              f"Marked {len(filenames)} file(s) as Reviewed.")
         
         # Show confirmation message
         QMessageBox.information(self, "Cleared", f"Removed {cleared_count} provided name(s).")
@@ -8995,6 +9588,10 @@ class AudioBrowser(QMainWindow):
             self.fingerprint_algorithm = selected_data
             self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, self.fingerprint_algorithm)
             self._update_fingerprint_ui()
+
+    def _on_fingerprint_section_toggled(self, checked: bool):
+        """Handle fingerprinting section expand/collapse."""
+        self.settings.setValue("fingerprint_section_expanded", checked)
 
     # ----- Auto-generation callbacks -----
     def _generate_fingerprints_for_folder(self):

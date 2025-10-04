@@ -5,6 +5,61 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Comprehensive Keyboard Shortcuts**: Global keyboard shortcuts for faster workflow
+  - `Space` - Play/Pause toggle (works anywhere except text fields)
+  - `Left/Right Arrow` - Skip backward/forward by 5 seconds
+  - `Up/Down Arrow` - Navigate to previous/next file in directory
+  - `N` - Add annotation at current playback position (focuses annotation input)
+  - `B` - Toggle Best Take marker for current file
+  - `P` - Toggle Partial Take marker for current file
+  - `0-9` - Jump to 0%, 10%, 20%, ... 90% of current song
+  - `[` - Set clip start marker at current position
+  - `]` - Set clip end marker at current position
+  - `Ctrl+Tab` / `Ctrl+Shift+Tab` - Cycle through tabs forward/backward
+  - `Ctrl+1/2/3/4` - Jump directly to specific tab
+  - `F2` - Rename currently selected file (focuses provided name field)
+  - `Ctrl+F` - Focus file tree filter box
+  - All shortcuts intelligently avoid conflicts with text input fields
+- **Quick Filter Box for File Tree**: Fast file searching and filtering
+  - Added filter text box above file tree for quick file search
+  - Supports fuzzy matching - type characters in order to match files
+  - Shows match count (e.g., "5 file(s)")
+  - Clear button to quickly reset filter
+  - Auto-expands tree when filtering to show all matches
+  - `Ctrl+F` keyboard shortcut to focus filter box
+  - `Esc` key clears the filter (using built-in clear button)
+- **Enhanced Context Menu for File Tree**: Additional right-click options for faster workflow
+  - "▶ Play" - Play the selected file directly from context menu
+  - "📝 Add annotation at 0:00" - Add annotation at file start
+  - "✏ Quick rename..." - Edit provided name via dialog
+  - "📋 Copy filename to provided name" - Use actual filename as provided name
+  - "🔍 Jump to in Library tab" - Switch to Library tab and select file
+  - "🔍 Jump to in Annotations tab" - Switch to Annotations tab for file
+  - All existing options preserved (Best Take, Partial Take, Export, etc.)
+  - Icons added to menu items for better visual recognition
+- **Collapsible Fingerprinting Section**: Reduce interface clutter with collapsible UI
+  - Fingerprinting section in Library tab is now collapsible using checkbox in title
+  - Click the title checkbox to expand/collapse the fingerprinting controls
+  - Saves expanded/collapsed state in settings and restores on startup
+  - Reduces visual clutter when not actively using fingerprinting features
+  - All fingerprinting functionality remains fully accessible when expanded
+- **Session State Management**: Track review progress and file status
+  - Added "Reviewed" checkbox column in Library table to mark files as reviewed
+  - Session state persists per practice folder in `.session_state.json`
+  - Status bar shows progress: "Session: Reviewed X of Y files"
+  - Automatically loads session state when switching practice folders
+  - Helps track which files have been reviewed during practice sessions
+  - State is saved immediately when checkboxes are toggled
+- **Multi-Select Batch Operations**: Perform actions on multiple files at once
+  - Library table now supports multi-selection (Ctrl+Click, Shift+Click)
+  - Selection behavior set to select entire rows for clarity
+  - Batch operations toolbar with three buttons:
+    - "Mark Selected as Best Take" - Mark multiple files as best take
+    - "Mark Selected as Partial Take" - Mark multiple files as partial take
+    - "Mark Selected as Reviewed" - Mark multiple files as reviewed
+  - Batch buttons enabled/disabled based on selection
+  - Confirmation dialogs before performing batch operations
+  - Reduces repetitive actions when processing large practice sessions
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders
