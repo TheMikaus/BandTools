@@ -2384,6 +2384,54 @@ class VolumeBoostWorker(QObject):
         self.progress.emit(1, 1, src.name)
         self.finished.emit(False)
 
+# ========== Channel Muting Worker ==========
+class ChannelMutingWorker(QObject):
+    """Worker thread for creating channel-muted audio files."""
+    finished = pyqtSignal(str, str)  # temp_path, error_message (empty string if success)
+
+    def __init__(self, audio_path: str, left_enabled: bool, right_enabled: bool, temp_path: str):
+        super().__init__()
+        self._path = str(audio_path)
+        self._left_enabled = left_enabled
+        self._right_enabled = right_enabled
+        self._temp_path = str(temp_path)
+
+    def run(self):
+        """Create channel-muted audio file in background."""
+        try:
+            from pydub import AudioSegment
+            
+            # Load the audio file
+            audio = AudioSegment.from_file(self._path)
+            
+            if audio.channels >= 2:
+                # Split into individual channels
+                channels = audio.split_to_mono()
+                
+                # Decrease the volume by a large number of decibels to mute
+                if not self._left_enabled:
+                    channels[0] = channels[0] - 100
+                
+                if not self._right_enabled:
+                    channels[1] = channels[1] - 100
+                
+                # Create stereo audio with muted channels
+                muted_audio = AudioSegment.from_mono_audiosegments(channels[0], channels[1])
+            else:
+                # For mono files, just use original or silence
+                muted_audio = audio if (self._left_enabled or self._right_enabled) else AudioSegment.silent(duration=len(audio))
+            
+            # Export temporary file
+            temp_path = Path(self._temp_path)
+            suffix = temp_path.suffix[1:].lower() if temp_path.suffix else 'wav'
+            muted_audio.export(str(temp_path), format=suffix)
+            
+            self.finished.emit(self._temp_path, "")
+            
+        except Exception as e:
+            log_print(f"Error creating channel-muted file: {e}")
+            self.finished.emit("", str(e))
+
 # ========== Fingerprint worker ==========
 class FingerprintWorker(QObject):
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
@@ -4571,7 +4619,8 @@ class AudioBrowser(QMainWindow):
         
         # Check for migration from legacy file
         user_notes_path = self._notes_json_path()
-        legacy_notes_path = (self.current_audio_file.parent if self.current_audio_file else self.current_practice_folder) / NOTES_JSON
+        # Always use current_practice_folder for consistency, not current_audio_file.parent
+        legacy_notes_path = self.current_practice_folder / NOTES_JSON
         
         # If user-specific file doesn't exist but legacy file does, migrate it
         if not user_notes_path.exists() and legacy_notes_path.exists():
@@ -5665,8 +5714,9 @@ class AudioBrowser(QMainWindow):
         if index >= 0 and self.tabs.tabText(index) == "Annotations" and self.current_audio_file:
             # Check if waveform is empty/not loaded yet (indicates deferred loading)
             if not hasattr(self.waveform, '_path') or self.waveform._path != self.current_audio_file:
-                # Trigger immediate loading now that user is viewing Annotations tab
-                self._deferred_annotation_load()
+                # Schedule loading with a small delay to avoid blocking the tab switch animation
+                # This keeps the UI responsive during tab changes
+                QTimer.singleShot(50, self._deferred_annotation_load)
 
     def _restore_tab_order(self):
         saved = self.settings.value(SETTINGS_KEY_TABS_ORDER, "", type=str) or ""
@@ -5821,9 +5871,12 @@ class AudioBrowser(QMainWindow):
             
             if not self._programmatic_selection and self.auto_switch_cb.isChecked():
                 self.tabs.setCurrentIndex(self._tab_index_by_name("Annotations"))
-            # Always play the selected file, even if it's already the current file
-            # This allows restarting the same song from the beginning when clicked
-            self._play_file(path)
+            
+            # Play the file, but skip if it's a programmatic selection of the same file
+            # (to avoid re-playing during auto-progression highlighting)
+            # For user clicks, always play to allow restarting the same song
+            if not self._programmatic_selection or is_different_file:
+                self._play_file(path)
             
             # Only update UI states if the file actually changed (performance optimization)
             if is_different_file:
@@ -6453,6 +6506,85 @@ class AudioBrowser(QMainWindow):
             # Fallback to direct detection on error
             return get_audio_channel_count(path)
 
+    def _get_channel_muted_file_cached(self, path: Path, left_enabled: bool, right_enabled: bool) -> Path:
+        """
+        Get a path to a channel-muted audio file, using cached version if available.
+        If not cached, returns original file and starts background generation.
+        
+        This is a non-blocking version that prevents UI freezes during MP3 decoding.
+        
+        Args:
+            path: Original audio file path
+            left_enabled: Whether left channel should be audible
+            right_enabled: Whether right channel should be audible
+            
+        Returns:
+            Path to the audio file to play (original or cached channel-muted file)
+        """
+        if left_enabled and right_enabled:  # Both channels enabled
+            return path
+            
+        if not HAVE_PYDUB:
+            # Fall back to original file if pydub is not available
+            return path
+            
+        # Check if file is actually stereo using cached channel count
+        channel_count = self._get_cached_channel_count(path)
+        if channel_count < 2:
+            return path  # File is not stereo, return original
+            
+        # Create temporary directory for channel-muted files
+        temp_dir = Path.home() / ".audiobrowser_temp"
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Generate filename for channel-muted version
+        if not left_enabled and right_enabled:
+            suffix = "_left_muted"
+        elif left_enabled and not right_enabled:
+            suffix = "_right_muted"
+        elif not left_enabled and not right_enabled:
+            suffix = "_both_muted"
+        else:
+            suffix = ""
+            
+        temp_filename = f"{path.stem}{suffix}{path.suffix}"
+        temp_path = temp_dir / temp_filename
+        
+        # Check if temporary file already exists and is newer than original
+        if temp_path.exists():
+            try:
+                original_mtime = path.stat().st_mtime
+                temp_mtime = temp_path.stat().st_mtime
+                if temp_mtime >= original_mtime:
+                    return temp_path  # Use existing temp file
+            except Exception:
+                pass
+        
+        # Temp file doesn't exist or is stale - start background generation
+        # Return original file for immediate playback
+        self._start_channel_muting_worker(path, left_enabled, right_enabled, temp_path)
+        return path
+    
+    def _start_channel_muting_worker(self, path: Path, left_enabled: bool, right_enabled: bool, temp_path: Path):
+        """Start a background worker to create channel-muted audio file."""
+        thread = QThread(self)
+        worker = ChannelMutingWorker(str(path), left_enabled, right_enabled, str(temp_path))
+        worker.moveToThread(thread)
+        
+        thread.started.connect(worker.run)
+        
+        def on_finished(temp_path_str: str, error: str):
+            if error:
+                log_print(f"Background channel muting failed: {error}")
+            else:
+                log_print(f"Channel-muted file created in background: {Path(temp_path_str).name}")
+            worker.deleteLater()
+            thread.quit()
+        
+        worker.finished.connect(on_finished)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+    
     def _get_channel_muted_file(self, path: Path, left_enabled: bool, right_enabled: bool) -> Path:
         """
         Get a path to an audio file with the specified channel muting configuration.
@@ -6571,7 +6703,9 @@ class AudioBrowser(QMainWindow):
         if both_channels_enabled:
             playback_file = path
         else:
-            playback_file = self._get_channel_muted_file(path, left_enabled, right_enabled)
+            # Try to get cached channel-muted file, or use original if not available
+            # This prevents blocking the UI thread on MP3 decoding
+            playback_file = self._get_channel_muted_file_cached(path, left_enabled, right_enabled)
         
         # Optimize media player state changes for faster song switching
         self.player.stop()
@@ -6707,8 +6841,9 @@ class AudioBrowser(QMainWindow):
                 self.tree.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.EnsureVisible)
                 
             finally:
-                # Reset the programmatic selection flag after a short delay
-                QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+                # Reset the programmatic selection flag after all pending events are processed
+                # Use 100ms delay to ensure selection change handler has completed
+                QTimer.singleShot(100, lambda: setattr(self, "_programmatic_selection", False))
                 
         except Exception as e:
             # Log the error but don't crash - tree highlighting is not critical for playback
@@ -6745,8 +6880,9 @@ class AudioBrowser(QMainWindow):
                 self.tree.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.EnsureVisible)
                 
             finally:
-                # Reset the programmatic selection flag after a short delay
-                QTimer.singleShot(0, lambda: setattr(self, "_programmatic_selection", False))
+                # Reset the programmatic selection flag after all pending events are processed
+                # Use 100ms delay to ensure selection change handler has completed
+                QTimer.singleShot(100, lambda: setattr(self, "_programmatic_selection", False))
                 
         except Exception as e:
             # Log the error but don't crash - folder selection restoration is not critical
