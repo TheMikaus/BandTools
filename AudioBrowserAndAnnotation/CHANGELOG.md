@@ -192,6 +192,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Previous format used spaces which are now replaced with underscores for better file system compatibility
 
 ### Fixed
+- **Tab Switching Hitches**: Fixed UI freezes when switching to Annotations tab
+  - Deferred waveform loading by 50ms to prevent blocking tab switch animation
+  - Tab changes now feel instant and responsive
+  - Waveform and annotation data load in background after tab switch completes
+- **Auto-Cycling Bug**: Fixed songs continuously cycling without user action
+  - Programmatic selection (during auto-progression highlighting) no longer triggers playback when the same file is already playing
+  - Only user clicks restart the same song from beginning
+  - Fixed `_programmatic_selection` flag timing - increased delay from 0ms to 100ms to ensure handler completes before flag reset
+  - Prevents infinite loop where file highlighting triggers selection change which triggers playback again
+- **MP3 Channel Muting UI Freezes**: Fixed UI blocking when muting channels on large MP3 files
+  - Added `ChannelMutingWorker` for background MP3 channel processing
+  - Channel-muted files created asynchronously in background thread
+  - First playback uses original file, subsequent plays use cached muted version
+  - Prevents multi-second UI freezes when loading large MP3 files with channel muting enabled
+- **Metadata File Path Inconsistency**: Fixed using incorrect metadata file for folders
+  - Always use `current_practice_folder` for metadata file paths, not `current_audio_file.parent`
+  - Ensures consistent annotation file access regardless of whether folder or file is selected
+  - Fixes bug where legacy annotation migration used wrong folder path
 - **Mono Export and Volume Boost File Handle Issue**: Fixed mono export and volume boost export failing due to locked file handles
   - Now properly releases media player file handle before attempting file rename operations
   - Calls `_release_media_for_path()` to clear QMediaPlayer source and wait for OS to release file locks
