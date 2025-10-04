@@ -4856,13 +4856,42 @@ class AudioBrowser(QMainWindow):
         self._update_session_status()
     
     def _update_session_status(self):
-        """Update status bar with session progress."""
-        total_files = len(self._list_audio_in_current_dir())
-        reviewed_count = len(self.reviewed_files)
-        if total_files > 0:
-            self.statusBar().showMessage(f"Session: Reviewed {reviewed_count} of {total_files} files")
-        else:
+        """Update status bar with comprehensive file statistics."""
+        audio_files = self._list_audio_in_current_dir()
+        total_files = len(audio_files)
+        
+        if total_files == 0:
             self.statusBar().clearMessage()
+            return
+        
+        # Count reviewed files
+        reviewed_count = len(self.reviewed_files)
+        
+        # Count files without provided names
+        without_names = sum(1 for p in audio_files if p.name not in self.provided_names or not self.provided_names[p.name])
+        
+        # Count best takes and partial takes
+        best_takes = sum(1 for p in audio_files if self.file_best_takes.get(p.name, False))
+        partial_takes = sum(1 for p in audio_files if self.file_partial_takes.get(p.name, False))
+        
+        # Build status message with comprehensive information
+        status_parts = []
+        status_parts.append(f"{total_files} file{'s' if total_files != 1 else ''}")
+        
+        if reviewed_count > 0:
+            status_parts.append(f"{reviewed_count} reviewed")
+        
+        if without_names > 0:
+            status_parts.append(f"{without_names} without names")
+        
+        if best_takes > 0:
+            status_parts.append(f"{best_takes} best take{'s' if best_takes != 1 else ''}")
+        
+        if partial_takes > 0:
+            status_parts.append(f"{partial_takes} partial take{'s' if partial_takes != 1 else ''}")
+        
+        status_message = " | ".join(status_parts)
+        self.statusBar().showMessage(status_message)
     
     def _practice_stats_json_path(self) -> Path:
         """Return path to practice statistics JSON file."""
@@ -8257,6 +8286,9 @@ class AudioBrowser(QMainWindow):
             self.provided_names[fname] = new_name
             self._save_names()
             self._update_library_provided_name_cell(fname, new_name)
+            
+            # Update status bar statistics
+            self._update_session_status()
 
     def _propagate_song_rename(self, old_name: str, new_name: str, matching_files: List[Dict[str, Any]]):
         """
@@ -8312,6 +8344,9 @@ class AudioBrowser(QMainWindow):
         self._load_names()
         self._update_library_provided_name_cell(self.current_audio_file.name, new_name)
         self._refresh_right_table()
+        
+        # Update status bar statistics
+        self._update_session_status()
         
         # Show results
         if errors:
@@ -8437,6 +8472,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show best take formatting
         self._refresh_tree_display()
+        
+        # Update status bar statistics
+        self._update_session_status()
 
     # Partial take checkbox on Annotations tab
     def _on_partial_take_changed(self, state):
@@ -8491,6 +8529,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show partial take formatting
         self._refresh_tree_display()
+        
+        # Update status bar statistics
+        self._update_session_status()
 
     # Reference song checkbox on Annotations tab
     def _on_reference_song_changed(self, state):

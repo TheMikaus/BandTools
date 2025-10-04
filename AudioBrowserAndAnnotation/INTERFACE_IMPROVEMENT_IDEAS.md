@@ -157,10 +157,14 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Toolbar Simplification:**
    - Move Undo Limit spinner to Preferences dialog
 
-3. **Status Bar Improvements:**
-   - Show more context: "12 files, 3 without names, 2 best takes"
-   - Show current operation progress (waveform generation, fingerprinting)
-   - Clickable status items to filter/navigate
+3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics)
+   - ✅ Show more context: "12 files | 5 reviewed | 3 without names | 2 best takes | 1 partial take"
+   - ✅ Automatically updates when files are marked, named, or reviewed
+   - ✅ Comprehensive file statistics at a glance
+   
+**Future Enhancements:**
+   - 💡 Show current operation progress (waveform generation, fingerprinting)
+   - 💡 Clickable status items to filter/navigate
 
 **Why:** Reduces cognitive load for new users; power users can enable advanced features.
 
