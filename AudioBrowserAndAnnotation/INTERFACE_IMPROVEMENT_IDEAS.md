@@ -150,14 +150,8 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 2. **Toolbar Simplification:**
    - Move Undo Limit spinner to Preferences dialog
-   - Consider hiding less-used controls in overflow menu (three-dot icon)
-   - Show only critical controls by default: Undo/Redo, Sync, Search
 
-3. **Progressive Disclosure:**
-   - Hide advanced features (fingerprinting, volume boost, mono conversion) until user enables "Advanced Mode"
-   - First-time user sees simpler interface focused on core workflow
-
-4. **Status Bar Improvements:**
+3. **Status Bar Improvements:**
    - Show more context: "12 files, 3 without names, 2 best takes"
    - Show current operation progress (waveform generation, fingerprinting)
    - Clickable status items to filter/navigate
@@ -188,11 +182,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Templates & Presets:**
    - Save annotation templates (e.g., "Timing issue", "Good energy", "Needs work")
    - Quick-insert template annotations with one click
-   - Save volume boost presets for different recording environments
 
 3. **Smart Batch Rename Patterns:**
    - Pattern: `{date}_{number}_{name}.{ext}`
+   - Pattern: `{number}_{song}_{take}.{ext}`
    - Pattern: `{band}_{song}_{take}.{ext}`
+   - Renaming should still follow the best take and partial take naming
    - Preview before applying
    - Undo batch rename as single operation
 
@@ -212,21 +207,17 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Show suggested names in Library table with different color/icon
    - Allow editing suggestions before applying
    - Show confidence score (70%, 85%, etc.)
-   - Click individual suggestions to play comparison audio from reference folder
 
 2. **Partial Application:**
    - Checkboxes next to each suggestion
    - Apply only selected suggestions
    - "Apply all >80% confidence" button
 
-3. **Learning Mode:**
-   - When user corrects auto-label, ask "Should this be remembered?"
-   - Build custom fingerprint adjustments over time
-
-4. **Multi-Algorithm Consensus:**
-   - Run all 4 algorithms, show when they agree
+3. **Multi-Algorithm Consensus:**
+   - Run many algorithms, show when they agree
    - Higher confidence when multiple algorithms agree
    - Warning when algorithms disagree
+   - Allow the user to specify which algorithms to use at one time
 
 **Why:** Makes auto-labeling less all-or-nothing; builds trust through transparency.
 
@@ -246,18 +237,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - "Resume last session" on startup
    - Show progress: "Reviewed 8 of 15 songs"
 
-2. **Practice Session Metadata:**
-   - Date picker for practice session
-   - Attendance: "Who was present?"
-   - Session notes: "What did we work on?"
-   - Store in `.session_info.json`
-
-3. **Recent Folders:**
+2. **Recent Folders:**
    - Quick access menu: "Recent practice folders"
    - Pin favorite folders to top
    - Show last modified date
 
-4. **Workspace Layouts:**
+3. **Workspace Layouts:**
    - Save tab positions, splitter sizes, visible columns
    - "Band practice layout" vs "Solo review layout"
    - Quick switch between layouts
@@ -281,31 +266,19 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Color-code by category
    - Quick buttons for common categories
 
-2. **Annotation Threading:**
-   - Reply to annotations (useful for multi-user)
-   - "Resolved" checkbox for issues
-   - Filter: Show unresolved only
-
-3. **Annotation Linking:**
+2. **Annotation Linking:**
    - Link annotation to similar moment in another take
    - "Compare with Take 2 at 1:30" button
    - Visual connection on waveform
 
-4. **Timestamp Formats:**
+3. **Timestamp Formats:**
    - Show timestamp in measures/beats if tempo known
-   - "Verse 2, Bar 4" instead of "2:15"
-   - Would require tempo/structure input
+   - "Measure 2, Bar 4" as well as the time "2:15"
+   - Would require tempo/structure input (note: the "sections" specification in the meta data is the "structure" of the song, verse, verse2, chorus, prechorus, etc...)
 
-5. **Audio Annotation:**
-   - Record voice annotation instead of typing
-   - Useful while practicing instrument
-   - Play voice note on hover
-
-6. **Annotation Export Formats:**
-   - Export to PDF with embedded audio clips
+4. **Annotation Export Formats:**
+   - Export to PDF
    - Export to HTML with embedded player
-   - Export to CSV for spreadsheet analysis
-   - Export to Markdown for documentation
 
 **Why:** Annotations are core feature; making them more powerful enhances the review process.
 
@@ -322,7 +295,6 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 1. **Auto-Sync Mode:**
    - Checkbox: "Auto-sync when files change"
-   - Background sync every N minutes
    - Show sync status icon (synced, syncing, conflicts)
 
 2. **Conflict Resolution UI:**
@@ -360,27 +332,11 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 **Improvement Ideas:**
 
-1. **Goal Setting:**
-   - Set goals per song: "Play without mistakes", "Tighten timing in bridge"
-   - Mark goals as achieved in annotations
-   - Track goal completion over sessions
-
-2. **Progress Metrics:**
-   - Graph: Number of takes per song over time
-   - Graph: Average annotation count (more = more issues?)
-   - Graph: Ratio of Best Takes to total takes
-   - Show improvement trends: "Fewer timing issues this month!"
-
-3. **Practice Statistics:**
+1. **Practice Statistics:**
    - Total practice time this week/month
    - Most practiced songs
    - Least practiced songs (needs attention?)
    - Practice consistency (days between sessions)
-
-4. **Reminders:**
-   - "Haven't practiced Song X in 2 weeks"
-   - "Goal deadline approaching"
-   - Integration with calendar apps
 
 **Why:** Transforms tool from passive review to active practice management; motivates consistent practice.
 
@@ -405,18 +361,13 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - "Practice mode": Play only setlist songs in order
    - Review all annotations for setlist songs
    - Check: All setlist songs have Best Take?
+   - Check: All setlist songs need to be Reference Library?
 
 3. **Performance Notes:**
    - Per-setlist notes: "Key change in Song X"
    - BPM reference
    - Tuning notes
    - Gear requirements
-
-4. **Live Mode:**
-   - Simplified playback interface for stage
-   - Big play button, minimal controls
-   - Auto-advance to next song
-   - Click track option
 
 **Why:** Bridges practice and performance; helps bands prepare for shows.
 
@@ -438,17 +389,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Tempo Analysis:**
    - Detect tempo drift during song
    - Visualize tempo changes as overlay
-   - Annotations: "Rushing here" with tempo data
 
 3. **Click Track Sync:**
    - Play metronome alongside recording
    - Adjust click tempo to match recording
    - Export recording with click mixed in
 
-4. **Integration with PolyRhythmMetronome:**
-   - Open current song's tempo in metronome app
-   - Share tempo/time signature data
-   - Practice along with recording
 
 **Why:** Timing is critical for bands; integrated tempo tools aid practice.
 
@@ -488,46 +434,6 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 3.5 Collaboration Features
-
-**Current State:**
-- Multi-user annotation files
-- Read-only other user's annotations
-- Sync via Google Drive
-
-**Improvement Ideas:**
-
-1. **Annotation Discussions:**
-   - Comment threads on annotations
-   - @mention band members
-   - Email notifications for @mentions (optional)
-
-2. **To-Do Lists:**
-   - Create tasks from annotations
-   - Assign tasks to band members
-   - Track task completion
-   - Filter: "My tasks only"
-
-3. **Voting System:**
-   - Vote on Best Take collectively
-   - Thumbs up/down on specific takes
-   - Show consensus: "3 of 4 members prefer Take 5"
-
-4. **Practice Agenda:**
-   - Shared document: "What to work on next practice"
-   - Add songs/sections to agenda
-   - Check off completed items
-   - Carry over unfinished items
-
-5. **Member Availability:**
-   - Calendar integration
-   - "When can we all meet?"
-   - Practice scheduling helper
-
-**Why:** Enhances band communication; keeps everyone on same page.
-
----
-
 ### 3.6 Comparison & Reference Tools
 
 **Current State:**
@@ -536,25 +442,14 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 **Improvement Ideas:**
 
-1. **Side-by-Side Comparison:**
-   - Split screen: Two waveforms side by side
-   - Synchronized playback (or solo each)
-   - Compare same song different takes
-   - Compare original recording vs band cover
-
-2. **Reference Library:**
+1. **Reference Library:**
    - Import original recordings of songs
    - Mark files as "Reference" vs "Practice"
    - Quick switch: "Listen to original"
-   - Overlay reference waveform on practice recording
 
-3. **Difference Highlighting:**
-   - Automatically highlight sections that differ
-   - "Your timing is early here" visual indicator
-   - Requires sophisticated analysis (ML?)
-
-4. **Multi-Track View:**
+2. **Multi-Track View:**
    - If band records individual instruments
+     - the band doesnt currently recording individual instruments. How would you recommend this be handled to make it effective for you.
    - Show all tracks aligned
    - Mute/solo individual tracks
    - See who made the mistake
@@ -573,30 +468,16 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 **Improvement Ideas:**
 
 1. **Practice Mix Exports:**
-   - "Export Best Takes as album"
-   - "Export practice tracks for member X" (with their part quieter)
    - "Export with click track"
    - Automatic normalization across tracks
 
-2. **Quick Share:**
-   - Generate shareable link to specific annotation
-   - "Listen to this moment" button
-   - Upload clip to SoundCloud/YouTube unlisted
-   - QR code for mobile access
-
-3. **Practice Package:**
+2. **Practice Package:**
    - Export folder as ZIP with:
      - All Best Takes
      - All annotations
      - Setlist PDF
      - Practice notes
-   - Share with guest musicians
-
-4. **Streaming to Practice Space:**
-   - Cast audio to network speaker
-   - Control playback from phone
-   - Useful when computer not at practice location
-
+ 
 **Why:** Makes it easier to take work out of the app and into practice situations.
 
 ---
@@ -634,33 +515,6 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Progress indicators for long operations
 
 **Why:** Professional appearance builds trust; modern UI feels more polished.
-
----
-
-### 4.2 Mobile/Tablet Companion App
-
-**Current State:**
-- Desktop-only application
-- Cannot review annotations on mobile
-
-**Improvement Ideas:**
-
-1. **Read-Only Mobile App:**
-   - View annotations on phone/tablet
-   - Play recordings from Google Drive
-   - No editing (keeps main app canonical)
-
-2. **Quick Annotation Entry:**
-   - Voice-to-text annotations via phone
-   - Photo annotations (e.g., picture of chord chart)
-   - Syncs to desktop app
-
-3. **Practice Reminders:**
-   - Push notifications on mobile
-   - Quick access to setlists and notes
-   - Timer for practice sessions
-
-**Why:** Band members want to review on the go; mobile complements desktop workflow.
 
 ---
 
@@ -739,10 +593,11 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Render only visible table rows
    - Dramatically improves performance with 1000+ files
 
-2. **Database Backend:**
+2. **Database Backend:** (Low Priority)
    - SQLite for annotations and metadata
    - Full-text search across all annotations
    - Complex queries: "All timing issues from last month"
+   - How would SQLite be able to be multi-user mergable? i.e. how do current metadata files fit in this new SQLite version
 
 3. **Folder Indexing:**
    - Background indexer for entire library
@@ -753,231 +608,24 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-## 6. Integration with External Tools
 
-### 6.1 DAW Integration
 
-**Current State:**
-- Standalone application
-- No integration with recording software
+## 6. Advanced Features
+
+### 6.1 Advanced Audio Analysis
 
 **Improvement Ideas:**
 
-1. **Export to DAW:**
-   - Export clip with markers for DAW import
-   - XML/EDL export for Reaper, Pro Tools, Logic
-   - Include annotation text as markers
-
-2. **Import from DAW:**
-   - Read DAW project files for song structure
-   - Import markers as annotations
-   - Sync tempo/beat grid
-
-3. **ReWire/Jack Audio:**
-   - Route audio from DAW into AudioBrowser
-   - Annotate while recording
-   - Real-time annotation during production
-
-**Why:** Many bands record multitrack; integration smooths workflow.
-
----
-
-### 6.2 Tablature/Sheet Music Integration
-
-**Current State:**
-- No music notation features
-- JamStikRecord is separate tab app
-
-**Improvement Ideas:**
-
-1. **Display Tab/Notation:**
-   - Import Guitar Pro, MusicXML files
-   - Show notation synced to audio playback
-   - Scrolling tab view
-
-2. **Annotation → Notation:**
-   - Convert time-based annotations to measure-based
-   - "Bar 16: Timing issue" instead of "1:32"
-
-3. **Integration with JamStikRecord:**
-   - Open current recording in JamStikRecord
-   - Generate tab from MIDI, then annotate
-   - Share tablature with band via sync
-
-**Why:** Visual music notation helps learning; connects recording to written music.
-
----
-
-### 6.3 Social Media & Streaming
-
-**Current State:**
-- Export audio files manually
-- No built-in sharing
-
-**Improvement Ideas:**
-
-1. **Direct Upload:**
-   - Upload to SoundCloud with annotations as description
-   - Upload to YouTube (audio + static waveform video)
-   - Post to band's Discord/Slack
-
-2. **Progress Sharing:**
-   - "Share our practice progress this month"
-   - Generate video: Waveform + metrics overlay
-   - Automated social media posts
-
-3. **Private Streaming:**
-   - Generate private streaming links
-   - Password-protected web player
-   - Share with producers, managers, etc.
-
-**Why:** Sharing progress builds accountability and engagement.
-
----
-
-## 7. Learning & Gamification
-
-### 7.1 Practice Achievements
-
-**Current State:**
-- No gamification
-- No achievement system
-
-**Improvement Ideas:**
-
-1. **Badges & Achievements:**
-   - "Reviewed 10 practice sessions"
-   - "First Best Take marked"
-   - "Practiced 5 days in a row"
-   - "Annotated 100 spots"
-
-2. **Practice Streaks:**
-   - "7-day practice streak!"
-   - Encouragement to maintain consistency
-   - Calendar heat map of practice days
-
-3. **Progress Levels:**
-   - Level up as band progresses
-   - Unlock features at higher levels
-   - Leaderboard (if band wants competition)
-
-**Why:** Gamification can motivate consistent practice habits.
-
----
-
-### 7.2 Educational Content
-
-**Current State:**
-- No built-in tutorials
-- README documentation only
-
-**Improvement Ideas:**
-
-1. **Interactive Tutorial:**
-   - First-run wizard
-   - Step-by-step guide through features
-   - Sample practice session included
-
-2. **Context-Sensitive Help:**
-   - "?" icon next to complex features
-   - Tooltip with "Learn more" link
-   - Video tutorials embedded in app
-
-3. **Best Practices Guide:**
-   - "How to run an effective practice session"
-   - "Annotation strategies for improvement"
-   - "Band collaboration tips"
-
-4. **Community Templates:**
-   - Share annotation templates
-   - Share workflow configurations
-   - Built-in template library
-
-**Why:** Users utilize tools better when well-educated; reduces support burden.
-
----
-
-## 8. Advanced Features
-
-### 8.1 AI-Powered Features
-
-**Improvement Ideas:**
-
-1. **Automatic Annotation Generation:**
-   - AI detects timing issues, wrong notes
-   - Suggests annotations: "Possible timing drift at 1:45"
-   - User reviews and confirms/rejects
-
-2. **Smart Suggestions:**
-   - "Based on annotations, consider practicing chorus more"
-   - "Timing improved 20% since last session!"
-   - "Similar issue in Take 3 and Take 7"
-
-3. **Voice Annotation Transcription:**
-   - Record voice note, auto-transcribe to text
-   - Searchable transcriptions
-
-4. **Automatic Best Take Selection:**
-   - AI analyzes all takes, suggests best
-   - Based on: fewer mistakes, better timing, dynamics
-   - User has final say
-
-**Why:** AI can augment human judgment, but shouldn't replace it.
-
----
-
-### 8.2 Advanced Audio Analysis
-
-**Improvement Ideas:**
-
-1. **Pitch Detection:**
-   - Show pitch over time (like Auto-Tune display)
-   - Highlight out-of-tune moments
-   - Useful for vocals and melodic instruments
-
-2. **Spectral Analysis:**
+1. **Spectral Analysis:**
    - Spectrogram view alongside waveform
    - Identify frequency issues
    - EQ suggestions
-
-3. **Dynamics Analysis:**
-   - Show volume envelope
-   - Identify peaks and clipping
-   - Compression suggestions
-
-4. **Stereo Field Visualization:**
-   - Show stereo width over time
-   - Identify imbalanced recordings
 
 **Why:** Visual feedback helps musicians understand technical aspects of recordings.
 
 ---
 
-### 8.3 Plugin System
-
-**Improvement Ideas:**
-
-1. **Plugin Architecture:**
-   - Python plugin API
-   - Community-contributed plugins
-   - Plugin manager in app
-
-2. **Example Plugins:**
-   - Custom export formats
-   - Integration with specific DAWs
-   - Alternative fingerprint algorithms
-   - Custom annotation types
-
-3. **Scripting:**
-   - Automate repetitive tasks
-   - Batch processing scripts
-   - Custom workflows
-
-**Why:** Extensibility allows power users to customize without bloating core app.
-
----
-
-## 9. Summary of High-Impact Ideas
+## 7. Summary of High-Impact Ideas
 
 Based on potential impact vs. implementation effort, here are top recommendations:
 
@@ -998,13 +646,9 @@ Based on potential impact vs. implementation effort, here are top recommendation
 ### Long-Term Features (High Impact, Higher Effort):
 1. **Setlist builder** for performance prep (Section 3.2)
 2. **Side-by-side comparison** tool (Section 3.6)
-3. **Mobile companion app** (Section 4.2)
 4. **Tempo detection & metronome integration** (Section 3.3)
-5. **Database backend** for large libraries (Section 5.2)
 
 ### Experimental/Advanced (Interesting, Needs Research):
-1. **AI-powered annotation suggestions** (Section 8.1)
-2. **Plugin system** for extensibility (Section 8.3)
 3. **Multi-track view** for individual instruments (Section 3.6)
 4. **MIDI controller support** (Section 4.3)
 
