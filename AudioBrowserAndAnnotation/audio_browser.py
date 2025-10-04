@@ -3238,9 +3238,18 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         
         # Cache for fingerprint exclusion data to avoid repeated disk I/O
         self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
+        
+        # Text filter for file tree
+        self._text_filter = ""
+        self.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+
+    def set_text_filter(self, text: str):
+        """Set the text filter for file names."""
+        self._text_filter = text.strip()
+        self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup, .backups, and .waveforms folders from the file tree."""
+        """Filter out .backup, .backups, and .waveforms folders, and apply text filter."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
@@ -3250,6 +3259,21 @@ class FileInfoProxyModel(QSortFilterProxyModel):
             folder_name = file_info.fileName()
             if folder_name.startswith('.backup') or folder_name == '.waveforms':
                 return False
+            # Always show directories when text filter is active (to show matching files within)
+            if self._text_filter:
+                return True
+        
+        # Apply text filter to files
+        if self._text_filter and not file_info.isDir():
+            filename = file_info.fileName().lower()
+            filter_text = self._text_filter.lower()
+            # Support simple fuzzy matching - check if all filter characters appear in order
+            filter_pos = 0
+            for char in filename:
+                if filter_pos < len(filter_text) and char == filter_text[filter_pos]:
+                    filter_pos += 1
+            if filter_pos < len(filter_text):
+                return False  # Not all filter characters found
         
         return True
 
@@ -4765,6 +4789,27 @@ class AudioBrowser(QMainWindow):
 
         splitter = QSplitter(self); main_layout.addWidget(splitter)
 
+        # Left panel with filter box and tree
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(4)
+        
+        # Filter box above tree
+        filter_layout = QHBoxLayout()
+        filter_layout.setContentsMargins(4, 4, 4, 4)
+        filter_label = QLabel("Filter:")
+        filter_layout.addWidget(filter_label)
+        self.tree_filter_edit = QLineEdit()
+        self.tree_filter_edit.setPlaceholderText("Type to filter files...")
+        self.tree_filter_edit.setClearButtonEnabled(True)
+        self.tree_filter_edit.textChanged.connect(self._on_tree_filter_changed)
+        filter_layout.addWidget(self.tree_filter_edit, 1)
+        self.filter_match_label = QLabel("")
+        self.filter_match_label.setStyleSheet("color: gray; font-size: 10pt;")
+        filter_layout.addWidget(self.filter_match_label)
+        left_layout.addLayout(filter_layout)
+
         # Tree model
         self.fs_model = QFileSystemModel(self)
         self.fs_model.setResolveSymlinks(True); self.fs_model.setReadOnly(True)
@@ -4806,7 +4851,9 @@ class AudioBrowser(QMainWindow):
         # Add context menu for fingerprint exclusion
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
-        splitter.addWidget(self.tree)
+        left_layout.addWidget(self.tree)
+        
+        splitter.addWidget(left_panel)
 
         # Right panel
         right = QWidget(); splitter.addWidget(right)
@@ -5725,6 +5772,45 @@ class AudioBrowser(QMainWindow):
             # Delete from remote
             self._delete_file_from_remote(filename)
 
+    def _on_tree_filter_changed(self, text: str):
+        """Handle changes to the file tree filter text."""
+        self.file_proxy.set_text_filter(text)
+        
+        # Count matching files
+        if text.strip():
+            match_count = self._count_visible_files()
+            self.filter_match_label.setText(f"{match_count} file(s)")
+        else:
+            self.filter_match_label.setText("")
+        
+        # Expand all if filtering, collapse if not
+        if text.strip():
+            self.tree.expandAll()
+        else:
+            self.tree.collapseAll()
+    
+    def _count_visible_files(self) -> int:
+        """Count the number of visible (filtered) files in the tree."""
+        count = 0
+        root_index = self.tree.rootIndex()
+        
+        def count_recursive(parent_index):
+            nonlocal count
+            row_count = self.file_proxy.rowCount(parent_index)
+            for row in range(row_count):
+                index = self.file_proxy.index(row, 0, parent_index)
+                if not index.isValid():
+                    continue
+                src_index = self.file_proxy.mapToSource(index)
+                file_info = self.fs_model.fileInfo(src_index)
+                if file_info.isFile():
+                    count += 1
+                elif file_info.isDir():
+                    count_recursive(index)
+        
+        count_recursive(root_index)
+        return count
+
     def _toggle_best_take_for_file(self, filename: str, file_path: Path):
         """Toggle best take status for a file from the context menu."""
         # Toggle best take for current set
@@ -6424,6 +6510,39 @@ class AudioBrowser(QMainWindow):
         except Exception as e:
             log_print(f"Error during auto-progression: {e}")
             # Don't let auto-progression errors crash the application
+
+    def _navigate_to_adjacent_file(self, direction: int):
+        """Navigate to the previous (direction=-1) or next (direction=1) file in the current directory.
+        
+        This method is called when the user presses Up/Down arrow keys to navigate through files.
+        It will find the adjacent file alphabetically and play it, ensuring the file is highlighted
+        in the tree view so users can see what is currently selected.
+        """
+        if not self.current_audio_file: 
+            return
+            
+        files = [p for p in self._list_audio_in_current_dir()]
+        if not files: 
+            return
+            
+        try:
+            # Sort files alphabetically for consistent ordering
+            files.sort(key=lambda p: p.name.lower())
+            cur = self.current_audio_file.resolve()
+            
+            # Find the current file and navigate to the adjacent one
+            for i, p in enumerate(files):
+                if p.resolve() == cur:
+                    target_index = i + direction
+                    if 0 <= target_index < len(files):
+                        target_file = files[target_index]
+                        log_print(f"Navigating from '{cur.name}' to '{target_file.name}'")
+                        self._play_file(target_file)
+                    else:
+                        log_print(f"Navigation: reached {'start' if direction < 0 else 'end'} of file list")
+                    break
+        except Exception as e:
+            log_print(f"Error during file navigation: {e}")
 
     # ----- Slider/time -----
     _user_is_scrubbing = False
@@ -7264,13 +7383,173 @@ class AudioBrowser(QMainWindow):
 
     def keyPressEvent(self, event):
         """Handle key press events for the main window."""
-        if event.key() == Qt.Key.Key_Delete:
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # Delete key for annotation deletion
+        if key == Qt.Key.Key_Delete:
             # Check if annotation table has focus and selected items
             if (self.annotation_table.hasFocus() and 
                 self.annotation_table.selectionModel().selectedRows()):
                 self._delete_selected_with_confirmation()
                 event.accept()
                 return
+        
+        # Space - Play/Pause (already handled in WaveformWidget, but add here for global access)
+        if key == Qt.Key.Key_Space and modifiers == Qt.KeyboardModifier.NoModifier:
+            # Don't trigger if user is typing in a text field
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self._toggle_play_pause()
+                event.accept()
+                return
+        
+        # Left/Right Arrow - Skip backward/forward by 5 seconds
+        if key == Qt.Key.Key_Left and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                new_pos = max(0, current_pos - 5000)  # Skip back 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Right and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                duration = self.player.duration()
+                new_pos = min(duration, current_pos + 5000)  # Skip forward 5 seconds
+                self.player.setPosition(new_pos)
+                event.accept()
+                return
+        
+        # Up/Down Arrow - Previous/Next file in list
+        if key == Qt.Key.Key_Up and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=-1)
+                event.accept()
+                return
+        
+        if key == Qt.Key.Key_Down and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit, QTreeView)):
+                self._navigate_to_adjacent_file(direction=1)
+                event.accept()
+                return
+        
+        # M - Toggle mute (placeholder - would need audio output muting)
+        # N - Add annotation at current playback position
+        if key == Qt.Key.Key_N and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                self.note_input.setFocus()
+                if self.pending_note_start_ms is None:
+                    self.pending_note_start_ms = int(self.player.position())
+                    self._update_captured_time_label()
+                event.accept()
+                return
+        
+        # B - Mark as best take
+        if key == Qt.Key.Key_B and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_best_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # P - Mark as partial take
+        if key == Qt.Key.Key_P and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)) and self.current_audio_file:
+                self._toggle_partial_take_for_file(self.current_audio_file.name, self.current_audio_file)
+                event.accept()
+                return
+        
+        # 0-9 - Jump to 0%, 10%, 20%, ... 90% of current song
+        if key >= Qt.Key.Key_0 and key <= Qt.Key.Key_9 and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                digit = key - Qt.Key.Key_0
+                duration = self.player.duration()
+                if duration > 0:
+                    position = int(duration * digit / 10)
+                    self.player.setPosition(position)
+                event.accept()
+                return
+        
+        # [ - Set clip start marker
+        if key == Qt.Key.Key_BracketLeft and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_start_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # ] - Set clip end marker
+        if key == Qt.Key.Key_BracketRight and modifiers == Qt.KeyboardModifier.NoModifier:
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, (QLineEdit, QPlainTextEdit)):
+                current_pos = self.player.position()
+                self.clip_sel_end_ms = current_pos
+                self._update_clip_edits_from_selection()
+                event.accept()
+                return
+        
+        # Ctrl+Tab / Ctrl+Shift+Tab - Cycle through tabs
+        if key == Qt.Key.Key_Tab and modifiers & Qt.KeyboardModifier.ControlModifier:
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                # Previous tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index - 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            else:
+                # Next tab
+                current_index = self.tabs.currentIndex()
+                new_index = (current_index + 1) % self.tabs.count()
+                self.tabs.setCurrentIndex(new_index)
+            event.accept()
+            return
+        
+        # Ctrl+1/2/3/4 - Jump directly to specific tabs
+        if modifiers == Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_1:
+                self.tabs.setCurrentIndex(0)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_2:
+                self.tabs.setCurrentIndex(1)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_3:
+                self.tabs.setCurrentIndex(2)
+                event.accept()
+                return
+            elif key == Qt.Key.Key_4:
+                if self.tabs.count() > 3:
+                    self.tabs.setCurrentIndex(3)
+                event.accept()
+                return
+        
+        # F2 - Rename currently selected file's provided name
+        if key == Qt.Key.Key_F2 and modifiers == Qt.KeyboardModifier.NoModifier:
+            if self.current_audio_file:
+                # Focus the provided name field in Library tab
+                self.tabs.setCurrentIndex(1)  # Switch to Library tab
+                self.provided_name_edit.setFocus()
+                self.provided_name_edit.selectAll()
+                event.accept()
+                return
+        
+        # Ctrl+F - Focus search/filter box
+        if key == Qt.Key.Key_F and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.tree_filter_edit.setFocus()
+            self.tree_filter_edit.selectAll()
+            event.accept()
+            return
         
         # Call parent implementation for other keys
         super().keyPressEvent(event)
