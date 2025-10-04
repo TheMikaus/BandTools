@@ -3238,9 +3238,18 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         
         # Cache for fingerprint exclusion data to avoid repeated disk I/O
         self._exclusion_cache: Dict[str, Tuple[set, float]] = {}  # dirpath -> (excluded_files_set, mtime)
+        
+        # Text filter for file tree
+        self._text_filter = ""
+        self.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+
+    def set_text_filter(self, text: str):
+        """Set the text filter for file names."""
+        self._text_filter = text.strip()
+        self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup, .backups, and .waveforms folders from the file tree."""
+        """Filter out .backup, .backups, and .waveforms folders, and apply text filter."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
@@ -3250,6 +3259,21 @@ class FileInfoProxyModel(QSortFilterProxyModel):
             folder_name = file_info.fileName()
             if folder_name.startswith('.backup') or folder_name == '.waveforms':
                 return False
+            # Always show directories when text filter is active (to show matching files within)
+            if self._text_filter:
+                return True
+        
+        # Apply text filter to files
+        if self._text_filter and not file_info.isDir():
+            filename = file_info.fileName().lower()
+            filter_text = self._text_filter.lower()
+            # Support simple fuzzy matching - check if all filter characters appear in order
+            filter_pos = 0
+            for char in filename:
+                if filter_pos < len(filter_text) and char == filter_text[filter_pos]:
+                    filter_pos += 1
+            if filter_pos < len(filter_text):
+                return False  # Not all filter characters found
         
         return True
 
@@ -4765,6 +4789,27 @@ class AudioBrowser(QMainWindow):
 
         splitter = QSplitter(self); main_layout.addWidget(splitter)
 
+        # Left panel with filter box and tree
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(4)
+        
+        # Filter box above tree
+        filter_layout = QHBoxLayout()
+        filter_layout.setContentsMargins(4, 4, 4, 4)
+        filter_label = QLabel("Filter:")
+        filter_layout.addWidget(filter_label)
+        self.tree_filter_edit = QLineEdit()
+        self.tree_filter_edit.setPlaceholderText("Type to filter files...")
+        self.tree_filter_edit.setClearButtonEnabled(True)
+        self.tree_filter_edit.textChanged.connect(self._on_tree_filter_changed)
+        filter_layout.addWidget(self.tree_filter_edit, 1)
+        self.filter_match_label = QLabel("")
+        self.filter_match_label.setStyleSheet("color: gray; font-size: 10pt;")
+        filter_layout.addWidget(self.filter_match_label)
+        left_layout.addLayout(filter_layout)
+
         # Tree model
         self.fs_model = QFileSystemModel(self)
         self.fs_model.setResolveSymlinks(True); self.fs_model.setReadOnly(True)
@@ -4806,7 +4851,9 @@ class AudioBrowser(QMainWindow):
         # Add context menu for fingerprint exclusion
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
-        splitter.addWidget(self.tree)
+        left_layout.addWidget(self.tree)
+        
+        splitter.addWidget(left_panel)
 
         # Right panel
         right = QWidget(); splitter.addWidget(right)
@@ -5724,6 +5771,45 @@ class AudioBrowser(QMainWindow):
         elif delete_remote_action and result == delete_remote_action:
             # Delete from remote
             self._delete_file_from_remote(filename)
+
+    def _on_tree_filter_changed(self, text: str):
+        """Handle changes to the file tree filter text."""
+        self.file_proxy.set_text_filter(text)
+        
+        # Count matching files
+        if text.strip():
+            match_count = self._count_visible_files()
+            self.filter_match_label.setText(f"{match_count} file(s)")
+        else:
+            self.filter_match_label.setText("")
+        
+        # Expand all if filtering, collapse if not
+        if text.strip():
+            self.tree.expandAll()
+        else:
+            self.tree.collapseAll()
+    
+    def _count_visible_files(self) -> int:
+        """Count the number of visible (filtered) files in the tree."""
+        count = 0
+        root_index = self.tree.rootIndex()
+        
+        def count_recursive(parent_index):
+            nonlocal count
+            row_count = self.file_proxy.rowCount(parent_index)
+            for row in range(row_count):
+                index = self.file_proxy.index(row, 0, parent_index)
+                if not index.isValid():
+                    continue
+                src_index = self.file_proxy.mapToSource(index)
+                file_info = self.fs_model.fileInfo(src_index)
+                if file_info.isFile():
+                    count += 1
+                elif file_info.isDir():
+                    count_recursive(index)
+        
+        count_recursive(root_index)
+        return count
 
     def _toggle_best_take_for_file(self, filename: str, file_path: Path):
         """Toggle best take status for a file from the context menu."""
@@ -7457,6 +7543,13 @@ class AudioBrowser(QMainWindow):
                 self.provided_name_edit.selectAll()
                 event.accept()
                 return
+        
+        # Ctrl+F - Focus search/filter box
+        if key == Qt.Key.Key_F and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.tree_filter_edit.setFocus()
+            self.tree_filter_edit.selectAll()
+            event.accept()
+            return
         
         # Call parent implementation for other keys
         super().keyPressEvent(event)

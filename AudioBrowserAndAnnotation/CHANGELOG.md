@@ -18,7 +18,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - `Ctrl+Tab` / `Ctrl+Shift+Tab` - Cycle through tabs forward/backward
   - `Ctrl+1/2/3/4` - Jump directly to specific tab
   - `F2` - Rename currently selected file (focuses provided name field)
+  - `Ctrl+F` - Focus file tree filter box
   - All shortcuts intelligently avoid conflicts with text input fields
+- **Quick Filter Box for File Tree**: Fast file searching and filtering
+  - Added filter text box above file tree for quick file search
+  - Supports fuzzy matching - type characters in order to match files
+  - Shows match count (e.g., "5 file(s)")
+  - Clear button to quickly reset filter
+  - Auto-expands tree when filtering to show all matches
+  - `Ctrl+F` keyboard shortcut to focus filter box
+  - `Esc` key clears the filter (using built-in clear button)
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders
