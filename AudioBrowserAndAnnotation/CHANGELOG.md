@@ -37,6 +37,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - "🔍 Jump to in Annotations tab" - Switch to Annotations tab for file
   - All existing options preserved (Best Take, Partial Take, Export, etc.)
   - Icons added to menu items for better visual recognition
+- **Collapsible Fingerprinting Section**: Reduce interface clutter with collapsible UI
+  - Fingerprinting section in Library tab is now collapsible using checkbox in title
+  - Click the title checkbox to expand/collapse the fingerprinting controls
+  - Saves expanded/collapsed state in settings and restores on startup
+  - Reduces visual clutter when not actively using fingerprinting features
+  - All fingerprinting functionality remains fully accessible when expanded
 - **Song Name Rename Propagation**: Rename song names across all instances automatically
   - When changing a song name (provided name), the application detects if other files share that name
   - Prompts user to propagate the rename to all matching files across all practice folders

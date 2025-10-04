@@ -4947,16 +4947,30 @@ class AudioBrowser(QMainWindow):
         # Library tab
         self.lib_tab = QWidget(); lib_layout = QVBoxLayout(self.lib_tab)
         
-        # Fingerprinting section
-        fp_group = QWidget()
-        fp_layout = QVBoxLayout(fp_group)
-        fp_layout.setContentsMargins(10, 10, 10, 10)
+        # Fingerprinting section - Collapsible
         colors = get_consistent_stylesheet_colors()
-        fp_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
-        
-        fp_title = QLabel("Audio Fingerprinting")
-        fp_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
-        fp_layout.addWidget(fp_title)
+        self.fp_group = QGroupBox("Audio Fingerprinting")
+        self.fp_group.setCheckable(True)
+        self.fp_group.setChecked(bool(self.settings.value("fingerprint_section_expanded", True)))
+        self.fp_group.toggled.connect(self._on_fingerprint_section_toggled)
+        self.fp_group.setStyleSheet(f"""
+            QGroupBox {{
+                background-color: {colors['bg_light']};
+                border: 1px solid {colors['border']};
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+                font-size: 14px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }}
+        """)
+        fp_layout = QVBoxLayout(self.fp_group)
+        fp_layout.setContentsMargins(10, 10, 10, 10)
         
         # Reference folder selection
         ref_row = QHBoxLayout()
@@ -5057,7 +5071,7 @@ class AudioBrowser(QMainWindow):
         self.auto_label_buttons_widget.setVisible(False)  # Initially hidden
         fp_layout.addWidget(self.auto_label_buttons_widget)
         
-        lib_layout.addWidget(fp_group)
+        lib_layout.addWidget(self.fp_group)
         
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["File", "Best Take", "Partial Take", "Provided Name (editable)"])
@@ -9396,6 +9410,10 @@ class AudioBrowser(QMainWindow):
             self.fingerprint_algorithm = selected_data
             self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, self.fingerprint_algorithm)
             self._update_fingerprint_ui()
+
+    def _on_fingerprint_section_toggled(self, checked: bool):
+        """Handle fingerprinting section expand/collapse."""
+        self.settings.setValue("fingerprint_section_expanded", checked)
 
     # ----- Auto-generation callbacks -----
     def _generate_fingerprints_for_folder(self):
