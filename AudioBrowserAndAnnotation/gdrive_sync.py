@@ -545,20 +545,33 @@ def should_sync_file(filename: str) -> bool:
 
 
 def get_sync_files(directory: Path) -> Set[str]:
-    """Get list of files that should be synced from a directory."""
+    """
+    Get list of files that should be synced from a directory, including subdirectories.
+    Returns paths relative to the root directory.
+    """
     sync_files = set()
     
     if not directory.exists():
         return sync_files
     
-    for item in directory.iterdir():
-        # Skip directories and excluded items
-        if item.is_dir() or item.name in SYNC_EXCLUDED:
-            continue
-        
-        if should_sync_file(item.name):
-            sync_files.add(item.name)
+    def scan_directory(current_dir: Path, relative_prefix: str = ""):
+        """Recursively scan directory and add syncable files."""
+        for item in current_dir.iterdir():
+            # Skip excluded directories
+            if item.is_dir():
+                if item.name not in SYNC_EXCLUDED:
+                    # Recursively scan subdirectory
+                    subdir_prefix = f"{relative_prefix}{item.name}/" if relative_prefix else f"{item.name}/"
+                    scan_directory(item, subdir_prefix)
+                continue
+            
+            # Check if file should be synced
+            if should_sync_file(item.name):
+                # Add file with relative path from root
+                relative_path = f"{relative_prefix}{item.name}"
+                sync_files.add(relative_path)
     
+    scan_directory(directory)
     return sync_files
 
 
