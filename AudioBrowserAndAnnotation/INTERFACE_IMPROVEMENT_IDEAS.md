@@ -140,7 +140,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 1.5 Visual Hierarchy & Clutter Reduction ✅ **IMPLEMENTED** (Collapsible Sections)
+### 1.5 Visual Hierarchy & Clutter Reduction ✅ **IMPLEMENTED** (Collapsible Sections, Toolbar Simplification)
 
 **Current State:**
 - Toolbar has many controls (Undo/Redo, Undo limit spinner, Auto-switch checkbox)
@@ -149,12 +149,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 **Improvement Ideas:**
 
-1. **Collapsible Sections:**
+1. **Collapsible Sections:** ✅ **IMPLEMENTED**
    - Fingerprinting section should be collapsible accordion
    - "Advanced Settings" section for less-common controls
    - Expanded/collapsed state persisted in settings
 
-2. **Toolbar Simplification:**
+2. **Toolbar Simplification:** ✅ **IMPLEMENTED**
    - Move Undo Limit spinner to Preferences dialog
 
 3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics)
@@ -235,7 +235,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 2.3 Session Management ✅ **IMPLEMENTED** (Reviewed Tracking)
+### 2.3 Session Management ✅ **IMPLEMENTED** (Reviewed Tracking, Recent Folders)
 
 **Current State:**
 - Each practice folder is independent
@@ -243,16 +243,16 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 **Improvement Ideas:**
 
-1. **Session State:**
+1. **Session State:** ✅ **IMPLEMENTED**
    - Remember which files reviewed (checkbox: "Reviewed")
    - Save playback position per file
    - "Resume last session" on startup
    - Show progress: "Reviewed 8 of 15 songs"
 
-2. **Recent Folders:**
+2. **Recent Folders:** ✅ **IMPLEMENTED**
    - Quick access menu: "Recent practice folders"
-   - Pin favorite folders to top
-   - Show last modified date
+   - Pin favorite folders to top (accessible via submenu)
+   - Show last modified date (shown in tooltip)
 
 3. **Workspace Layouts:**
    - Save tab positions, splitter sizes, visible columns

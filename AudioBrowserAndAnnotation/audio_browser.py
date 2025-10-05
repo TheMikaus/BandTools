@@ -175,6 +175,7 @@ SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generate_fingerprints"
 SETTINGS_KEY_AUTO_GEN_TIMING = "auto_generation_timing"  # "boot" or "folder_selection"
 SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
+SETTINGS_KEY_RECENT_FOLDERS = "recent_folders"  # List of recently opened practice folders
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 SESSION_STATE_JSON = ".session_state.json"
@@ -3704,6 +3705,74 @@ class AutoGenerationSettingsDialog(QDialog):
         """Return the configured settings."""
         return self.result_settings
 
+
+class PreferencesDialog(QDialog):
+    """Dialog for application preferences."""
+    
+    def __init__(self, current_undo_limit: int, parent=None):
+        super().__init__(parent)
+        self.undo_limit = current_undo_limit
+        
+        self.setWindowTitle("Preferences")
+        self.setModal(True)
+        self.resize(400, 200)
+        
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        
+        # Description
+        description = QLabel("Configure application preferences.")
+        description.setWordWrap(True)
+        main_layout.addWidget(description)
+        
+        main_layout.addWidget(QLabel(""))  # Spacer
+        
+        # Settings group
+        colors = get_consistent_stylesheet_colors()
+        settings_group = QWidget()
+        settings_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
+        settings_layout = QVBoxLayout(settings_group)
+        settings_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Undo limit setting
+        undo_row = QHBoxLayout()
+        undo_row.addWidget(QLabel("Undo limit:"))
+        self.undo_spin = QSpinBox()
+        self.undo_spin.setRange(10, 1000)
+        self.undo_spin.setValue(current_undo_limit)
+        self.undo_spin.setToolTip("Maximum number of undo operations to keep in history")
+        undo_row.addWidget(self.undo_spin)
+        undo_row.addStretch(1)
+        settings_layout.addLayout(undo_row)
+        
+        main_layout.addWidget(settings_group)
+        main_layout.addStretch(1)
+        
+        # Dialog buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.accept)
+        ok_btn.setDefault(True)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
+    
+    def accept(self):
+        """Handle OK button click - save undo limit."""
+        self.undo_limit = self.undo_spin.value()
+        super().accept()
+    
+    def get_undo_limit(self):
+        """Return the configured undo limit."""
+        return self.undo_limit
+
+
 # ========== Main window ==========
 class AudioBrowser(QMainWindow):
 
@@ -4502,6 +4571,7 @@ class AudioBrowser(QMainWindow):
 
     def _save_root(self, p: Path):
         self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
+        self._add_to_recent_folders(p)  # Track in recent folders
         self.current_practice_folder = p  # Reset to root when changing root
         self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         self.fs_model.setRootPath(str(self.root_path))
@@ -4526,6 +4596,65 @@ class AudioBrowser(QMainWindow):
         self._refresh_annotation_legend()
         self._update_fingerprint_ui()
         self.waveform.clear()
+    
+    def _get_recent_folders(self) -> list[str]:
+        """Get list of recent folders from settings."""
+        recent = self.settings.value(SETTINGS_KEY_RECENT_FOLDERS, [])
+        if not isinstance(recent, list):
+            return []
+        # Filter out folders that no longer exist
+        return [f for f in recent if Path(f).exists()]
+    
+    def _add_to_recent_folders(self, folder_path: Path):
+        """Add folder to recent folders list, maintaining max size of 10."""
+        folder_str = str(folder_path)
+        recent = self._get_recent_folders()
+        
+        # Remove if already in list
+        if folder_str in recent:
+            recent.remove(folder_str)
+        
+        # Add to front of list
+        recent.insert(0, folder_str)
+        
+        # Keep only the 10 most recent
+        recent = recent[:10]
+        
+        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, recent)
+        self._update_recent_folders_menu()
+    
+    def _update_recent_folders_menu(self):
+        """Update the recent folders submenu with current list."""
+        if not hasattr(self, 'recent_folders_menu'):
+            return
+            
+        self.recent_folders_menu.clear()
+        
+        recent = self._get_recent_folders()
+        if not recent:
+            no_recent_action = QAction("No recent folders", self)
+            no_recent_action.setEnabled(False)
+            self.recent_folders_menu.addAction(no_recent_action)
+            return
+        
+        for folder_str in recent:
+            folder_path = Path(folder_str)
+            # Show just the folder name, with full path in tooltip
+            action = QAction(folder_path.name, self)
+            action.setToolTip(folder_str)
+            action.triggered.connect(lambda checked, p=folder_path: self._save_root(p))
+            self.recent_folders_menu.addAction(action)
+        
+        self.recent_folders_menu.addSeparator()
+        
+        clear_action = QAction("Clear Recent Folders", self)
+        clear_action.triggered.connect(self._clear_recent_folders)
+        self.recent_folders_menu.addAction(clear_action)
+    
+    def _clear_recent_folders(self):
+        """Clear the recent folders list."""
+        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, [])
+        self._update_recent_folders_menu()
 
     def _names_json_path(self) -> Path: 
         # Always use current_practice_folder for provided names to ensure consistency
@@ -4981,6 +5110,11 @@ class AudioBrowser(QMainWindow):
         act_change_root.triggered.connect(self._change_root_clicked)
         file_menu.addAction(act_change_root)
         
+        # Recent folders submenu
+        self.recent_folders_menu = QMenu("Recent &Folders", self)
+        file_menu.addMenu(self.recent_folders_menu)
+        self._update_recent_folders_menu()
+        
         file_menu.addSeparator()
         
         self.rename_action = QAction("&Batch Rename (##_ProvidedName)", self)
@@ -5010,6 +5144,10 @@ class AudioBrowser(QMainWindow):
         self.auto_gen_settings_action = QAction("Auto-Generation &Settings…", self)
         self.auto_gen_settings_action.triggered.connect(self._show_auto_generation_settings)
         file_menu.addAction(self.auto_gen_settings_action)
+        
+        preferences_action = QAction("&Preferences…", self)
+        preferences_action.triggered.connect(self._show_preferences_dialog)
+        file_menu.addAction(preferences_action)
         
         self.restore_backup_action = QAction("&Restore from Backup…", self)
         self.restore_backup_action.triggered.connect(self._restore_from_backup)
@@ -5047,7 +5185,7 @@ class AudioBrowser(QMainWindow):
         help_changelog_action.triggered.connect(self._show_changelog_dialog)
         help_menu.addAction(help_changelog_action)
         
-        # Simplified toolbar - Undo/Redo, Up navigation, Undo limit, and Auto-switch
+        # Simplified toolbar - Undo/Redo, Up navigation, and Auto-switch
         tb = QToolBar("Main"); self.addToolBar(tb)
 
         # Undo/Redo
@@ -5064,11 +5202,6 @@ class AudioBrowser(QMainWindow):
         act_up.triggered.connect(self._go_up)
         tb.addAction(act_up)
 
-        tb.addSeparator()
-        tb.addWidget(QLabel("Undo limit:"))
-        self.undo_spin = QSpinBox(); self.undo_spin.setRange(10, 1000); self.undo_spin.setValue(int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100)))
-        self.undo_spin.valueChanged.connect(self._on_undo_capacity_changed)
-        tb.addWidget(self.undo_spin)
         tb.addSeparator()
 
         self.auto_switch_cb = QCheckBox("Auto-switch to Annotations")
@@ -10806,6 +10939,28 @@ class AudioBrowser(QMainWindow):
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
+
+    def _show_preferences_dialog(self):
+        """Show preferences dialog."""
+        # Get current undo limit
+        current_undo_limit = int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100))
+        
+        # Show dialog
+        dialog = PreferencesDialog(current_undo_limit, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Apply new undo limit
+            new_undo_limit = dialog.get_undo_limit()
+            
+            # Save to persistent settings
+            self.settings.setValue(SETTINGS_KEY_UNDO_CAP, new_undo_limit)
+            
+            # Update the undo capacity in the history
+            self._undo_capacity = new_undo_limit
+            # Trim undo history if new limit is smaller
+            while len(self._undo_history) > self._undo_capacity:
+                self._undo_history.pop(0)
+            
+            log_print(f"Undo limit updated to: {new_undo_limit}")
 
     def _show_about_dialog(self):
         """Show About dialog with version information."""
