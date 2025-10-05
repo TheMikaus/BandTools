@@ -5,6 +5,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Practice Statistics Dashboard**: Comprehensive practice tracking and analytics
+  - Track total practice time across all sessions
+  - View current session duration in real-time
+  - See most practiced songs (top 5) with play count and last played date
+  - Identify least practiced songs (bottom 5) that may need attention
+  - Monitor practice consistency (average days between sessions)
+  - Review recent sessions (last 10) with date, duration, folder, and files reviewed
+  - Automatic session tracking when changing folders or closing application
+  - Per-file playback time tracking for detailed song-level statistics
+  - Access via Help menu → "Practice Statistics" or `Ctrl+Shift+S` keyboard shortcut
+  - All statistics stored in `.practice_stats.json` per practice folder
+  - Motivates consistent practice and helps identify areas needing more work
+- **Enhanced Status Bar Statistics**: Comprehensive file information at a glance
+  - Status bar now shows: total files, reviewed count, files without names, best takes, and partial takes
+  - Format: "12 files | 5 reviewed | 3 without names | 2 best takes | 1 partial take"
+  - Automatically updates when files are marked, named, or reviewed
+  - Provides comprehensive overview of current practice folder status
+  - Helps quickly identify areas needing attention (unnamed files, unreviewed files)
 - **A-B Loop Markers for Targeted Practice**: Set loop points for practicing specific sections
   - Visual A-B loop markers on waveform (cyan/blue color with "A" and "B" labels)
   - `L` - Set loop start marker (A point) at current playback position

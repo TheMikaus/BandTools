@@ -157,10 +157,14 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Toolbar Simplification:**
    - Move Undo Limit spinner to Preferences dialog
 
-3. **Status Bar Improvements:**
-   - Show more context: "12 files, 3 without names, 2 best takes"
-   - Show current operation progress (waveform generation, fingerprinting)
-   - Clickable status items to filter/navigate
+3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics)
+   - ✅ Show more context: "12 files | 5 reviewed | 3 without names | 2 best takes | 1 partial take"
+   - ✅ Automatically updates when files are marked, named, or reviewed
+   - ✅ Comprehensive file statistics at a glance
+   
+**Future Enhancements:**
+   - 💡 Show current operation progress (waveform generation, fingerprinting)
+   - 💡 Clickable status items to filter/navigate
 
 **Why:** Reduces cognitive load for new users; power users can enable advanced features.
 
@@ -330,19 +334,32 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ## 3. Practice-Focused Features
 
-### 3.1 Practice Goals & Tracking
+### 3.1 Practice Goals & Tracking ✅ **IMPLEMENTED** (Practice Statistics Dashboard)
 
 **Current State:**
-- No practice goal tracking
-- No metrics on improvement over time
+- Practice statistics tracking implemented
+- Session history and song practice metrics available
+- Accessible via Help menu and Ctrl+Shift+S shortcut
 
-**Improvement Ideas:**
+**Implemented Features:**
 
 1. **Practice Statistics:**
-   - Total practice time this week/month
-   - Most practiced songs
-   - Least practiced songs (needs attention?)
-   - Practice consistency (days between sessions)
+   - ✅ Total practice time across all sessions
+   - ✅ Current session duration tracking
+   - ✅ Most practiced songs (top 5) with play count and last played date
+   - ✅ Least practiced songs (bottom 5) with play count and last played date
+   - ✅ Practice consistency metric (average days between sessions)
+   - ✅ Recent sessions list (last 10) with date, duration, folder, and files reviewed
+   - ✅ Automatic session tracking when changing folders or closing application
+   - ✅ Per-file playback time tracking
+
+**Future Enhancements:**
+
+2. **Practice Goals:**
+   - 💡 Set weekly/monthly practice time goals
+   - 💡 Track goal progress with visual indicators
+   - 💡 Notifications when goals are met or missed
+   - 💡 Per-song practice goals (e.g., "Practice this song 5 times this week")
 
 **Why:** Transforms tool from passive review to active practice management; motivates consistent practice.
 
@@ -652,7 +669,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
 2. ✅ **A-B loop sections** for targeted practice (Section 3.4) - **IMPLEMENTED**
-3. **Practice statistics dashboard** (Section 3.1)
+3. ✅ **Practice statistics dashboard** (Section 3.1) - **IMPLEMENTED**
 4. **Improved auto-labeling preview** (Section 2.2)
 5. **Annotation categories/tags** (Section 2.4)
 

@@ -183,7 +183,8 @@ DURATIONS_JSON = ".duration_cache.json"
 FINGERPRINTS_JSON = ".audio_fingerprints.json"
 USER_COLORS_JSON = ".user_colors.json"
 SONG_RENAMES_JSON = ".song_renames.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON}
+PRACTICE_STATS_JSON = ".practice_stats.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -4114,6 +4115,12 @@ class AudioBrowser(QMainWindow):
         # Session state tracking
         self.session_state: Dict[str, Any] = {}  # {filename: {reviewed: bool, last_position_ms: int}}
         self.reviewed_files: set = set()  # Set of filenames marked as reviewed
+        
+        # Practice statistics tracking
+        self.practice_stats: Dict[str, Any] = {}  # {sessions: [...], songs: {...}}
+        self.current_session_start: Optional[datetime] = None
+        self.current_playback_start: Optional[datetime] = None
+        self.current_playback_file: Optional[str] = None
 
         # Annotation sets
         self.annotation_sets: List[Dict[str, Any]] = []
@@ -4545,6 +4552,9 @@ class AudioBrowser(QMainWindow):
         if folder.exists() and folder.is_dir():
             # Reset backup flag when changing to a different folder
             if self.current_practice_folder != folder:
+                # End current practice session before switching folders
+                self._end_practice_session()
+                
                 self._backup_created_this_session = False
                 # Clear channel count cache when changing directories to avoid stale entries
                 self._channel_count_cache.clear()
@@ -4555,6 +4565,9 @@ class AudioBrowser(QMainWindow):
             # Load session state for this folder
             self._load_session_state()
             self._update_session_status()
+            
+            # Load practice statistics for this folder
+            self._load_practice_stats()
             
             # Update file watcher for new folder
             if self._initialization_complete:
@@ -4843,13 +4856,114 @@ class AudioBrowser(QMainWindow):
         self._update_session_status()
     
     def _update_session_status(self):
-        """Update status bar with session progress."""
-        total_files = len(self._list_audio_in_current_dir())
-        reviewed_count = len(self.reviewed_files)
-        if total_files > 0:
-            self.statusBar().showMessage(f"Session: Reviewed {reviewed_count} of {total_files} files")
-        else:
+        """Update status bar with comprehensive file statistics."""
+        audio_files = self._list_audio_in_current_dir()
+        total_files = len(audio_files)
+        
+        if total_files == 0:
             self.statusBar().clearMessage()
+            return
+        
+        # Count reviewed files
+        reviewed_count = len(self.reviewed_files)
+        
+        # Count files without provided names
+        without_names = sum(1 for p in audio_files if p.name not in self.provided_names or not self.provided_names[p.name])
+        
+        # Count best takes and partial takes
+        best_takes = sum(1 for p in audio_files if self.file_best_takes.get(p.name, False))
+        partial_takes = sum(1 for p in audio_files if self.file_partial_takes.get(p.name, False))
+        
+        # Build status message with comprehensive information
+        status_parts = []
+        status_parts.append(f"{total_files} file{'s' if total_files != 1 else ''}")
+        
+        if reviewed_count > 0:
+            status_parts.append(f"{reviewed_count} reviewed")
+        
+        if without_names > 0:
+            status_parts.append(f"{without_names} without names")
+        
+        if best_takes > 0:
+            status_parts.append(f"{best_takes} best take{'s' if best_takes != 1 else ''}")
+        
+        if partial_takes > 0:
+            status_parts.append(f"{partial_takes} partial take{'s' if partial_takes != 1 else ''}")
+        
+        status_message = " | ".join(status_parts)
+        self.statusBar().showMessage(status_message)
+    
+    def _practice_stats_json_path(self) -> Path:
+        """Return path to practice statistics JSON file."""
+        return self.current_practice_folder / PRACTICE_STATS_JSON
+    
+    def _load_practice_stats(self):
+        """Load practice statistics from JSON file."""
+        stats = load_json(self._practice_stats_json_path(), {}) or {}
+        self.practice_stats = {
+            "sessions": stats.get("sessions", []),
+            "songs": stats.get("songs", {})
+        }
+        
+        # Start a new session
+        self.current_session_start = datetime.now()
+    
+    def _save_practice_stats(self):
+        """Save practice statistics to JSON file."""
+        save_json(self._practice_stats_json_path(), self.practice_stats)
+    
+    def _track_playback_start(self, filename: str):
+        """Track when playback starts for a file."""
+        self.current_playback_start = datetime.now()
+        self.current_playback_file = filename
+    
+    def _track_playback_end(self):
+        """Track when playback ends and update statistics."""
+        if self.current_playback_start and self.current_playback_file:
+            # Calculate practice time
+            duration = (datetime.now() - self.current_playback_start).total_seconds()
+            
+            # Only count if played for at least 1 second
+            if duration >= 1.0:
+                # Update song-specific stats
+                song_name = self.current_playback_file
+                if song_name not in self.practice_stats["songs"]:
+                    self.practice_stats["songs"][song_name] = {
+                        "total_time": 0,
+                        "play_count": 0,
+                        "last_played": None
+                    }
+                
+                self.practice_stats["songs"][song_name]["total_time"] += duration
+                self.practice_stats["songs"][song_name]["play_count"] += 1
+                self.practice_stats["songs"][song_name]["last_played"] = datetime.now().isoformat()
+                
+                # Save updated stats
+                self._save_practice_stats()
+        
+        # Reset tracking
+        self.current_playback_start = None
+        self.current_playback_file = None
+    
+    def _end_practice_session(self):
+        """End the current practice session and save statistics."""
+        if self.current_session_start:
+            session_duration = (datetime.now() - self.current_session_start).total_seconds()
+            
+            # Only save session if it lasted at least 1 minute
+            if session_duration >= 60:
+                session_data = {
+                    "start_time": self.current_session_start.isoformat(),
+                    "end_time": datetime.now().isoformat(),
+                    "duration": session_duration,
+                    "folder": str(self.current_practice_folder.name),
+                    "reviewed_count": len(self.reviewed_files)
+                }
+                
+                self.practice_stats["sessions"].append(session_data)
+                self._save_practice_stats()
+            
+            self.current_session_start = None
 
     # ----- UI -----
     def _init_ui(self):
@@ -4915,6 +5029,11 @@ class AudioBrowser(QMainWindow):
         help_shortcuts_action = QAction("&Keyboard Shortcuts", self)
         help_shortcuts_action.triggered.connect(self._show_keyboard_shortcuts_dialog)
         help_menu.addAction(help_shortcuts_action)
+        
+        help_stats_action = QAction("Practice &Statistics", self)
+        help_stats_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        help_stats_action.triggered.connect(self._show_practice_statistics_dialog)
+        help_menu.addAction(help_stats_action)
         
         help_menu.addSeparator()
         
@@ -6739,6 +6858,9 @@ class AudioBrowser(QMainWindow):
         self.pending_note_start_ms = None  # Store original path, not temp file
         self._update_captured_time_label()
         
+        # Track playback start for practice statistics
+        self._track_playback_start(path.name)
+        
         # Defer expensive operations to not block audio playback startup
         # Use a short timer to let audio start playing before doing heavy UI work
         QTimer.singleShot(10, lambda: self._finish_song_loading(path, need_reload_annotations))
@@ -6889,6 +7011,9 @@ class AudioBrowser(QMainWindow):
             log_print(f"Warning: Failed to restore folder selection for {self.current_practice_folder}: {e}")
 
     def _stop_playback(self):
+        # Track playback end for practice statistics
+        self._track_playback_end()
+        
         if self.player.playbackState() != QMediaPlayer.PlaybackState.StoppedState: self.player.stop()
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.play_pause_btn.setEnabled(False); self.position_slider.setEnabled(False); self.slider_sync.stop()
@@ -8161,6 +8286,9 @@ class AudioBrowser(QMainWindow):
             self.provided_names[fname] = new_name
             self._save_names()
             self._update_library_provided_name_cell(fname, new_name)
+            
+            # Update status bar statistics
+            self._update_session_status()
 
     def _propagate_song_rename(self, old_name: str, new_name: str, matching_files: List[Dict[str, Any]]):
         """
@@ -8216,6 +8344,9 @@ class AudioBrowser(QMainWindow):
         self._load_names()
         self._update_library_provided_name_cell(self.current_audio_file.name, new_name)
         self._refresh_right_table()
+        
+        # Update status bar statistics
+        self._update_session_status()
         
         # Show results
         if errors:
@@ -8341,6 +8472,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show best take formatting
         self._refresh_tree_display()
+        
+        # Update status bar statistics
+        self._update_session_status()
 
     # Partial take checkbox on Annotations tab
     def _on_partial_take_changed(self, state):
@@ -8395,6 +8529,9 @@ class AudioBrowser(QMainWindow):
         
         # Refresh the tree display to show partial take formatting
         self._refresh_tree_display()
+        
+        # Update status bar statistics
+        self._update_session_status()
 
     # Reference song checkbox on Annotations tab
     def _on_reference_song_changed(self, state):
@@ -10566,6 +10703,227 @@ class AudioBrowser(QMainWindow):
         
         # Show dialog non-modally
         self._shortcuts_dialog.show()
+    
+    def _show_practice_statistics_dialog(self):
+        """Show practice statistics dialog with session history and song statistics."""
+        # Calculate statistics
+        sessions = self.practice_stats.get("sessions", [])
+        songs = self.practice_stats.get("songs", {})
+        
+        # Total practice time across all sessions
+        total_time = sum(session.get("duration", 0) for session in sessions)
+        total_hours = int(total_time // 3600)
+        total_minutes = int((total_time % 3600) // 60)
+        
+        # Current session time
+        current_session_time = 0
+        if self.current_session_start:
+            current_session_time = (datetime.now() - self.current_session_start).total_seconds()
+        current_hours = int(current_session_time // 3600)
+        current_minutes = int((current_session_time % 3600) // 60)
+        
+        # Recent sessions (last 10)
+        recent_sessions = sessions[-10:] if len(sessions) > 10 else sessions
+        recent_sessions.reverse()  # Most recent first
+        
+        # Session statistics
+        session_count = len(sessions)
+        
+        # Calculate practice consistency (days between sessions)
+        consistency_text = "Not enough data"
+        if len(sessions) >= 2:
+            # Calculate average days between sessions
+            session_dates = []
+            for session in sessions:
+                try:
+                    start_time = datetime.fromisoformat(session.get("start_time", ""))
+                    session_dates.append(start_time.date())
+                except (ValueError, TypeError):
+                    continue
+            
+            if len(session_dates) >= 2:
+                session_dates.sort()
+                days_between = []
+                for i in range(1, len(session_dates)):
+                    days_diff = (session_dates[i] - session_dates[i-1]).days
+                    days_between.append(days_diff)
+                
+                if days_between:
+                    avg_days = sum(days_between) / len(days_between)
+                    consistency_text = f"{avg_days:.1f} days average between sessions"
+        
+        # Song statistics
+        song_stats_list = []
+        for song_name, stats in songs.items():
+            total_seconds = stats.get("total_time", 0)
+            play_count = stats.get("play_count", 0)
+            last_played = stats.get("last_played", "Never")
+            
+            # Format last played time
+            try:
+                last_played_dt = datetime.fromisoformat(last_played)
+                days_ago = (datetime.now() - last_played_dt).days
+                if days_ago == 0:
+                    last_played_str = "Today"
+                elif days_ago == 1:
+                    last_played_str = "Yesterday"
+                else:
+                    last_played_str = f"{days_ago} days ago"
+            except (ValueError, TypeError):
+                last_played_str = "Never"
+            
+            song_stats_list.append({
+                "name": song_name,
+                "total_time": total_seconds,
+                "play_count": play_count,
+                "last_played": last_played_str
+            })
+        
+        # Sort songs by total practice time (most practiced first)
+        song_stats_list.sort(key=lambda x: x["total_time"], reverse=True)
+        most_practiced = song_stats_list[:5]  # Top 5
+        least_practiced = song_stats_list[-5:] if len(song_stats_list) > 5 else []
+        least_practiced.reverse()  # Least practiced first
+        
+        # Build HTML content
+        html_content = f"""
+        <h2>Practice Statistics</h2>
+        
+        <h3>Session Summary</h3>
+        <table cellpadding="5" border="0">
+        <tr><td><b>Total Sessions:</b></td><td>{session_count}</td></tr>
+        <tr><td><b>Total Practice Time:</b></td><td>{total_hours}h {total_minutes}m</td></tr>
+        <tr><td><b>Current Session:</b></td><td>{current_hours}h {current_minutes}m</td></tr>
+        <tr><td><b>Practice Consistency:</b></td><td>{consistency_text}</td></tr>
+        </table>
+        
+        <h3>Recent Sessions</h3>
+        <table cellpadding="5" border="1" cellspacing="0" style="border-collapse: collapse;">
+        <tr style="background-color: #e0e0e0;">
+            <th>Date</th>
+            <th>Duration</th>
+            <th>Folder</th>
+            <th>Files Reviewed</th>
+        </tr>
+        """
+        
+        for session in recent_sessions:
+            try:
+                start_time = datetime.fromisoformat(session.get("start_time", ""))
+                date_str = start_time.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                date_str = "Unknown"
+            
+            duration = session.get("duration", 0)
+            hours = int(duration // 3600)
+            minutes = int((duration % 3600) // 60)
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            
+            folder = session.get("folder", "Unknown")
+            reviewed = session.get("reviewed_count", 0)
+            
+            html_content += f"""
+        <tr>
+            <td>{date_str}</td>
+            <td>{duration_str}</td>
+            <td>{folder}</td>
+            <td>{reviewed}</td>
+        </tr>
+            """
+        
+        html_content += """
+        </table>
+        """
+        
+        # Most practiced songs
+        if most_practiced:
+            html_content += """
+        <h3>Most Practiced Songs</h3>
+        <table cellpadding="5" border="1" cellspacing="0" style="border-collapse: collapse;">
+        <tr style="background-color: #e0e0e0;">
+            <th>Song</th>
+            <th>Total Time</th>
+            <th>Play Count</th>
+            <th>Last Played</th>
+        </tr>
+            """
+            
+            for song in most_practiced:
+                total_seconds = song["total_time"]
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                
+                html_content += f"""
+        <tr>
+            <td>{song["name"]}</td>
+            <td>{time_str}</td>
+            <td>{song["play_count"]}</td>
+            <td>{song["last_played"]}</td>
+        </tr>
+                """
+            
+            html_content += """
+        </table>
+            """
+        
+        # Least practiced songs
+        if least_practiced and len(song_stats_list) > 5:
+            html_content += """
+        <h3>Least Practiced Songs</h3>
+        <table cellpadding="5" border="1" cellspacing="0" style="border-collapse: collapse;">
+        <tr style="background-color: #e0e0e0;">
+            <th>Song</th>
+            <th>Total Time</th>
+            <th>Play Count</th>
+            <th>Last Played</th>
+        </tr>
+            """
+            
+            for song in least_practiced:
+                total_seconds = song["total_time"]
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                
+                html_content += f"""
+        <tr>
+            <td>{song["name"]}</td>
+            <td>{time_str}</td>
+            <td>{song["play_count"]}</td>
+            <td>{song["last_played"]}</td>
+        </tr>
+                """
+            
+            html_content += """
+        </table>
+            """
+        
+        if not most_practiced:
+            html_content += "<p><em>No practice statistics available yet. Start practicing to see your progress!</em></p>"
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_NAME} - Practice Statistics")
+        dialog.resize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Add text display area
+        text_edit = QTextEdit()
+        text_edit.setHtml(html_content)
+        text_edit.setReadOnly(True)
+        layout.addWidget(text_edit)
+        
+        # Add close button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
 
     # ----- Google Drive Sync methods -----
     def _refresh_remote_files(self):
@@ -11330,6 +11688,7 @@ class AudioBrowser(QMainWindow):
         self._cleanup_auto_fingerprint_thread()
 
         self._save_names(); self._save_notes(); self._save_duration_cache(); 
+        self._end_practice_session();  # Save practice session before closing
         self._cleanup_temp_channel_files();
         super().closeEvent(ev)
 
