@@ -20,6 +20,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - **Color Consistency**: Ensures consistent visual appearance across different machines and display setups
 - **Automatic Backup System**: Creates timestamped backups of metadata files before modifications
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software
+- **Practice Statistics**: Analyzes your practice folders to show which songs you've practiced, frequency, and recording counts. View comprehensive analytics via Help menu or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for complete guide.
 
 # Expected Workflow
 - Have band practice. Record each song as a separate audio file.
@@ -29,6 +30,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Listen to each song, leaving annotations, and selecting clips of parts of the song that really stand out.
 - Mark your favorite recordings as "Best Take" either from the Library tab or from the Annotations tab while listening.
 - Mark incomplete but potentially useful recordings as "Partial Take" for later reference.
+- **Practice Statistics**: Analyze your practice folders to see which songs you've practiced, how often, and when! Access via Help menu → "Practice Statistics" or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for details.
 - **Note**: The application automatically creates backups of your metadata before making changes. If you need to restore previous annotations or song names, use "Restore from Backup..." from the toolbar.
 
 # Backup System
@@ -47,6 +49,24 @@ The application includes an automatic backup system that protects your metadata:
 - **Preview**: See what files will be restored before confirming
 - **Safety**: Requires confirmation before overwriting existing files
 - **Updates**: UI automatically refreshes to show restored data
+
+# Practice Statistics
+
+Analyze your practice folders to gain insights into your practice history! The application scans your recordings and generates:
+
+- **Practice frequency**: Number of sessions, date ranges, and consistency metrics
+- **Song analysis**: Which songs you've practiced, how many takes, and best take counts
+- **Progress tracking**: Most/least practiced songs, last practiced dates, and recording counts
+
+**Access**: Help menu → "Practice Statistics" or press `Ctrl+Shift+S`
+
+**How it works**: Analyzes practice folders on-demand by scanning audio files, provided names, and annotations
+
+**Complete Guide**: See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for detailed documentation on:
+- What gets analyzed and how it works
+- How to interpret the statistics dashboard
+- Practical use cases and tips
+- Folder naming conventions for accurate dates
 
 # Note
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
