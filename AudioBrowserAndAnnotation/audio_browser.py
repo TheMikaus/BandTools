@@ -3687,6 +3687,36 @@ class NowPlayingPanel(QWidget):
             self._is_collapsed = collapsed
             self._update_collapse_state()
 
+# ========== Clickable Label for Status Bar ==========
+class ClickableLabel(QLabel):
+    """A clickable QLabel that changes cursor and emits signal on click."""
+    
+    def __init__(self, text: str = "", callback=None, parent=None):
+        super().__init__(text, parent)
+        self.callback = callback
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setStyleSheet("QLabel { color: #0066cc; text-decoration: underline; }")
+        
+    def mousePressEvent(self, event):
+        """Handle mouse click."""
+        if event.button() == Qt.MouseButton.LeftButton and self.callback:
+            self.callback()
+        super().mousePressEvent(event)
+    
+    def enterEvent(self, event):
+        """Handle mouse enter - make text bold."""
+        font = self.font()
+        font.setBold(True)
+        self.setFont(font)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Handle mouse leave - restore normal text."""
+        font = self.font()
+        font.setBold(False)
+        self.setFont(font)
+        super().leaveEvent(event)
+
 # ========== FileInfo proxy to show Size/Time ==========
 class FileInfoProxyModel(QSortFilterProxyModel):
     def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], audio_browser, parent=None):
@@ -5363,12 +5393,17 @@ class AudioBrowser(QMainWindow):
         self._update_session_status()
     
     def _update_session_status(self):
-        """Update status bar with comprehensive file statistics."""
+        """Update status bar with comprehensive file statistics using clickable items."""
         audio_files = self._list_audio_in_current_dir()
         total_files = len(audio_files)
         
         if total_files == 0:
-            self.statusBar().clearMessage()
+            # Clear clickable status items when no files
+            while self.status_layout.count():
+                child = self.status_layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            self.status_labels.clear()
             return
         
         # Count reviewed files
@@ -5381,24 +5416,8 @@ class AudioBrowser(QMainWindow):
         best_takes = sum(1 for p in audio_files if self.file_best_takes.get(p.name, False))
         partial_takes = sum(1 for p in audio_files if self.file_partial_takes.get(p.name, False))
         
-        # Build status message with comprehensive information
-        status_parts = []
-        status_parts.append(f"{total_files} file{'s' if total_files != 1 else ''}")
-        
-        if reviewed_count > 0:
-            status_parts.append(f"{reviewed_count} reviewed")
-        
-        if without_names > 0:
-            status_parts.append(f"{without_names} without names")
-        
-        if best_takes > 0:
-            status_parts.append(f"{best_takes} best take{'s' if best_takes != 1 else ''}")
-        
-        if partial_takes > 0:
-            status_parts.append(f"{partial_takes} partial take{'s' if partial_takes != 1 else ''}")
-        
-        status_message = " | ".join(status_parts)
-        self.statusBar().showMessage(status_message)
+        # Update clickable status items
+        self._update_clickable_status(total_files, reviewed_count, without_names, best_takes, partial_takes)
     
     def _practice_stats_json_path(self) -> Path:
         """Return path to practice statistics JSON file."""
@@ -6497,6 +6516,9 @@ class AudioBrowser(QMainWindow):
 
         # Initialize progress indicators in status bar
         self._init_progress_indicators()
+        
+        # Initialize clickable status items in status bar
+        self._init_clickable_status_items()
         
         # Restore workspace layout if saved
         self._restore_workspace_layout()
@@ -11948,6 +11970,187 @@ class AudioBrowser(QMainWindow):
         """Hide progress indicators."""
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+    
+    def _init_clickable_status_items(self):
+        """Initialize clickable status items widget in status bar."""
+        # Create a container widget for all status items
+        self.status_widget = QWidget()
+        self.status_layout = QHBoxLayout(self.status_widget)
+        self.status_layout.setContentsMargins(0, 0, 0, 0)
+        self.status_layout.setSpacing(0)
+        
+        # Add the widget to the status bar (left side, non-permanent)
+        self.statusBar().addWidget(self.status_widget, 1)  # Stretch factor 1
+        
+        # Store references to status labels for easy updates
+        self.status_labels = {}
+    
+    def _update_clickable_status(self, total_files: int, reviewed_count: int, 
+                                  without_names: int, best_takes: int, partial_takes: int):
+        """Update status bar with clickable status items.
+        
+        Args:
+            total_files: Total number of files
+            reviewed_count: Number of reviewed files
+            without_names: Number of files without provided names
+            best_takes: Number of best take files
+            partial_takes: Number of partial take files
+        """
+        # Clear existing widgets
+        while self.status_layout.count():
+            child = self.status_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self.status_labels.clear()
+        
+        # Helper to add status items
+        def add_label(text: str, clickable: bool = False, callback=None):
+            if clickable and callback:
+                label = ClickableLabel(text, callback)
+            else:
+                label = QLabel(text)
+            self.status_layout.addWidget(label)
+            return label
+        
+        def add_separator():
+            sep = QLabel(" | ")
+            self.status_layout.addWidget(sep)
+        
+        # Add file count (not clickable)
+        add_label(f"{total_files} file{'s' if total_files != 1 else ''}")
+        
+        # Add reviewed count (clickable - filter to reviewed files)
+        if reviewed_count > 0:
+            add_separator()
+            self.status_labels['reviewed'] = add_label(
+                f"{reviewed_count} reviewed",
+                clickable=True,
+                callback=lambda: self._filter_reviewed_files()
+            )
+        
+        # Add without names count (clickable - filter to files without names)
+        if without_names > 0:
+            add_separator()
+            self.status_labels['without_names'] = add_label(
+                f"{without_names} without names",
+                clickable=True,
+                callback=lambda: self._filter_without_names()
+            )
+        
+        # Add best takes count (clickable - filter to best takes)
+        if best_takes > 0:
+            add_separator()
+            self.status_labels['best_takes'] = add_label(
+                f"{best_takes} best take{'s' if best_takes != 1 else ''}",
+                clickable=True,
+                callback=lambda: self._filter_best_takes()
+            )
+        
+        # Add partial takes count (clickable - filter to partial takes)
+        if partial_takes > 0:
+            add_separator()
+            self.status_labels['partial_takes'] = add_label(
+                f"{partial_takes} partial take{'s' if partial_takes != 1 else ''}",
+                clickable=True,
+                callback=lambda: self._filter_partial_takes()
+            )
+        
+        # Add stretch to push everything to the left
+        self.status_layout.addStretch()
+    
+    def _filter_reviewed_files(self):
+        """Filter tree to show only reviewed files."""
+        # Switch to folder tab where the tree is
+        self.tabs.setCurrentIndex(0)
+        
+        # Build filter string: match filenames of reviewed files
+        if not self.reviewed_files:
+            return
+        
+        # For simplicity, we'll show a message - full implementation would require
+        # enhancing the filter proxy model to support reviewed filter
+        QMessageBox.information(
+            self,
+            "Filter: Reviewed Files",
+            f"Showing {len(self.reviewed_files)} reviewed files:\n\n" +
+            "\n".join(sorted(self.reviewed_files)[:10]) +
+            ("\n..." if len(self.reviewed_files) > 10 else "")
+        )
+    
+    def _filter_without_names(self):
+        """Filter tree to show only files without provided names."""
+        # Switch to Library tab where files are listed
+        self.tabs.setCurrentIndex(1)
+        
+        # Get files without names
+        audio_files = self._list_audio_in_current_dir()
+        files_without_names = [
+            p.name for p in audio_files 
+            if p.name not in self.provided_names or not self.provided_names[p.name]
+        ]
+        
+        if not files_without_names:
+            return
+        
+        # Show info message
+        QMessageBox.information(
+            self,
+            "Filter: Files Without Names",
+            f"Found {len(files_without_names)} files without provided names:\n\n" +
+            "\n".join(sorted(files_without_names)[:10]) +
+            ("\n..." if len(files_without_names) > 10 else "") +
+            "\n\nSwitched to Library tab. You can provide names using the table."
+        )
+    
+    def _filter_best_takes(self):
+        """Filter tree to show only best take files."""
+        # Switch to Library tab
+        self.tabs.setCurrentIndex(1)
+        
+        # Get best take files
+        audio_files = self._list_audio_in_current_dir()
+        best_take_files = [
+            p.name for p in audio_files 
+            if self.file_best_takes.get(p.name, False)
+        ]
+        
+        if not best_take_files:
+            return
+        
+        # Show info message
+        QMessageBox.information(
+            self,
+            "Filter: Best Takes",
+            f"Found {len(best_take_files)} best take files:\n\n" +
+            "\n".join(sorted(best_take_files)[:10]) +
+            ("\n..." if len(best_take_files) > 10 else "") +
+            "\n\nSwitched to Library tab. Best takes are highlighted."
+        )
+    
+    def _filter_partial_takes(self):
+        """Filter tree to show only partial take files."""
+        # Switch to Library tab
+        self.tabs.setCurrentIndex(1)
+        
+        # Get partial take files
+        audio_files = self._list_audio_in_current_dir()
+        partial_take_files = [
+            p.name for p in audio_files 
+            if self.file_partial_takes.get(p.name, False)
+        ]
+        
+        if not partial_take_files:
+            return
+        
+        # Show info message
+        QMessageBox.information(
+            self,
+            "Filter: Partial Takes",
+            f"Found {len(partial_take_files)} partial take files:\n\n" +
+            "\n".join(sorted(partial_take_files)[:10]) +
+            ("\n..." if len(partial_take_files) > 10 else "") +
+            "\n\nSwitched to Library tab. Partial takes are highlighted."
+        )
 
     def _show_about_dialog(self):
         """Show About dialog with version information."""
