@@ -28,7 +28,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - **Automatic Backup System**: Creates timestamped backups of metadata files before modifications
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software
 - **Practice Statistics**: Analyzes your practice folders to show which songs you've practiced, frequency, and recording counts. View comprehensive analytics via Help menu or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for complete guide.
-- **Practice Goals**: Set and track practice goals including weekly/monthly time goals, session count goals, and per-song practice goals. Visual progress indicators show how close you are to achieving your goals. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`.
+- **Practice Goals**: Set and track practice goals including weekly/monthly time goals, session count goals, and per-song practice goals. Visual progress indicators show how close you are to achieving your goals. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`. See [PRACTICE_GOALS_GUIDE.md](PRACTICE_GOALS_GUIDE.md) for complete user guide.
 
 # Expected Workflow
 - Have band practice. Record each song as a separate audio file.
