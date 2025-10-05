@@ -190,7 +190,8 @@ USER_COLORS_JSON = ".user_colors.json"
 SONG_RENAMES_JSON = ".song_renames.json"
 PRACTICE_STATS_JSON = ".practice_stats.json"
 PRACTICE_GOALS_JSON = ".practice_goals.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON}
+SETLISTS_JSON = ".setlists.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON, SETLISTS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -4322,6 +4323,10 @@ class AudioBrowser(QMainWindow):
         self.gdrive_sync_manager = None  # Will be initialized when needed
         self.gdrive_folder_name: Optional[str] = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER, "")
         self.remote_files: Set[str] = set()  # Track which files exist on remote
+        
+        # Setlists
+        self.setlists: Dict[str, Dict[str, Any]] = {}  # {setlist_id: {name, songs: [{folder, filename}], notes, created_date}}
+        self.active_setlist_id: Optional[str] = None  # Currently active setlist for practice mode
 
         # UI
         self._init_ui()
@@ -4331,6 +4336,9 @@ class AudioBrowser(QMainWindow):
         self._load_song_renames()
         self._load_notes()
         self._ensure_uids()
+        
+        # Load setlists
+        self.setlists = self._load_setlists()
 
         # Populate UI
         self._refresh_set_combo()
@@ -5320,6 +5328,99 @@ class AudioBrowser(QMainWindow):
             "days_remaining": max(0, days_remaining),
             "message": message
         }
+    
+    # ----- Setlist Management -----
+    def _setlists_json_path(self) -> Path:
+        """Return path to setlists JSON file."""
+        return self.root_path / SETLISTS_JSON
+    
+    def _load_setlists(self) -> Dict[str, Dict[str, Any]]:
+        """Load setlists from JSON file.
+        
+        Returns dict with structure:
+        {
+            "setlist_uuid": {
+                "name": "Summer Tour 2024",
+                "songs": [
+                    {"folder": "practice_2024_01_01", "filename": "01_MySong.mp3"},
+                    {"folder": "practice_2024_01_15", "filename": "02_Another.mp3"}
+                ],
+                "notes": "Performance notes here",
+                "created_date": "2025-01-15T12:00:00",
+                "last_modified": "2025-01-20T15:30:00"
+            }
+        }
+        """
+        setlists_data = load_json(self._setlists_json_path(), {}) or {}
+        return setlists_data
+    
+    def _save_setlists(self, setlists_data: Dict[str, Dict[str, Any]]):
+        """Save setlists to JSON file."""
+        save_json(self._setlists_json_path(), setlists_data)
+    
+    def _get_setlist_songs_details(self, setlist_id: str) -> List[Dict[str, Any]]:
+        """Get detailed information about songs in a setlist.
+        
+        Returns list of dicts with:
+        - folder: practice folder name
+        - filename: audio filename
+        - provided_name: song name from metadata
+        - duration: song duration in seconds (if available)
+        - is_best_take: whether file is marked as best take
+        - exists: whether the file still exists
+        """
+        setlist = self.setlists.get(setlist_id)
+        if not setlist:
+            return []
+        
+        songs_details = []
+        for song_entry in setlist.get("songs", []):
+            folder = song_entry.get("folder", "")
+            filename = song_entry.get("filename", "")
+            
+            # Check if file exists
+            folder_path = self.root_path / folder
+            file_path = folder_path / filename
+            exists = file_path.exists()
+            
+            # Load provided name from that folder
+            provided_name = filename
+            if exists:
+                names_path = folder_path / NAMES_JSON
+                names_data = load_json(names_path, {}) or {}
+                provided_name = names_data.get(filename, filename)
+            
+            # Get duration
+            duration_ms = 0
+            if exists:
+                duration_path = folder_path / DURATIONS_JSON
+                duration_data = load_json(duration_path, {}) or {}
+                duration_ms = duration_data.get(filename, 0)
+            
+            # Check if best take
+            is_best_take = False
+            if exists:
+                # Check all annotation sets in that folder
+                notes_files = list(folder_path.glob(f"{NOTES_JSON[:-5]}_*.json")) + [folder_path / NOTES_JSON]
+                for notes_path in notes_files:
+                    if notes_path.exists():
+                        notes_data = load_json(notes_path, {}) or {}
+                        file_meta = notes_data.get("per_file", {}).get(filename, {})
+                        if file_meta.get("best_take", False):
+                            is_best_take = True
+                            break
+            
+            songs_details.append({
+                "folder": folder,
+                "filename": filename,
+                "provided_name": provided_name,
+                "duration_ms": duration_ms,
+                "duration_sec": duration_ms // 1000 if duration_ms > 0 else 0,
+                "is_best_take": is_best_take,
+                "exists": exists
+            })
+        
+        return songs_details
 
     # ----- UI -----
     def _init_ui(self):
@@ -5408,6 +5509,14 @@ class AudioBrowser(QMainWindow):
         reset_layout_action = QAction("Reset to &Default Layout", self)
         reset_layout_action.triggered.connect(self._reset_workspace_layout)
         view_menu.addAction(reset_layout_action)
+        
+        # Tools menu
+        tools_menu = menubar.addMenu("&Tools")
+        
+        setlist_builder_action = QAction("&Setlist Builder…", self)
+        setlist_builder_action.setShortcut(QKeySequence("Ctrl+Shift+T"))
+        setlist_builder_action.triggered.connect(self._show_setlist_builder_dialog)
+        tools_menu.addAction(setlist_builder_action)
         
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -13152,6 +13261,560 @@ class AudioBrowser(QMainWindow):
             self._auto_gen_fingerprint_thread.wait()
             self._auto_gen_fingerprint_thread.deleteLater()
             self._auto_gen_fingerprint_thread = None
+    
+    def _show_setlist_builder_dialog(self):
+        """Show setlist builder dialog for managing performance setlists."""
+        import uuid
+        from datetime import datetime
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
+                                      QWidget, QLabel, QPushButton, QListWidget,
+                                      QListWidgetItem, QLineEdit, QTextEdit,
+                                      QMessageBox, QInputDialog, QTableWidget,
+                                      QTableWidgetItem, QHeaderView, QFileDialog,
+                                      QScrollArea)
+        from PyQt6.QtCore import Qt
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_NAME} - Setlist Builder")
+        dialog.resize(1000, 700)
+        
+        main_layout = QVBoxLayout(dialog)
+        
+        # Create tab widget
+        tabs = QTabWidget()
+        main_layout.addWidget(tabs)
+        
+        # Tab 1: Manage Setlists
+        manage_tab = QWidget()
+        manage_layout = QHBoxLayout(manage_tab)
+        
+        # Left side: Setlist list
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        left_label = QLabel("<h3>Your Setlists</h3>")
+        left_layout.addWidget(left_label)
+        
+        setlist_list = QListWidget()
+        left_layout.addWidget(setlist_list)
+        
+        # Setlist management buttons
+        btn_layout = QHBoxLayout()
+        btn_new = QPushButton("New Setlist")
+        btn_rename = QPushButton("Rename")
+        btn_delete = QPushButton("Delete")
+        btn_layout.addWidget(btn_new)
+        btn_layout.addWidget(btn_rename)
+        btn_layout.addWidget(btn_delete)
+        left_layout.addLayout(btn_layout)
+        
+        manage_layout.addWidget(left_panel, 1)
+        
+        # Right side: Setlist details
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        
+        right_label = QLabel("<h3>Setlist Details</h3>")
+        right_layout.addWidget(right_label)
+        
+        # Song list table
+        songs_table = QTableWidget()
+        songs_table.setColumnCount(6)
+        songs_table.setHorizontalHeaderLabels(["#", "Song Name", "Best Take", "Duration", "Folder", "Actions"])
+        songs_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        songs_table.setColumnWidth(0, 40)
+        songs_table.setColumnWidth(2, 80)
+        songs_table.setColumnWidth(3, 80)
+        songs_table.setColumnWidth(5, 100)
+        right_layout.addWidget(songs_table)
+        
+        # Total duration label
+        total_duration_label = QLabel("Total Duration: 0:00")
+        right_layout.addWidget(total_duration_label)
+        
+        # Song management buttons
+        song_btn_layout = QHBoxLayout()
+        btn_add_song = QPushButton("Add Song from Current Folder")
+        btn_remove_song = QPushButton("Remove Song")
+        btn_move_up = QPushButton("↑ Move Up")
+        btn_move_down = QPushButton("↓ Move Down")
+        song_btn_layout.addWidget(btn_add_song)
+        song_btn_layout.addWidget(btn_remove_song)
+        song_btn_layout.addWidget(btn_move_up)
+        song_btn_layout.addWidget(btn_move_down)
+        right_layout.addLayout(song_btn_layout)
+        
+        # Performance notes
+        notes_label = QLabel("<b>Performance Notes:</b>")
+        right_layout.addWidget(notes_label)
+        
+        notes_edit = QTextEdit()
+        notes_edit.setPlaceholderText("Add notes about this setlist (key changes, tuning, gear requirements, etc.)")
+        notes_edit.setMaximumHeight(100)
+        right_layout.addWidget(notes_edit)
+        
+        manage_layout.addWidget(right_panel, 2)
+        
+        tabs.addTab(manage_tab, "Manage Setlists")
+        
+        # Tab 2: Practice Mode
+        practice_tab = QWidget()
+        practice_layout = QVBoxLayout(practice_tab)
+        
+        practice_label = QLabel("<h2>Practice Mode</h2>")
+        practice_layout.addWidget(practice_label)
+        
+        practice_desc = QLabel("<p>Select a setlist to practice. The application will play songs in order and highlight them in the file tree.</p>")
+        practice_layout.addWidget(practice_desc)
+        
+        practice_setlist_list = QListWidget()
+        practice_layout.addWidget(practice_setlist_list)
+        
+        practice_btn_layout = QHBoxLayout()
+        btn_start_practice = QPushButton("Start Practice Mode")
+        btn_stop_practice = QPushButton("Stop Practice Mode")
+        btn_stop_practice.setEnabled(False)
+        practice_btn_layout.addWidget(btn_start_practice)
+        practice_btn_layout.addWidget(btn_stop_practice)
+        practice_btn_layout.addStretch()
+        practice_layout.addLayout(practice_btn_layout)
+        
+        tabs.addTab(practice_tab, "Practice Mode")
+        
+        # Tab 3: Export & Validation
+        export_tab = QWidget()
+        export_layout = QVBoxLayout(export_tab)
+        
+        export_label = QLabel("<h2>Export & Validation</h2>")
+        export_layout.addWidget(export_label)
+        
+        export_setlist_list = QListWidget()
+        export_layout.addWidget(export_setlist_list)
+        
+        validation_label = QLabel("<b>Validation Results:</b>")
+        export_layout.addWidget(validation_label)
+        
+        validation_text = QTextEdit()
+        validation_text.setReadOnly(True)
+        validation_text.setMaximumHeight(150)
+        export_layout.addWidget(validation_text)
+        
+        export_btn_layout = QHBoxLayout()
+        btn_validate = QPushButton("Validate Setlist")
+        btn_export_text = QPushButton("Export as Text")
+        btn_export_pdf = QPushButton("Export as PDF (Coming Soon)")
+        btn_export_pdf.setEnabled(False)
+        export_btn_layout.addWidget(btn_validate)
+        export_btn_layout.addWidget(btn_export_text)
+        export_btn_layout.addWidget(btn_export_pdf)
+        export_btn_layout.addStretch()
+        export_layout.addLayout(export_btn_layout)
+        
+        tabs.addTab(export_tab, "Export & Validation")
+        
+        # State variables
+        current_setlist_id = [None]  # Use list to allow modification in nested functions
+        
+        # Helper functions
+        def refresh_setlist_lists():
+            """Refresh all setlist lists in the dialog."""
+            setlist_list.clear()
+            practice_setlist_list.clear()
+            export_setlist_list.clear()
+            
+            for setlist_id, setlist_data in self.setlists.items():
+                name = setlist_data.get("name", "Unnamed Setlist")
+                song_count = len(setlist_data.get("songs", []))
+                display_text = f"{name} ({song_count} songs)"
+                
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.ItemDataRole.UserRole, setlist_id)
+                setlist_list.addItem(item)
+                
+                item2 = QListWidgetItem(display_text)
+                item2.setData(Qt.ItemDataRole.UserRole, setlist_id)
+                practice_setlist_list.addItem(item2)
+                
+                item3 = QListWidgetItem(display_text)
+                item3.setData(Qt.ItemDataRole.UserRole, setlist_id)
+                export_setlist_list.addItem(item3)
+        
+        def refresh_songs_table():
+            """Refresh the songs table for the current setlist."""
+            songs_table.setRowCount(0)
+            total_duration_label.setText("Total Duration: 0:00")
+            
+            if not current_setlist_id[0]:
+                return
+            
+            songs_details = self._get_setlist_songs_details(current_setlist_id[0])
+            total_seconds = 0
+            
+            for i, song in enumerate(songs_details):
+                row = songs_table.rowCount()
+                songs_table.insertRow(row)
+                
+                # Position
+                songs_table.setItem(row, 0, QTableWidgetItem(str(i + 1)))
+                
+                # Song name
+                name_item = QTableWidgetItem(song["provided_name"])
+                if not song["exists"]:
+                    name_item.setForeground(QColor("red"))
+                    name_item.setToolTip("File not found")
+                songs_table.setItem(row, 1, name_item)
+                
+                # Best take indicator
+                best_take_text = "✓" if song["is_best_take"] else ""
+                songs_table.setItem(row, 2, QTableWidgetItem(best_take_text))
+                
+                # Duration
+                duration_sec = song["duration_sec"]
+                total_seconds += duration_sec
+                minutes = duration_sec // 60
+                seconds = duration_sec % 60
+                duration_str = f"{minutes}:{seconds:02d}"
+                songs_table.setItem(row, 3, QTableWidgetItem(duration_str))
+                
+                # Folder
+                songs_table.setItem(row, 4, QTableWidgetItem(song["folder"]))
+                
+                # Actions placeholder
+                songs_table.setItem(row, 5, QTableWidgetItem(""))
+            
+            # Update total duration
+            total_minutes = total_seconds // 60
+            total_sec_rem = total_seconds % 60
+            total_duration_label.setText(f"Total Duration: {total_minutes}:{total_sec_rem:02d}")
+        
+        def on_setlist_selected():
+            """Handle setlist selection."""
+            selected_items = setlist_list.selectedItems()
+            if not selected_items:
+                current_setlist_id[0] = None
+                refresh_songs_table()
+                notes_edit.clear()
+                return
+            
+            setlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+            current_setlist_id[0] = setlist_id
+            
+            # Load setlist data
+            setlist_data = self.setlists.get(setlist_id, {})
+            notes_edit.setPlainText(setlist_data.get("notes", ""))
+            
+            refresh_songs_table()
+        
+        def save_current_notes():
+            """Save performance notes for current setlist."""
+            if not current_setlist_id[0]:
+                return
+            
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if setlist_data:
+                setlist_data["notes"] = notes_edit.toPlainText()
+                setlist_data["last_modified"] = datetime.now().isoformat()
+                self._save_setlists(self.setlists)
+        
+        def create_new_setlist():
+            """Create a new setlist."""
+            name, ok = QInputDialog.getText(dialog, "New Setlist", "Enter setlist name:")
+            if ok and name:
+                setlist_id = str(uuid.uuid4())
+                self.setlists[setlist_id] = {
+                    "name": name,
+                    "songs": [],
+                    "notes": "",
+                    "created_date": datetime.now().isoformat(),
+                    "last_modified": datetime.now().isoformat()
+                }
+                self._save_setlists(self.setlists)
+                refresh_setlist_lists()
+                self.statusBar().showMessage(f"Created setlist: {name}", 3000)
+        
+        def rename_setlist():
+            """Rename the selected setlist."""
+            if not current_setlist_id[0]:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist to rename.")
+                return
+            
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if not setlist_data:
+                return
+            
+            old_name = setlist_data.get("name", "")
+            name, ok = QInputDialog.getText(dialog, "Rename Setlist", "Enter new name:", text=old_name)
+            if ok and name:
+                setlist_data["name"] = name
+                setlist_data["last_modified"] = datetime.now().isoformat()
+                self._save_setlists(self.setlists)
+                refresh_setlist_lists()
+                self.statusBar().showMessage(f"Renamed setlist to: {name}", 3000)
+        
+        def delete_setlist():
+            """Delete the selected setlist."""
+            if not current_setlist_id[0]:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist to delete.")
+                return
+            
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if not setlist_data:
+                return
+            
+            name = setlist_data.get("name", "Unnamed Setlist")
+            reply = QMessageBox.question(dialog, "Delete Setlist",
+                                        f"Are you sure you want to delete '{name}'?",
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                del self.setlists[current_setlist_id[0]]
+                self._save_setlists(self.setlists)
+                current_setlist_id[0] = None
+                refresh_setlist_lists()
+                refresh_songs_table()
+                notes_edit.clear()
+                self.statusBar().showMessage(f"Deleted setlist: {name}", 3000)
+        
+        def add_song_from_current_folder():
+            """Add selected song from current folder to setlist."""
+            if not current_setlist_id[0]:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist first.")
+                return
+            
+            if not self.current_audio_file:
+                QMessageBox.warning(dialog, "No File Selected", "Please select an audio file in the main window.")
+                return
+            
+            # Get current folder and filename
+            folder_name = self.current_practice_folder.name
+            filename = self.current_audio_file.name
+            
+            # Check if song already in setlist
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if setlist_data:
+                for song in setlist_data.get("songs", []):
+                    if song["folder"] == folder_name and song["filename"] == filename:
+                        QMessageBox.information(dialog, "Already in Setlist", "This song is already in the setlist.")
+                        return
+                
+                # Add song
+                setlist_data["songs"].append({
+                    "folder": folder_name,
+                    "filename": filename
+                })
+                setlist_data["last_modified"] = datetime.now().isoformat()
+                self._save_setlists(self.setlists)
+                refresh_songs_table()
+                self.statusBar().showMessage(f"Added {filename} to setlist", 3000)
+        
+        def remove_song():
+            """Remove selected song from setlist."""
+            if not current_setlist_id[0]:
+                return
+            
+            selected_row = songs_table.currentRow()
+            if selected_row < 0:
+                QMessageBox.warning(dialog, "No Selection", "Please select a song to remove.")
+                return
+            
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if setlist_data and 0 <= selected_row < len(setlist_data.get("songs", [])):
+                removed_song = setlist_data["songs"].pop(selected_row)
+                setlist_data["last_modified"] = datetime.now().isoformat()
+                self._save_setlists(self.setlists)
+                refresh_songs_table()
+                self.statusBar().showMessage(f"Removed song from setlist", 3000)
+        
+        def move_song_up():
+            """Move selected song up in the setlist."""
+            if not current_setlist_id[0]:
+                return
+            
+            selected_row = songs_table.currentRow()
+            if selected_row <= 0:
+                return
+            
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if setlist_data:
+                songs = setlist_data.get("songs", [])
+                if 0 < selected_row < len(songs):
+                    songs[selected_row], songs[selected_row - 1] = songs[selected_row - 1], songs[selected_row]
+                    setlist_data["last_modified"] = datetime.now().isoformat()
+                    self._save_setlists(self.setlists)
+                    refresh_songs_table()
+                    songs_table.selectRow(selected_row - 1)
+        
+        def move_song_down():
+            """Move selected song down in the setlist."""
+            if not current_setlist_id[0]:
+                return
+            
+            selected_row = songs_table.currentRow()
+            setlist_data = self.setlists.get(current_setlist_id[0])
+            if setlist_data:
+                songs = setlist_data.get("songs", [])
+                if 0 <= selected_row < len(songs) - 1:
+                    songs[selected_row], songs[selected_row + 1] = songs[selected_row + 1], songs[selected_row]
+                    setlist_data["last_modified"] = datetime.now().isoformat()
+                    self._save_setlists(self.setlists)
+                    refresh_songs_table()
+                    songs_table.selectRow(selected_row + 1)
+        
+        def start_practice_mode():
+            """Start practice mode with selected setlist."""
+            selected_items = practice_setlist_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist for practice mode.")
+                return
+            
+            setlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+            self.active_setlist_id = setlist_id
+            btn_stop_practice.setEnabled(True)
+            btn_start_practice.setEnabled(False)
+            
+            setlist_name = self.setlists.get(setlist_id, {}).get("name", "Unknown")
+            self.statusBar().showMessage(f"Practice mode started: {setlist_name}", 5000)
+            QMessageBox.information(dialog, "Practice Mode Started", 
+                                   f"Practice mode started for: {setlist_name}\n\n"
+                                   "Songs in this setlist will be highlighted in the file tree.")
+        
+        def stop_practice_mode():
+            """Stop practice mode."""
+            self.active_setlist_id = None
+            btn_stop_practice.setEnabled(False)
+            btn_start_practice.setEnabled(True)
+            self.statusBar().showMessage("Practice mode stopped", 3000)
+        
+        def validate_setlist():
+            """Validate the selected setlist."""
+            selected_items = export_setlist_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist to validate.")
+                return
+            
+            setlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+            songs_details = self._get_setlist_songs_details(setlist_id)
+            
+            validation_results = []
+            validation_results.append("=== Setlist Validation Results ===\n")
+            
+            missing_files = []
+            missing_best_takes = []
+            total_songs = len(songs_details)
+            
+            for song in songs_details:
+                if not song["exists"]:
+                    missing_files.append(f"  - {song['provided_name']} ({song['folder']}/{song['filename']})")
+                if not song["is_best_take"]:
+                    missing_best_takes.append(f"  - {song['provided_name']}")
+            
+            validation_results.append(f"Total songs: {total_songs}")
+            validation_results.append(f"Missing files: {len(missing_files)}")
+            validation_results.append(f"Songs without Best Take: {len(missing_best_takes)}\n")
+            
+            if missing_files:
+                validation_results.append("❌ Missing Files:")
+                validation_results.extend(missing_files)
+                validation_results.append("")
+            else:
+                validation_results.append("✓ All files exist\n")
+            
+            if missing_best_takes:
+                validation_results.append("⚠️  Songs without Best Take:")
+                validation_results.extend(missing_best_takes)
+                validation_results.append("")
+            else:
+                validation_results.append("✓ All songs have Best Takes\n")
+            
+            if not missing_files and not missing_best_takes:
+                validation_results.append("✅ Setlist is ready for performance!")
+            
+            validation_text.setPlainText("\n".join(validation_results))
+        
+        def export_as_text():
+            """Export setlist as text file."""
+            selected_items = export_setlist_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(dialog, "No Selection", "Please select a setlist to export.")
+                return
+            
+            setlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+            setlist_data = self.setlists.get(setlist_id)
+            if not setlist_data:
+                return
+            
+            # Ask for save location
+            default_name = f"{setlist_data.get('name', 'setlist').replace(' ', '_')}.txt"
+            file_path, _ = QFileDialog.getSaveFileName(dialog, "Export Setlist", default_name, "Text Files (*.txt)")
+            
+            if not file_path:
+                return
+            
+            # Generate export content
+            songs_details = self._get_setlist_songs_details(setlist_id)
+            
+            lines = []
+            lines.append(f"SETLIST: {setlist_data.get('name', 'Unnamed')}")
+            lines.append(f"Created: {setlist_data.get('created_date', 'Unknown')}")
+            lines.append(f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append("=" * 60)
+            lines.append("")
+            
+            total_seconds = 0
+            for i, song in enumerate(songs_details, 1):
+                duration_sec = song["duration_sec"]
+                total_seconds += duration_sec
+                minutes = duration_sec // 60
+                seconds = duration_sec % 60
+                
+                best_take_marker = " [BEST TAKE]" if song["is_best_take"] else ""
+                missing_marker = " [MISSING]" if not song["exists"] else ""
+                
+                lines.append(f"{i}. {song['provided_name']}{best_take_marker}{missing_marker}")
+                lines.append(f"   Duration: {minutes}:{seconds:02d}")
+                lines.append(f"   Source: {song['folder']}/{song['filename']}")
+                lines.append("")
+            
+            lines.append("=" * 60)
+            total_minutes = total_seconds // 60
+            total_sec_rem = total_seconds % 60
+            lines.append(f"Total Songs: {len(songs_details)}")
+            lines.append(f"Total Duration: {total_minutes}:{total_sec_rem:02d}")
+            
+            if setlist_data.get("notes"):
+                lines.append("")
+                lines.append("PERFORMANCE NOTES:")
+                lines.append(setlist_data["notes"])
+            
+            # Write to file
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(lines))
+                QMessageBox.information(dialog, "Export Successful", f"Setlist exported to:\n{file_path}")
+                self.statusBar().showMessage(f"Setlist exported successfully", 3000)
+            except Exception as e:
+                QMessageBox.critical(dialog, "Export Failed", f"Failed to export setlist:\n{str(e)}")
+        
+        # Connect signals
+        setlist_list.itemSelectionChanged.connect(on_setlist_selected)
+        btn_new.clicked.connect(create_new_setlist)
+        btn_rename.clicked.connect(rename_setlist)
+        btn_delete.clicked.connect(delete_setlist)
+        btn_add_song.clicked.connect(add_song_from_current_folder)
+        btn_remove_song.clicked.connect(remove_song)
+        btn_move_up.clicked.connect(move_song_up)
+        btn_move_down.clicked.connect(move_song_down)
+        notes_edit.textChanged.connect(save_current_notes)
+        btn_start_practice.clicked.connect(start_practice_mode)
+        btn_stop_practice.clicked.connect(stop_practice_mode)
+        btn_validate.clicked.connect(validate_setlist)
+        btn_export_text.clicked.connect(export_as_text)
+        
+        # Initial population
+        refresh_setlist_lists()
+        
+        # Show dialog
+        dialog.exec()
 
     def closeEvent(self, ev):
         # Check if auto-labeling is in progress
