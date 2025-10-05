@@ -15,6 +15,20 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Resolves issue where mini waveform appeared as just a dark box
 
 ### Added
+- **Tempo & Metronome Integration**: Manual BPM entry and visual tempo markers for timing practice
+  - New "BPM" column in Library tab for entering tempo per song
+  - Editable BPM field with input validation (1-300 BPM range)
+  - Visual tempo markers on waveform showing measure boundaries
+  - Measure lines displayed every 4 beats (assumes 4/4 time signature)
+  - Measure numbers labeled every 4 measures (M4, M8, M12, etc.)
+  - Tempo data persisted in `.tempo.json` file per practice folder
+  - Real-time waveform updates when BPM is changed
+  - Subtle gray dashed lines that don't interfere with other markers
+  - Safety limit of 1000 measures to prevent performance issues
+  - Integration with existing features (annotations, loops, best takes)
+  - Implements Section 3.3 "Tempo & Metronome Integration" from INTERFACE_IMPROVEMENT_IDEAS.md
+  - See [TEST_PLAN_TEMPO_METRONOME.md](TEST_PLAN_TEMPO_METRONOME.md) for comprehensive test plan (31 test cases)
+  - See [IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md) for technical details
 - **Now Playing Panel**: Persistent playback and annotation controls accessible from any tab
   - Always-visible compact panel positioned below player bar and above tabs
   - Shows current file name with music note icon (♪)

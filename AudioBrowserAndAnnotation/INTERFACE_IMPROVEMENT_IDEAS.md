@@ -440,30 +440,47 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 3.3 Tempo & Metronome Integration
+### 3.3 Tempo & Metronome Integration ✅ **IMPLEMENTED** (Manual BPM Entry, Visual Tempo Markers)
 
 **Current State:**
-- No tempo awareness
-- PolyRhythmMetronome is separate app
+- Manual BPM entry per song with persistent storage
+- Visual tempo markers (measure lines) on waveform
+- Measure boundaries displayed based on 4/4 time signature
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Tempo Detection:**
-   - Auto-detect BPM of recordings
-   - Manual BPM entry per song
-   - Show tempo on waveform (measure markers)
+1. **Manual Tempo Entry:** ✅ **IMPLEMENTED**
+   - Manual BPM entry per song in Library tab
+   - Editable BPM column with validation (1-300 range)
+   - Persistent storage in `.tempo.json` file
+   - Show tempo on waveform (measure markers every 4 beats)
+   - Measure numbers displayed every 4 measures
+   - Real-time updates when BPM changes
+
+**Future Enhancement Ideas:**
+
+1. **Automatic Tempo Detection:**
+   - 💡 Auto-detect BPM of recordings (requires audio analysis library)
 
 2. **Tempo Analysis:**
-   - Detect tempo drift during song
-   - Visualize tempo changes as overlay
+   - 💡 Detect tempo drift during song
+   - 💡 Visualize tempo changes as overlay
+   - 💡 Support for variable time signatures (3/4, 6/8, etc.)
 
-3. **Click Track Sync:**
-   - Play metronome alongside recording
-   - Adjust click tempo to match recording
-   - Export recording with click mixed in
-
+3. **Audio Metronome Playback:**
+   - 💡 Play metronome click alongside recording
+   - 💡 Adjust click tempo to match recording
+   - 💡 Export recording with click mixed in
+   - 💡 Volume control for metronome
+   - 💡 Different click sounds for downbeat vs. other beats
 
 **Why:** Timing is critical for bands; integrated tempo tools aid practice.
+
+**Access**: Set BPM in Library tab → View tempo markers on waveform in Annotations tab
+
+**Documentation**:
+- [TEST_PLAN_TEMPO_METRONOME.md](TEST_PLAN_TEMPO_METRONOME.md) - Complete test plan with 31 test cases
+- [IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md) - Technical details
 
 ---
 
@@ -734,8 +751,8 @@ Based on potential impact vs. implementation effort, here are top recommendation
 
 ### Long-Term Features (High Impact, Higher Effort):
 1. ✅ **Setlist builder** for performance prep (Section 3.2) - **IMPLEMENTED**
-2. **Side-by-side comparison** tool (Section 3.6)
-3. **Tempo detection & metronome integration** (Section 3.3)
+2. ✅ **Tempo & metronome integration** for timing practice (Section 3.3) - **IMPLEMENTED** (manual BPM, visual markers)
+3. **Side-by-side comparison** tool (Section 3.6)
 
 ### Experimental/Advanced (Interesting, Needs Research):
 3. **Multi-track view** for individual instruments (Section 3.6)
