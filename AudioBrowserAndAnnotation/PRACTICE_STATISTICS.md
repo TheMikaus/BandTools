@@ -2,47 +2,50 @@
 
 ## Overview
 
-The Practice Statistics feature helps you track and analyze your band practice sessions. It automatically monitors your practice time, shows which songs you're working on most (and least), and helps you maintain consistent practice habits.
+The Practice Statistics feature analyzes your band practice folders and recordings to provide insights into your practice history. It automatically scans your practice folders, analyzes audio files, and generates statistics showing which songs you've practiced, how often, and when.
 
-## What Gets Tracked?
+## What Gets Analyzed?
 
-### Session-Level Tracking
-- **Total Practice Time**: Cumulative time spent across all practice sessions
-- **Current Session Duration**: Live tracking of your active practice session
-- **Session Count**: Number of distinct practice sessions recorded
+### Practice Session Analysis
+- **Total Practice Sessions**: Number of practice folders analyzed
+- **Total Recordings**: Total count of audio files across all practices
+- **Unique Songs**: Number of distinct songs identified
+- **Date Range**: Time span from first to last practice session
 - **Practice Consistency**: Average number of days between practice sessions
-- **Files Reviewed**: How many files you marked as "reviewed" during each session
 
-### Song-Level Tracking
-- **Total Playback Time**: How long you've spent listening to each song
-- **Play Count**: Number of times each song has been played
-- **Last Played Date**: When you last listened to each song
+### Song-Level Analysis
+- **Times Practiced**: How many practice sessions included this song
+- **Total Takes**: Total number of recordings of this song
+- **Best Takes**: Count of recordings marked as "Best Take"
+- **Last Practiced**: When this song was last practiced
 
 ## How It Works
 
-### Automatic Tracking
+### Folder-Based Analysis
 
-Practice statistics are tracked **automatically** in the background:
+Practice statistics are generated **on-demand** by analyzing your practice folders:
 
-1. **Session Start**: When you open a practice folder, a new session begins
-2. **Playback Tracking**: Every time you play an audio file, the playback time is recorded
-3. **Session End**: When you close the app or switch to a different practice folder, the session ends
-4. **Auto-Save**: Statistics are saved continuously as you use the application
+1. **Folder Discovery**: Scans your band practice directory for folders containing audio files
+2. **Date Detection**: Extracts practice dates from folder names (e.g., "2024-01-15-Practice") or folder timestamps
+3. **File Analysis**: Examines audio files, provided names, and annotations in each folder
+4. **Statistics Generation**: Compiles data into meaningful statistics when you open the dashboard
 
-> 💡 **Visual Learner?** See [PRACTICE_STATISTICS_DIAGRAM.md](PRACTICE_STATISTICS_DIAGRAM.md) for a detailed flow diagram and examples.
+### Folder Naming Convention
 
-### Data Storage
+For accurate date tracking, use dated folder names like:
+- `2024-01-15-Practice`
+- `2024-01-15-Rehearsal`
+- `2024-01-15` (any format starting with YYYY-MM-DD)
 
-- Statistics are stored in `.practice_stats.json` files
-- **One file per practice folder** - each folder has its own independent statistics
-- Located in the root of each practice folder alongside your audio files
-- JSON format for easy backup and portability
+If folders don't follow this pattern, the system uses folder modification timestamps.
 
-### What Counts as Practice Time?
+### What Gets Analyzed?
 
-- **Minimum session duration**: 1 minute - Sessions shorter than this aren't recorded
-- **Minimum playback duration**: 1 second - Very brief plays aren't counted
-- **Active time only**: Only actual playback time is counted, not pause time or time browsing files
+The system examines:
+- **Audio files**: `.wav` and `.mp3` files in each practice folder
+- **Provided names**: Song names from `.provided_names.json`
+- **Annotations**: Best Take and Partial Take markers from `.audio_notes_*.json`
+- **Folder metadata**: Creation/modification dates for session dating
 
 ## How to View Statistics
 
@@ -57,144 +60,138 @@ There are two ways to access your practice statistics:
 
 The Practice Statistics dashboard displays:
 
-#### Session Summary
-- **Total Sessions**: How many practice sessions you've completed
-- **Total Practice Time**: Cumulative time in hours and minutes (e.g., "5h 42m")
-- **Current Session**: Duration of your active session
-- **Practice Consistency**: Average days between sessions (e.g., "3.5 days average between sessions")
+#### Overall Summary
+- **Total Practice Sessions**: Number of practice folders found
+- **Total Recordings**: Count of all audio files
+- **Unique Songs**: Number of different songs identified
+- **Date Range**: Time span of your practices (e.g., "2024-01-10 to 2024-03-15")
+- **Practice Consistency**: Average days between practices (e.g., "3.5 days average between practices")
 
-#### Recent Sessions Table
+#### Recent Practice Sessions Table
 Shows your last 10 practice sessions with:
-- **Date**: When the session occurred (YYYY-MM-DD HH:MM)
-- **Duration**: How long the session lasted
-- **Folder**: Which practice folder you worked in
-- **Files Reviewed**: How many files you marked as reviewed
+- **Date**: When the practice occurred (extracted from folder name or timestamp)
+- **Folder**: Practice folder name
+- **Files**: Number of audio files recorded in that session
+- **Songs**: Number of unique songs practiced
+- **Best Takes**: How many recordings were marked as Best Take
 
 #### Most Practiced Songs
-Top 5 songs you've spent the most time on:
-- **Song**: File name or provided song name
-- **Total Time**: Cumulative playback time
-- **Play Count**: Number of times played
-- **Last Played**: When you last played it (e.g., "Today", "3 days ago")
+Top 5 songs by practice count:
+- **Song**: Song name (from provided names or filename)
+- **Times Practiced**: How many practice sessions included this song
+- **Total Takes**: Total number of recordings across all sessions
+- **Best Takes**: How many recordings were marked as Best Take
+- **Last Practiced**: When you last worked on this song (e.g., "Today", "3 days ago")
 
 #### Least Practiced Songs
 Bottom 5 songs that might need more attention:
 - Same metrics as "Most Practiced Songs"
-- Helps identify neglected songs that need work
+- Helps identify songs that haven't been practiced recently
 
 ## Practical Use Cases
 
-### 1. **Track Practice Goals**
-**Use Case**: You want to practice 5 hours per week.
+### 1. **Monitor Practice Frequency**
+**Use Case**: You want to ensure your band practices regularly.
 
 **How to Use**:
-- Check "Total Practice Time" at the start and end of each week
-- Monitor "Current Session" to stay motivated during practice
-- Review "Recent Sessions" to see your weekly progress
+- Check "Total Practice Sessions" and "Date Range" to see overall activity
+- Monitor "Practice Consistency" to see if you're meeting your practice schedule
+- Review "Recent Practice Sessions" to identify gaps in your practice schedule
 
 ### 2. **Balance Song Practice**
 **Use Case**: You need to work on all songs equally before a performance.
 
 **How to Use**:
-- Check "Least Practiced Songs" to identify which songs need attention
-- Focus your practice on songs with low play counts
-- Use "Last Played" to ensure you're not neglecting any songs
+- Check "Least Practiced Songs" to identify which songs need more takes
+- Focus your next practice on songs with low "Times Practiced" counts
+- Use "Last Practiced" to ensure you're not neglecting any songs for too long
 
-### 3. **Maintain Consistent Practice Habits**
-**Use Case**: You want to practice regularly, not just cram before shows.
-
-**How to Use**:
-- Monitor "Practice Consistency" metric
-- Aim for consistent day gaps (e.g., practice every 2-3 days)
-- Review "Recent Sessions" to spot gaps in your schedule
-
-### 4. **Review Problem Songs**
-**Use Case**: Some songs need extra attention and you want to track progress.
+### 3. **Track Song Development**
+**Use Case**: You want to see how much work has gone into each song.
 
 **How to Use**:
-- Check which songs have high "Play Count" - these might be challenging songs
-- Compare "Total Time" vs "Play Count" - high time/count ratio means you're spending more time per playback
-- Use this data to identify songs that need focused practice
+- Review "Total Takes" to see how many recordings you've made of each song
+- Compare "Times Practiced" vs "Total Takes" to see which songs get multiple takes per session
+- Check "Best Takes" count to see which songs have strong recordings ready
 
-### 5. **Session Planning**
-**Use Case**: You have 2 hours for practice and want to review progress.
+### 4. **Identify Problem Songs**
+**Use Case**: Some songs require more attempts to get right.
 
 **How to Use**:
-- Check "Files Reviewed" in recent sessions to continue where you left off
-- Review "Least Practiced Songs" to plan which files to focus on
-- Monitor "Current Session" time to pace your practice
+- Look for songs with high "Total Takes" but low "Best Takes" - these need more work
+- Songs with many takes across multiple sessions likely have challenging parts
+- Use this data to plan focused practice sessions on difficult material
+
+### 5. **Prepare for Performances**
+**Use Case**: You need to review your setlist before a show.
+
+**How to Use**:
+- Check when setlist songs were "Last Practiced" - refresh anything that's stale
+- Verify all performance songs have at least one "Best Take" marked
+- Review "Recent Practice Sessions" to see if you've covered all necessary material
 
 ## Tips and Best Practices
 
 ### Getting Accurate Statistics
 
-1. **Keep playing to completion**: Stats are only recorded if you play for at least 1 second
-2. **Mark files as reviewed**: This helps track your progress through each session
-3. **Use consistent practice folders**: Each folder tracks its own statistics
-4. **Don't delete `.practice_stats.json`**: This is where your history is stored
+1. **Use dated folder names**: Name folders like "2024-01-15-Practice" for accurate session dating
+2. **Provide song names**: Fill in the "Provided Name" column so songs are properly identified
+3. **Mark best takes**: Mark your best recordings so statistics can track quality progress
+4. **Organize by practice session**: Keep each practice session in its own dated folder
 
 ### Understanding the Metrics
 
-- **High play count + short total time**: You're playing many short segments (good for spot-checking specific parts)
-- **Low play count + long total time**: You're doing deep listening sessions (good for comprehensive review)
-- **Large gaps in "Recent Sessions"**: Inconsistent practice schedule
-- **Many sessions, short durations**: Frequent but brief practice (consider longer sessions)
+- **High "Total Takes" + High "Best Takes"**: Song is well-rehearsed with multiple good recordings
+- **High "Total Takes" + Low "Best Takes"**: Song needs more work - many attempts but few successes
+- **High "Times Practiced"**: Song appears in many sessions - core repertoire material
+- **Large gaps between practices**: Consider more frequent practice sessions
+- **Many songs, few takes each**: Covering a lot of material - good for variety
 
 ### Common Questions
 
-**Q: Why doesn't my session appear in the statistics?**
-- A: Sessions shorter than 1 minute aren't recorded. Make sure you're actively using the app.
+**Q: Why doesn't my practice folder appear in the statistics?**
+- A: Make sure the folder contains `.wav` or `.mp3` audio files. Empty folders are skipped.
 
-**Q: Why is a song's total time less than I expected?**
-- A: Only actual playback time is counted, not pause time or time with the song selected but not playing.
+**Q: How does it determine practice dates?**
+- A: First, it looks for YYYY-MM-DD patterns in folder names (e.g., "2024-01-15-Practice"). If not found, it uses the folder's modification timestamp.
 
-**Q: Can I reset or edit statistics?**
-- A: Statistics are stored in `.practice_stats.json` in each practice folder. You can delete this file to reset (but you'll lose all history). Alternatively, edit the JSON file directly for manual adjustments.
+**Q: Can I regenerate statistics?**
+- A: Yes! Statistics are generated fresh each time you open the dashboard - they're not stored anywhere. Just click "Practice Statistics" again to update.
 
-**Q: Do statistics sync across computers?**
-- A: No, practice statistics are intentionally local-only (not synced via Google Drive). This allows each band member to track their own practice time independently. If you want to share statistics, you can manually copy the `.practice_stats.json` file.
+**Q: What if song names aren't showing correctly?**
+- A: Statistics use the "Provided Name" from each file. If you haven't set provided names, it will use filenames instead. Fill in the "Provided Name" column to improve accuracy.
 
-**Q: What if I practice in multiple folders?**
-- A: Each practice folder maintains independent statistics. This is intentional - you might have separate projects or time periods you want to track separately.
+**Q: Do statistics include all band members' annotations?**
+- A: Yes! The system scans all `.audio_notes_*.json` files, so Best Take markings from any band member are counted.
 
-**Q: Can I export or backup my statistics?**
-- A: Yes! The `.practice_stats.json` file is a simple JSON file you can copy, backup, or analyze with other tools.
+**Q: Can I analyze practices from different projects separately?**
+- A: Statistics include all practice folders under your Band Practice Directory. To analyze different projects, set different root directories for each project.
+
+**Q: How does it handle duplicate song names across folders?**
+- A: Songs with the same name are treated as the same song. The system aggregates takes, practice counts, and dates across all folders.
 
 ## Technical Details
 
-### JSON Structure
+### How Statistics Are Generated
 
-The `.practice_stats.json` file contains:
+When you open the Practice Statistics dialog:
 
-```json
-{
-  "sessions": [
-    {
-      "start_time": "2024-01-15T10:30:00",
-      "end_time": "2024-01-15T12:15:00",
-      "duration": 6300,
-      "folder": "2024-01-15-Practice",
-      "reviewed_count": 8
-    }
-  ],
-  "songs": {
-    "Take_5.wav": {
-      "total_time": 245.3,
-      "play_count": 3,
-      "last_played": "2024-01-15T12:00:00"
-    }
-  }
-}
-```
+1. **Folder Discovery**: Scans the Band Practice Directory for all subdirectories containing `.wav` or `.mp3` files
+2. **Date Extraction**: Attempts to parse dates from folder names using YYYY-MM-DD pattern, falls back to folder timestamps
+3. **File Analysis**: For each practice folder:
+   - Counts audio files
+   - Loads `.provided_names.json` to identify song names
+   - Scans `.audio_notes_*.json` files for Best Take and Partial Take markers
+4. **Aggregation**: Combines data across all folders to generate overall statistics
+5. **Display**: Formats and displays in HTML dialog
 
-### Session Lifecycle
+### Performance
 
-1. **Session Start**: Triggered when you select a practice folder
-2. **Continuous Tracking**: Playback events update song statistics in real-time
-3. **Session End**: Triggered by:
-   - Switching to a different practice folder
-   - Closing the application
-4. **Data Persistence**: Stats saved to disk immediately after each playback and at session end
+Statistics generation is fast even with large practice histories:
+- Folders are scanned recursively only when needed
+- Only metadata files are read (not audio file contents)
+- Results are generated on-demand (not cached)
+- Typical generation time: < 1 second for 100+ practice folders
 
 ## Related Features
 
@@ -207,12 +204,12 @@ The `.practice_stats.json` file contains:
 
 Planned improvements to practice statistics (see `INTERFACE_IMPROVEMENT_IDEAS.md`):
 
-- Set weekly/monthly practice time goals
+- Set practice frequency goals (e.g., "Practice 3 times per week")
 - Track goal progress with visual indicators
-- Notifications when goals are met or missed
-- Per-song practice goals (e.g., "Practice this song 5 times this week")
 - Export statistics to CSV for external analysis
-- Practice time charts and visualizations
+- Practice history charts and visualizations
+- Filter statistics by date range
+- Compare statistics across time periods
 
 ---
 
