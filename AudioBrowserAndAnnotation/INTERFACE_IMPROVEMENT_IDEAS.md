@@ -674,6 +674,8 @@ Based on potential impact vs. implementation effort, here are top recommendation
 3. ✅ **Context menu enhancements** (Section 1.3) - **IMPLEMENTED**
 4. ✅ **Collapsible fingerprinting section** (Section 1.5) - **IMPLEMENTED**
 5. ✅ **Session state** (remember reviewed files, resume position) (Section 2.3) - **IMPLEMENTED**
+6. ✅ **Recent folders menu** for quick folder access (Section 2.3.2) - **IMPLEMENTED**
+7. ✅ **Toolbar simplification** (move undo limit to preferences) (Section 1.5.2) - **IMPLEMENTED**
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
