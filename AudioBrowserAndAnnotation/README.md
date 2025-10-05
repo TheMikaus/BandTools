@@ -29,6 +29,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software
 - **Practice Statistics**: Analyzes your practice folders to show which songs you've practiced, frequency, and recording counts. View comprehensive analytics via Help menu or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for complete guide.
 - **Practice Goals**: Set and track practice goals including weekly/monthly time goals, session count goals, and per-song practice goals. Visual progress indicators show how close you are to achieving your goals. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`. See [PRACTICE_GOALS_GUIDE.md](PRACTICE_GOALS_GUIDE.md) for complete user guide.
+- **Setlist Builder**: Create and manage performance setlists for live shows and performances. Build setlists from songs across multiple practice folders, reorder songs for performance sequence, add performance notes (key changes, tuning, gear), validate setlist readiness (check for Best Takes and missing files), calculate total duration, export to text format for printing/sharing, and activate Practice Mode for focused rehearsal. Access via Tools menu → "Setlist Builder" or `Ctrl+Shift+T`. See [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md) and [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md) for complete documentation.
 
 # Expected Workflow
 - Have band practice. Record each song as a separate audio file.
@@ -40,6 +41,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Mark incomplete but potentially useful recordings as "Partial Take" for later reference.
 - **Practice Statistics**: Analyze your practice folders to see which songs you've practiced, how often, and when! Access via Help menu → "Practice Statistics" or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for details.
 - **Practice Goals**: Set and track practice goals to stay motivated! Create weekly/monthly time goals, session count goals, or per-song practice goals. Visual progress bars show your progress and days remaining. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`.
+- **Setlist Builder**: Prepare for performances by creating organized setlists! Add songs from any practice folder, reorder for performance sequence, add performance notes, validate readiness, and export for printing. Activate Practice Mode to focus on setlist songs. Access via Tools menu → "Setlist Builder" or `Ctrl+Shift+T`.
 - **Note**: The application automatically creates backups of your metadata before making changes. If you need to restore previous annotations or song names, use "Restore from Backup..." from the toolbar.
 
 # Backup System

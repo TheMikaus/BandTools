@@ -5,6 +5,29 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Setlist Builder**: Complete performance preparation and setlist management system
+  - New "Setlist Builder" dialog accessible via Tools menu or Ctrl+Shift+T
+  - Create, rename, and delete named setlists (e.g., "Summer Tour 2024")
+  - Add songs from any practice folder to a setlist
+  - Reorder songs with Move Up/Down buttons for performance sequence
+  - Display song details: provided name, Best Take status, duration, source folder
+  - Automatic total duration calculation for entire setlist
+  - Per-setlist performance notes (key changes, tuning, gear requirements)
+  - Auto-save of notes as you type
+  - Practice Mode: Activate a setlist for focused practice sessions
+  - Validation: Check for missing files and songs without Best Takes
+  - Detailed validation report with counts and warnings
+  - Export setlists to formatted text files for printing/sharing
+  - Exported files include all song details, durations, and performance notes
+  - Songs stored as references (folder + filename) - no file duplication
+  - Support for songs from multiple practice folders in one setlist
+  - Duplicate prevention (can't add same song twice)
+  - Visual indicators: Best Take checkmarks (✓), missing file warnings (red text)
+  - Persistent storage in `.setlists.json` file in root practice folder
+  - UUID-based unique identifiers for each setlist
+  - Comprehensive test plan with 43 test cases
+  - Complete documentation and implementation summary
+  - Implements Section 3.2 "Setlist Builder" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Practice Goals**: Set and track practice goals to stay motivated and focused
   - New "Practice Goals" dialog accessible via Help menu or Ctrl+Shift+G
   - Create weekly/monthly practice time goals (in minutes)

@@ -384,34 +384,46 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 3.2 Setlist Builder
+### 3.2 Setlist Builder ✅ **IMPLEMENTED** (Setlist Management, Validation, Export, Practice Mode)
 
 **Current State:**
-- No setlist concept
-- Can mark Best Takes but no organization for performance
+- Complete setlist management system implemented
+- Create, rename, delete setlists
+- Add songs from any practice folder
+- Validation and export functionality
+- Practice mode for focused sessions
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Setlist Management:**
-   - Create named setlists: "Summer Tour 2024"
-   - Drag Best Takes into setlist order
-   - Show total duration
-   - Export setlist to print/PDF
+1. **Setlist Management:** ✅ **IMPLEMENTED**
+   - ✅ Create named setlists: "Summer Tour 2024"
+   - ✅ Add songs to setlist from any practice folder
+   - ✅ Reorder songs with Move Up/Down buttons
+   - ✅ Show total duration
+   - ✅ Export setlist to text format
+   - 💡 Export to PDF (future enhancement)
 
-2. **Setlist Preparation:**
-   - Highlight songs in setlist in file tree
-   - "Practice mode": Play only setlist songs in order
-   - Review all annotations for setlist songs
-   - Check: All setlist songs have Best Take?
-   - Check: All setlist songs need to be Reference Library?
+2. **Setlist Preparation:** ✅ **IMPLEMENTED**
+   - ✅ Practice mode: Activate setlist for focused practice
+   - ✅ Validation: Check all setlist songs have Best Take
+   - ✅ Validation: Check all files exist
+   - 💡 Highlight songs in setlist in file tree (future enhancement)
+   - 💡 Auto-play setlist songs in order (future enhancement)
+   - 💡 Review all annotations for setlist songs (future enhancement)
 
-3. **Performance Notes:**
-   - Per-setlist notes: "Key change in Song X"
-   - BPM reference
-   - Tuning notes
-   - Gear requirements
+3. **Performance Notes:** ✅ **IMPLEMENTED**
+   - ✅ Per-setlist notes with auto-save
+   - ✅ Free-form text area for key changes, tuning, gear requirements
+   - ✅ Notes included in text export
+   - ✅ Notes persist across sessions
 
 **Why:** Bridges practice and performance; helps bands prepare for shows.
+
+**Access**: Tools menu → "Setlist Builder…" or Ctrl+Shift+T
+
+**Documentation**:
+- [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md) - Complete test plan with 43 test cases
+- [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md) - Technical details
 
 ---
 
@@ -706,9 +718,9 @@ Based on potential impact vs. implementation effort, here are top recommendation
 7. ✅ **Export best takes package** for easy sharing/archiving (Section 3.7.2) - **IMPLEMENTED**
 
 ### Long-Term Features (High Impact, Higher Effort):
-1. **Setlist builder** for performance prep (Section 3.2)
+1. ✅ **Setlist builder** for performance prep (Section 3.2) - **IMPLEMENTED**
 2. **Side-by-side comparison** tool (Section 3.6)
-4. **Tempo detection & metronome integration** (Section 3.3)
+3. **Tempo detection & metronome integration** (Section 3.3)
 
 ### Experimental/Advanced (Interesting, Needs Research):
 3. **Multi-track view** for individual instruments (Section 3.6)
