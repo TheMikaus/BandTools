@@ -137,6 +137,39 @@ right_layout.addWidget(self.now_playing_panel)
 
 ---
 
+## Mini Waveform Enhancement (Update)
+
+### Issue Resolved
+The mini waveform was initially implemented as a placeholder using a `QLabel` with background color changes. This appeared as a dark box and didn't provide useful visual feedback.
+
+### Solution Implemented
+**New Class**: `MiniWaveformWidget(QWidget)` (lines ~3389-3485)
+
+**Features**:
+- Actual waveform visualization (not just color changes)
+- Playhead indicator showing current position
+- Supports both mono and stereo audio
+- Uses same color scheme as main waveform
+- Automatically syncs with main waveform data
+
+**Key Methods**:
+- `set_waveform_data(peaks, duration_ms)`: Receives waveform peaks from main view
+- `set_position(position_ms)`: Updates playhead position
+- `paintEvent()`: Custom rendering of waveform and playhead
+
+**Integration**:
+- Connected to `waveform.waveformReady` signal
+- `_update_now_playing_waveform()` method passes data from main view
+- Reuses cached waveform data (no performance impact)
+- Updates automatically when files change
+
+**Visual Improvement**:
+- Before: Dark box with subtle color changes (#1a1a1a background)
+- After: Clear waveform visualization with red playhead indicator
+- Better visual context for navigation and position awareness
+
+---
+
 ## Documentation Updates
 
 ### Files Created
