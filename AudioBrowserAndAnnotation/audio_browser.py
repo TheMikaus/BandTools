@@ -150,7 +150,8 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QSplitter, QTableWidget, QTableWidgetItem,
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
-    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit, QMenuBar, QGroupBox
+    QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit, QMenuBar, QGroupBox,
+    QProgressBar
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -177,6 +178,8 @@ SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
 SETTINGS_KEY_RECENT_FOLDERS = "recent_folders"  # List of recently opened practice folders
 SETTINGS_KEY_THEME = "color_theme"  # Color theme: "light" or "dark"
+SETTINGS_KEY_WINDOW_GEOMETRY = "window_geometry"  # Window geometry for workspace layouts
+SETTINGS_KEY_SPLITTER_STATE = "splitter_state"  # Main splitter state for workspace layouts
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 SESSION_STATE_JSON = ".session_state.json"
@@ -5228,6 +5231,23 @@ class AudioBrowser(QMainWindow):
         self.gdrive_delete_folder_action.triggered.connect(self._delete_remote_folder)
         file_menu.addAction(self.gdrive_delete_folder_action)
         
+        # View menu
+        view_menu = menubar.addMenu("&View")
+        
+        save_layout_action = QAction("&Save Window Layout", self)
+        save_layout_action.setShortcut(QKeySequence("Ctrl+Shift+L"))
+        save_layout_action.triggered.connect(self._save_workspace_layout)
+        view_menu.addAction(save_layout_action)
+        
+        restore_layout_action = QAction("&Restore Window Layout", self)
+        restore_layout_action.setShortcut(QKeySequence("Ctrl+Shift+R"))
+        restore_layout_action.triggered.connect(self._restore_workspace_layout)
+        view_menu.addAction(restore_layout_action)
+        
+        reset_layout_action = QAction("Reset to &Default Layout", self)
+        reset_layout_action.triggered.connect(self._reset_workspace_layout)
+        view_menu.addAction(reset_layout_action)
+        
         # Help menu
         help_menu = menubar.addMenu("&Help")
         
@@ -5293,7 +5313,7 @@ class AudioBrowser(QMainWindow):
         self.path_label.setText(f"Band Practice Directory: {self.root_path}")
         main_layout.addWidget(self.path_label)
 
-        splitter = QSplitter(self); main_layout.addWidget(splitter)
+        self.main_splitter = QSplitter(self); main_layout.addWidget(self.main_splitter)
 
         # Left panel with filter box and tree
         left_panel = QWidget()
@@ -5359,11 +5379,11 @@ class AudioBrowser(QMainWindow):
         self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
         left_layout.addWidget(self.tree)
         
-        splitter.addWidget(left_panel)
+        self.main_splitter.addWidget(left_panel)
 
         # Right panel
-        right = QWidget(); splitter.addWidget(right)
-        splitter.setStretchFactor(0, 2); splitter.setStretchFactor(1, 3)
+        right = QWidget(); self.main_splitter.addWidget(right)
+        self.main_splitter.setStretchFactor(0, 2); self.main_splitter.setStretchFactor(1, 3)
         right_layout = QVBoxLayout(right)
 
         # Player bar
@@ -5890,6 +5910,12 @@ class AudioBrowser(QMainWindow):
         self._restore_tab_order()
 
         if "Fusion" in QStyleFactory.keys(): QApplication.instance().setStyle("Fusion")
+
+        # Initialize progress indicators in status bar
+        self._init_progress_indicators()
+        
+        # Restore workspace layout if saved
+        self._restore_workspace_layout()
 
         self._general_save_timer = QTimer(self); self._general_save_timer.setSingleShot(True); self._general_save_timer.timeout.connect(self._save_notes)
         self._folder_save_timer = QTimer(self); self._folder_save_timer.setSingleShot(True); self._folder_save_timer.timeout.connect(self._save_notes)
@@ -11190,6 +11216,114 @@ class AudioBrowser(QMainWindow):
                     QMessageBox.StandardButton.Ok
                 )
 
+    # ----- Workspace Layout Methods -----
+    def _save_workspace_layout(self):
+        """Save current window geometry and splitter state."""
+        try:
+            # Save window geometry
+            self.settings.setValue(SETTINGS_KEY_WINDOW_GEOMETRY, self.saveGeometry())
+            
+            # Save splitter state
+            self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, self.main_splitter.saveState())
+            
+            self.statusBar().showMessage("Window layout saved", 3000)
+            log_print("Workspace layout saved")
+        except Exception as e:
+            log_print(f"Error saving workspace layout: {e}")
+            QMessageBox.warning(self, "Save Layout Error", f"Failed to save workspace layout: {str(e)}")
+    
+    def _restore_workspace_layout(self):
+        """Restore saved window geometry and splitter state."""
+        try:
+            # Restore window geometry
+            geometry = self.settings.value(SETTINGS_KEY_WINDOW_GEOMETRY)
+            if geometry:
+                self.restoreGeometry(geometry)
+                log_print("Window geometry restored")
+            
+            # Restore splitter state
+            splitter_state = self.settings.value(SETTINGS_KEY_SPLITTER_STATE)
+            if splitter_state:
+                self.main_splitter.restoreState(splitter_state)
+                log_print("Splitter state restored")
+        except Exception as e:
+            log_print(f"Error restoring workspace layout: {e}")
+    
+    def _reset_workspace_layout(self):
+        """Reset window layout to default size and splitter position."""
+        try:
+            # Reset window size
+            self.resize(1360, 900)
+            
+            # Reset splitter to default proportions (2:3)
+            total_width = self.main_splitter.width()
+            left_width = int(total_width * 0.4)  # 2/5 of total
+            right_width = total_width - left_width  # 3/5 of total
+            self.main_splitter.setSizes([left_width, right_width])
+            
+            # Clear saved settings
+            self.settings.remove(SETTINGS_KEY_WINDOW_GEOMETRY)
+            self.settings.remove(SETTINGS_KEY_SPLITTER_STATE)
+            
+            self.statusBar().showMessage("Layout reset to default", 3000)
+            log_print("Workspace layout reset to default")
+        except Exception as e:
+            log_print(f"Error resetting workspace layout: {e}")
+            QMessageBox.warning(self, "Reset Layout Error", f"Failed to reset workspace layout: {str(e)}")
+    
+    # ----- Progress Indicator Methods -----
+    def _init_progress_indicators(self):
+        """Initialize progress indicators in status bar."""
+        # Create progress bar widget
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumWidth(200)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        
+        # Create progress label
+        self.progress_label = QLabel("")
+        self.progress_label.setVisible(False)
+        
+        # Add to status bar (right side)
+        self.statusBar().addPermanentWidget(self.progress_label)
+        self.statusBar().addPermanentWidget(self.progress_bar)
+    
+    def _show_progress(self, operation: str, current: int, total: int, filename: str = ""):
+        """Show progress in status bar.
+        
+        Args:
+            operation: Operation name (e.g., "Generating waveforms", "Fingerprinting")
+            current: Current item number
+            total: Total number of items
+            filename: Optional filename being processed
+        """
+        if total <= 0:
+            self._hide_progress()
+            return
+        
+        percentage = int((current / total) * 100)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(percentage)
+        self.progress_bar.setVisible(True)
+        
+        # Update label with operation and optional filename
+        if filename:
+            label_text = f"{operation}: {current}/{total} ({filename})"
+        else:
+            label_text = f"{operation}: {current}/{total}"
+        
+        # Truncate filename if too long
+        if len(label_text) > 60:
+            label_text = label_text[:57] + "..."
+        
+        self.progress_label.setText(label_text)
+        self.progress_label.setVisible(True)
+    
+    def _hide_progress(self):
+        """Hide progress indicators."""
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+
     def _show_about_dialog(self):
         """Show About dialog with version information."""
         about_text = f"""<h2>{APP_NAME}</h2>
@@ -12320,9 +12454,13 @@ class AudioBrowser(QMainWindow):
             progress_msg = f"Generating waveforms... {current + 1}/{total}: {filename}"
             log_print(f"  {progress_msg}")
             self.statusBar().showMessage(progress_msg)
+            # Show progress in status bar indicator
+            self._show_progress("Generating waveforms", current + 1, total, Path(filename).name)
             
         def on_waveform_finished(generated_count, canceled):
             self._cleanup_auto_waveform_thread()
+            # Hide progress indicator
+            self._hide_progress()
             
             if canceled:
                 log_print("Waveform generation was canceled")
@@ -12378,9 +12516,13 @@ class AudioBrowser(QMainWindow):
             progress_msg = f"Generating fingerprints... {current + 1}/{total}: {filename}"
             log_print(f"  {progress_msg}")
             self.statusBar().showMessage(progress_msg)
+            # Show progress in status bar indicator
+            self._show_progress("Generating fingerprints", current + 1, total, Path(filename).name)
         
         def on_fingerprint_finished(generated_count, canceled):
             self._cleanup_auto_fingerprint_thread()
+            # Hide progress indicator
+            self._hide_progress()
             if canceled:
                 log_print("Fingerprint generation was canceled")
                 self._finish_auto_generation()

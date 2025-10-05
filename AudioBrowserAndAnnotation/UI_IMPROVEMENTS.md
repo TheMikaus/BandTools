@@ -147,6 +147,93 @@ The main toolbar has been simplified to reduce clutter:
 
 ---
 
+## Workspace Layouts
+
+**Location**: View menu
+
+Save and restore custom window configurations for different workflows:
+
+### How to Use
+
+#### Saving Your Layout
+1. Resize the window to your preferred size
+2. Adjust the splitter between file tree and content panels
+3. Open the **View** menu
+4. Select **Save Window Layout** (or press **Ctrl+Shift+L**)
+5. Status bar confirms "Window layout saved"
+
+#### Restoring Your Layout
+1. Open the **View** menu
+2. Select **Restore Window Layout** (or press **Ctrl+Shift+R**)
+3. Window and panels return to saved configuration
+
+#### Resetting to Default
+1. Open the **View** menu
+2. Select **Reset to Default Layout**
+3. Window returns to 1360x900 with 40:60 panel ratio
+
+### Features
+- Saves window size and position
+- Saves splitter position between file tree and content area
+- Automatically restores saved layout on application startup
+- Keyboard shortcuts for quick save/restore
+- Easy reset to default if needed
+
+### Why This Helps
+- Optimize layout for your screen size and resolution
+- No need to resize window every time you open the app
+- Perfect for switching between different monitors or displays
+- Create comfortable workspace that suits your review process
+- Quick toggle between focused modes (wide file tree vs. wide content area)
+
+### Use Cases
+- **Large Monitor**: Save expanded layout to use all available space
+- **Laptop**: Save compact layout optimized for smaller screen
+- **Review Mode**: Wide content area for better waveform and annotation viewing
+- **Organization Mode**: Wide file tree for easier file navigation
+
+---
+
+## Status Bar Progress Indicators
+
+**Location**: Status bar (bottom-right of window)
+
+Visual progress feedback for background operations:
+
+### What You'll See
+- **Progress Bar**: Shows percentage completion (0-100%)
+- **Progress Label**: Shows operation name, file count, and current filename
+  - Example: "Generating waveforms: 5/20 (MySong.wav)"
+  - Example: "Generating fingerprints: 12/15 (AnotherSong.mp3)"
+
+### When It Appears
+- During automatic waveform generation (when opening folders)
+- During automatic fingerprint generation (when enabled)
+- During manual fingerprint generation from Library tab
+
+### Features
+- Real-time progress updates as each file is processed
+- Shows current filename being processed
+- Long filenames automatically truncated to prevent layout issues
+- Auto-hides when operation completes or is canceled
+- Doesn't interfere with other status bar messages
+- Non-modal: you can continue working while operations run
+
+### Why This Helps
+- Know exactly how long operations will take
+- See which file is being processed (useful if one file is problematic)
+- Reduces uncertainty during long operations on large folders
+- No need to wonder if the application is frozen or working
+- Better user experience than hidden background operations
+
+### Tips
+- Progress is per-file, so fast files complete quickly
+- Large folders (50+ files) will show progress for several minutes
+- You can cancel operations if needed (progress indicates how much was done)
+- Check progress label if a specific file seems to be taking too long
+
+---
+
 ## Tips for Best Experience
 
 ### Recent Folders
@@ -171,6 +258,19 @@ The main toolbar has been simplified to reduce clutter:
 - The SUMMARY.txt file in the export makes it easy to review what's included
 - Share packages with band members who don't have the application installed
 
+### Workspace Layouts
+- Save your layout after finding comfortable window/panel sizes
+- Different saved layouts can be useful for different monitors or display setups
+- Use Ctrl+Shift+L frequently to update your saved layout as preferences change
+- Reset to default if your layout becomes problematic or cluttered
+- Saved layout persists across application sessions automatically
+
+### Progress Indicators
+- Watch progress during first-time folder opens (waveform generation)
+- Use progress to estimate remaining time for large folder operations
+- If a specific file seems stuck, the progress label shows which file is being processed
+- Progress indicators are most useful for folders with 20+ audio files
+
 ### Keyboard Shortcuts
 Many operations have keyboard shortcuts for even faster workflow. See **Help → Keyboard Shortcuts** for a complete list.
 
@@ -179,6 +279,8 @@ Many operations have keyboard shortcuts for even faster workflow. See **Help →
 ## Related Documentation
 
 - [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) - Step-by-step guide for new features (Dark Mode, Export Best Takes)
+- [TEST_PLAN_WORKSPACE_PROGRESS.md](TEST_PLAN_WORKSPACE_PROGRESS.md) - Comprehensive test plan for workspace layouts and progress indicators
+- [IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md) - Technical details of workspace layouts and progress indicators implementation
 - [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned and implemented interface improvements
 - [CHANGELOG.md](CHANGELOG.md) - Complete version history with all changes
 - [README.md](README.md) - Main application documentation
