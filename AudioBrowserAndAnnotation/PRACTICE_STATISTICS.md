@@ -29,6 +29,8 @@ Practice statistics are tracked **automatically** in the background:
 3. **Session End**: When you close the app or switch to a different practice folder, the session ends
 4. **Auto-Save**: Statistics are saved continuously as you use the application
 
+> 💡 **Visual Learner?** See [PRACTICE_STATISTICS_DIAGRAM.md](PRACTICE_STATISTICS_DIAGRAM.md) for a detailed flow diagram and examples.
+
 ### Data Storage
 
 - Statistics are stored in `.practice_stats.json` files
