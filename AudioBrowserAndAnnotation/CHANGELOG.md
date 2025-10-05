@@ -388,6 +388,10 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Works with both WAV and MP3 files using pydub audio processing
 
 ### Fixed
+- **Preferences Dialog AttributeError**: Fixed crash when changing theme in preferences dialog
+  - Fixed typo where code referenced non-existent `self._undo_history` instead of `self._undo_stack`
+  - Improved undo stack trimming logic to properly adjust `_undo_index` when capacity is reduced
+  - Theme switching in preferences dialog now works correctly without AttributeError
 - **Volume Boost During Playback**: Fixed volume boost not applying correctly during real-time playback
   - Removed `min(1.0)` cap on effective volume that prevented boost from exceeding 100%
   - Boost now properly amplifies audio up to 4.0x (400%) as intended
