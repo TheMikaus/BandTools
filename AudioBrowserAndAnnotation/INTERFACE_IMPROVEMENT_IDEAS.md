@@ -349,32 +349,36 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ## 3. Practice-Focused Features
 
-### 3.1 Practice Goals & Tracking ✅ **IMPLEMENTED** (Practice Statistics Dashboard)
+### 3.1 Practice Goals & Tracking ✅ **IMPLEMENTED** (Practice Statistics Dashboard, Practice Goals)
 
 **Current State:**
 - Practice statistics tracking implemented
+- Practice goals management system implemented
 - Session history and song practice metrics available
-- Accessible via Help menu and Ctrl+Shift+S shortcut
+- Goals accessible via Help menu and Ctrl+Shift+G shortcut
 
 **Implemented Features:**
 
-1. **Practice Statistics:**
+1. **Practice Statistics:** ✅ **IMPLEMENTED**
    - ✅ Total practice time across all sessions
    - ✅ Current session duration tracking
    - ✅ Most practiced songs (top 5) with play count and last played date
-   - ✅ Least practiced songs (bottom 5) with play count and last played date
+   - ✅ Least practiced songs (bottom 5) with play count and last practiced date
    - ✅ Practice consistency metric (average days between sessions)
    - ✅ Recent sessions list (last 10) with date, duration, folder, and files reviewed
    - ✅ Automatic session tracking when changing folders or closing application
    - ✅ Per-file playback time tracking
 
-**Future Enhancements:**
-
-2. **Practice Goals:**
-   - 💡 Set weekly/monthly practice time goals
-   - 💡 Track goal progress with visual indicators
-   - 💡 Notifications when goals are met or missed
-   - 💡 Per-song practice goals (e.g., "Practice this song 5 times this week")
+2. **Practice Goals:** ✅ **IMPLEMENTED**
+   - ✅ Set weekly/monthly practice time goals
+   - ✅ Set weekly/monthly session count goals
+   - ✅ Track goal progress with visual indicators (progress bars, percentages)
+   - ✅ Visual status indicators when goals are met (green) or expired (red)
+   - ✅ Per-song practice goals (e.g., "Practice this song 5 times this week")
+   - ✅ Per-song best take goals
+   - ✅ Create, view, and delete goals through dedicated UI
+   - ✅ Automatic goal progress calculation based on practice folder analysis
+   - ✅ Days remaining countdown for active goals
 
 **Why:** Transforms tool from passive review to active practice management; motivates consistent practice.
 
@@ -696,9 +700,10 @@ Based on potential impact vs. implementation effort, here are top recommendation
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
 2. ✅ **A-B loop sections** for targeted practice (Section 3.4) - **IMPLEMENTED**
 3. ✅ **Practice statistics dashboard** (Section 3.1) - **IMPLEMENTED**
-4. ✅ **Improved auto-labeling preview** (Section 2.2) - **IMPLEMENTED**
-5. ✅ **Annotation categories/tags** (Section 2.4) - **IMPLEMENTED**
-6. ✅ **Export best takes package** for easy sharing/archiving (Section 3.7.2) - **IMPLEMENTED**
+4. ✅ **Practice goals tracking** (Section 3.1.2) - **IMPLEMENTED**
+5. ✅ **Improved auto-labeling preview** (Section 2.2) - **IMPLEMENTED**
+6. ✅ **Annotation categories/tags** (Section 2.4) - **IMPLEMENTED**
+7. ✅ **Export best takes package** for easy sharing/archiving (Section 3.7.2) - **IMPLEMENTED**
 
 ### Long-Term Features (High Impact, Higher Effort):
 1. **Setlist builder** for performance prep (Section 3.2)

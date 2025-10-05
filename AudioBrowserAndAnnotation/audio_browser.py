@@ -189,7 +189,8 @@ FINGERPRINTS_JSON = ".audio_fingerprints.json"
 USER_COLORS_JSON = ".user_colors.json"
 SONG_RENAMES_JSON = ".song_renames.json"
 PRACTICE_STATS_JSON = ".practice_stats.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON}
+PRACTICE_GOALS_JSON = ".practice_goals.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -5160,6 +5161,166 @@ class AudioBrowser(QMainWindow):
             
             self.current_session_start = None
 
+    # ----- Practice Goals -----
+    def _practice_goals_json_path(self) -> Path:
+        """Return path to practice goals JSON file."""
+        return self.root_path / PRACTICE_GOALS_JSON
+    
+    def _load_practice_goals(self):
+        """Load practice goals from JSON file.
+        
+        Returns dict with structure:
+        {
+            "weekly_goals": [
+                {
+                    "id": "goal_uuid",
+                    "type": "time",  # "time" or "session_count"
+                    "target": 300,  # minutes for time, count for sessions
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-01-07",
+                    "created": "2025-01-01T12:00:00"
+                }
+            ],
+            "monthly_goals": [...],
+            "song_goals": [
+                {
+                    "id": "goal_uuid",
+                    "song_name": "Song Title",
+                    "type": "practice_count",  # "practice_count" or "best_take"
+                    "target": 5,
+                    "start_date": "2025-01-01",
+                    "end_date": "2025-01-31",
+                    "created": "2025-01-01T12:00:00"
+                }
+            ]
+        }
+        """
+        goals_data = load_json(self._practice_goals_json_path(), {}) or {}
+        return {
+            "weekly_goals": goals_data.get("weekly_goals", []),
+            "monthly_goals": goals_data.get("monthly_goals", []),
+            "song_goals": goals_data.get("song_goals", [])
+        }
+    
+    def _save_practice_goals(self, goals_data: Dict[str, Any]):
+        """Save practice goals to JSON file."""
+        save_json(self._practice_goals_json_path(), goals_data)
+    
+    def _calculate_goal_progress(self, goal: Dict[str, Any], stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate progress for a given goal.
+        
+        Args:
+            goal: Goal dictionary with type, target, start_date, end_date
+            stats: Practice statistics from _generate_practice_folder_statistics
+            
+        Returns:
+            Dict with current, target, percentage, status, days_remaining
+        """
+        from datetime import datetime, timedelta
+        
+        goal_type = goal.get("type")
+        target = goal.get("target", 0)
+        start_date_str = goal.get("start_date")
+        end_date_str = goal.get("end_date")
+        
+        # Parse dates
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+        except:
+            return {
+                "current": 0,
+                "target": target,
+                "percentage": 0,
+                "status": "error",
+                "days_remaining": 0,
+                "message": "Invalid date format"
+            }
+        
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        days_remaining = (end_date - today).days
+        
+        # Initialize progress
+        current_value = 0
+        status = "in_progress"
+        message = ""
+        
+        # Calculate based on goal type
+        if goal_type == "time":
+            # Weekly/monthly practice time goal (in minutes)
+            # Sum practice time from sessions in date range
+            for session in stats["practice_sessions"]:
+                session_date = session.get("date")
+                if session_date:
+                    if start_date <= session_date.replace(hour=0, minute=0, second=0, microsecond=0) <= end_date:
+                        # Estimate session duration (rough estimate: 3 minutes per file)
+                        file_count = session.get("file_count", 0)
+                        current_value += file_count * 3  # Rough estimate
+            
+            message = f"{current_value} of {target} minutes"
+            
+        elif goal_type == "session_count":
+            # Count practice sessions in date range
+            for session in stats["practice_sessions"]:
+                session_date = session.get("date")
+                if session_date:
+                    if start_date <= session_date.replace(hour=0, minute=0, second=0, microsecond=0) <= end_date:
+                        current_value += 1
+            
+            message = f"{current_value} of {target} sessions"
+            
+        elif goal_type == "practice_count":
+            # Per-song practice count goal
+            song_name = goal.get("song_name", "")
+            song_data = stats["songs"].get(song_name, {})
+            
+            # Count practices in date range (approximate - we count total takes in folders within range)
+            for session in stats["practice_sessions"]:
+                session_date = session.get("date")
+                if session_date:
+                    if start_date <= session_date.replace(hour=0, minute=0, second=0, microsecond=0) <= end_date:
+                        if song_name in session.get("songs", []):
+                            current_value += 1
+            
+            message = f"{current_value} of {target} practices"
+            
+        elif goal_type == "best_take":
+            # Per-song best take goal (just need 1 best take)
+            song_name = goal.get("song_name", "")
+            song_data = stats["songs"].get(song_name, {})
+            best_takes = song_data.get("best_takes", 0)
+            
+            if best_takes > 0:
+                current_value = 1
+                status = "complete"
+            
+            message = "Best take recorded!" if best_takes > 0 else "No best take yet"
+        
+        # Calculate percentage
+        percentage = min(100, int((current_value / target * 100) if target > 0 else 0))
+        
+        # Determine status
+        if today > end_date:
+            if current_value >= target:
+                status = "complete"
+            else:
+                status = "expired"
+        elif current_value >= target:
+            status = "complete"
+        elif days_remaining <= 0:
+            status = "expired"
+        else:
+            status = "in_progress"
+        
+        return {
+            "current": current_value,
+            "target": target,
+            "percentage": percentage,
+            "status": status,
+            "days_remaining": max(0, days_remaining),
+            "message": message
+        }
+
     # ----- UI -----
     def _init_ui(self):
         self.resize(1360, 900); self.setStatusBar(QStatusBar(self))
@@ -5259,6 +5420,11 @@ class AudioBrowser(QMainWindow):
         help_stats_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         help_stats_action.triggered.connect(self._show_practice_statistics_dialog)
         help_menu.addAction(help_stats_action)
+        
+        help_goals_action = QAction("Practice &Goals", self)
+        help_goals_action.setShortcut(QKeySequence("Ctrl+Shift+G"))
+        help_goals_action.triggered.connect(self._show_practice_goals_dialog)
+        help_menu.addAction(help_goals_action)
         
         help_menu.addSeparator()
         
@@ -11846,6 +12012,403 @@ class AudioBrowser(QMainWindow):
         close_button.clicked.connect(dialog.accept)
         button_layout.addWidget(close_button)
         layout.addLayout(button_layout)
+        
+        dialog.exec()
+    
+    def _show_practice_goals_dialog(self):
+        """Show practice goals management and progress dialog."""
+        import uuid
+        from datetime import datetime, timedelta
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
+                                      QWidget, QLabel, QPushButton, QComboBox,
+                                      QSpinBox, QTableWidget, QTableWidgetItem,
+                                      QHeaderView, QProgressBar, QMessageBox,
+                                      QLineEdit, QDateEdit)
+        from PyQt6.QtCore import Qt, QDate
+        
+        # Load goals and generate stats
+        goals_data = self._load_practice_goals()
+        stats = self._generate_practice_folder_statistics()
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_NAME} - Practice Goals")
+        dialog.resize(900, 700)
+        
+        main_layout = QVBoxLayout(dialog)
+        
+        # Create tab widget
+        tabs = QTabWidget()
+        main_layout.addWidget(tabs)
+        
+        # Tab 1: Active Goals (with progress)
+        active_tab = QWidget()
+        active_layout = QVBoxLayout(active_tab)
+        
+        active_label = QLabel("<h2>Active Practice Goals</h2>")
+        active_layout.addWidget(active_label)
+        
+        # Display active goals with progress
+        active_goals_widget = QWidget()
+        active_goals_layout = QVBoxLayout(active_goals_widget)
+        
+        all_goals = []
+        all_goals.extend([{**g, "category": "weekly"} for g in goals_data.get("weekly_goals", [])])
+        all_goals.extend([{**g, "category": "monthly"} for g in goals_data.get("monthly_goals", [])])
+        all_goals.extend([{**g, "category": "song"} for g in goals_data.get("song_goals", [])])
+        
+        if not all_goals:
+            no_goals_label = QLabel("<p><em>No practice goals set. Use the 'Manage Goals' tab to create your first goal!</em></p>")
+            active_goals_layout.addWidget(no_goals_label)
+        else:
+            for goal in all_goals:
+                # Calculate progress
+                progress_info = self._calculate_goal_progress(goal, stats)
+                
+                # Skip expired goals older than 7 days
+                if progress_info["status"] == "expired" and progress_info["days_remaining"] < -7:
+                    continue
+                
+                # Create goal card
+                goal_card = QWidget()
+                goal_card.setStyleSheet("QWidget { background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 5px; padding: 10px; margin: 5px; }")
+                card_layout = QVBoxLayout(goal_card)
+                
+                # Goal title
+                goal_type_str = goal.get("type", "unknown")
+                if goal.get("category") == "song":
+                    title = f"Song: {goal.get('song_name', 'Unknown')} - {goal_type_str.replace('_', ' ').title()}"
+                else:
+                    title = f"{goal.get('category', 'Unknown').title()} Goal - {goal_type_str.replace('_', ' ').title()}"
+                
+                title_label = QLabel(f"<b>{title}</b>")
+                card_layout.addWidget(title_label)
+                
+                # Goal dates
+                dates_str = f"{goal.get('start_date', 'N/A')} to {goal.get('end_date', 'N/A')}"
+                dates_label = QLabel(f"<i>{dates_str}</i>")
+                card_layout.addWidget(dates_label)
+                
+                # Progress bar
+                progress_bar = QProgressBar()
+                progress_bar.setValue(progress_info["percentage"])
+                progress_bar.setFormat(f"{progress_info['percentage']}% - {progress_info['message']}")
+                
+                # Color code based on status
+                if progress_info["status"] == "complete":
+                    progress_bar.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
+                elif progress_info["status"] == "expired":
+                    progress_bar.setStyleSheet("QProgressBar::chunk { background-color: #f44336; }")
+                elif progress_info["percentage"] >= 75:
+                    progress_bar.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
+                elif progress_info["percentage"] >= 50:
+                    progress_bar.setStyleSheet("QProgressBar::chunk { background-color: #FF9800; }")
+                else:
+                    progress_bar.setStyleSheet("QProgressBar::chunk { background-color: #2196F3; }")
+                
+                card_layout.addWidget(progress_bar)
+                
+                # Status message
+                status_msg = ""
+                if progress_info["status"] == "complete":
+                    status_msg = "✅ Goal completed! Great work!"
+                elif progress_info["status"] == "expired":
+                    status_msg = f"⚠️ Goal expired ({abs(progress_info['days_remaining'])} days ago)"
+                else:
+                    status_msg = f"⏰ {progress_info['days_remaining']} days remaining"
+                
+                status_label = QLabel(status_msg)
+                card_layout.addWidget(status_label)
+                
+                active_goals_layout.addWidget(goal_card)
+        
+        active_goals_layout.addStretch()
+        
+        # Make scrollable
+        from PyQt6.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(active_goals_widget)
+        scroll_area.setWidgetResizable(True)
+        active_layout.addWidget(scroll_area)
+        
+        tabs.addTab(active_tab, "Active Goals")
+        
+        # Tab 2: Manage Goals
+        manage_tab = QWidget()
+        manage_layout = QVBoxLayout(manage_tab)
+        
+        manage_label = QLabel("<h2>Manage Practice Goals</h2>")
+        manage_layout.addWidget(manage_label)
+        
+        # Goal creation form
+        form_group = QWidget()
+        form_group.setStyleSheet("QWidget { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 15px; }")
+        form_layout = QVBoxLayout(form_group)
+        
+        form_title = QLabel("<h3>Create New Goal</h3>")
+        form_layout.addWidget(form_title)
+        
+        # Goal category selection
+        category_layout = QHBoxLayout()
+        category_layout.addWidget(QLabel("Goal Type:"))
+        goal_category_combo = QComboBox()
+        goal_category_combo.addItems(["Weekly Time Goal", "Monthly Time Goal", "Weekly Session Count", "Monthly Session Count", "Song Practice Count", "Song Best Take"])
+        category_layout.addWidget(goal_category_combo)
+        category_layout.addStretch()
+        form_layout.addLayout(category_layout)
+        
+        # Song selection (for song goals)
+        song_layout = QHBoxLayout()
+        song_layout.addWidget(QLabel("Song Name:"))
+        song_input = QLineEdit()
+        song_input.setPlaceholderText("Enter song name (for song-specific goals)")
+        song_input.setEnabled(False)  # Disabled by default
+        song_layout.addWidget(song_input)
+        form_layout.addLayout(song_layout)
+        
+        # Target value
+        target_layout = QHBoxLayout()
+        target_layout.addWidget(QLabel("Target:"))
+        target_spin = QSpinBox()
+        target_spin.setRange(1, 10000)
+        target_spin.setValue(300)  # Default 300 minutes (5 hours)
+        target_spin.setSuffix(" minutes")
+        target_layout.addWidget(target_spin)
+        target_layout.addStretch()
+        form_layout.addLayout(target_layout)
+        
+        # Date range
+        date_layout = QHBoxLayout()
+        date_layout.addWidget(QLabel("Start Date:"))
+        start_date_edit = QDateEdit()
+        start_date_edit.setCalendarPopup(True)
+        start_date_edit.setDate(QDate.currentDate())
+        date_layout.addWidget(start_date_edit)
+        
+        date_layout.addWidget(QLabel("End Date:"))
+        end_date_edit = QDateEdit()
+        end_date_edit.setCalendarPopup(True)
+        end_date_edit.setDate(QDate.currentDate().addDays(7))  # Default 1 week
+        date_layout.addWidget(end_date_edit)
+        date_layout.addStretch()
+        form_layout.addLayout(date_layout)
+        
+        # Create button
+        create_button_layout = QHBoxLayout()
+        create_button_layout.addStretch()
+        create_goal_btn = QPushButton("Create Goal")
+        create_button_layout.addWidget(create_goal_btn)
+        form_layout.addLayout(create_button_layout)
+        
+        manage_layout.addWidget(form_group)
+        
+        # Existing goals table
+        table_label = QLabel("<h3>Existing Goals</h3>")
+        manage_layout.addWidget(table_label)
+        
+        goals_table = QTableWidget()
+        goals_table.setColumnCount(6)
+        goals_table.setHorizontalHeaderLabels(["Type", "Target", "Start Date", "End Date", "Status", "Actions"])
+        goals_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        # Populate table with existing goals
+        def refresh_goals_table():
+            goals_table.setRowCount(0)
+            all_goals_list = []
+            all_goals_list.extend([{**g, "category": "weekly"} for g in goals_data.get("weekly_goals", [])])
+            all_goals_list.extend([{**g, "category": "monthly"} for g in goals_data.get("monthly_goals", [])])
+            all_goals_list.extend([{**g, "category": "song"} for g in goals_data.get("song_goals", [])])
+            
+            for goal in all_goals_list:
+                row = goals_table.rowCount()
+                goals_table.insertRow(row)
+                
+                # Type column
+                goal_type = goal.get("type", "unknown")
+                if goal.get("category") == "song":
+                    type_str = f"Song: {goal.get('song_name', 'Unknown')}"
+                else:
+                    type_str = f"{goal.get('category', 'Unknown').title()} - {goal_type.replace('_', ' ').title()}"
+                goals_table.setItem(row, 0, QTableWidgetItem(type_str))
+                
+                # Target column
+                target_val = goal.get("target", 0)
+                if goal_type in ["time"]:
+                    target_str = f"{target_val} min"
+                else:
+                    target_str = str(target_val)
+                goals_table.setItem(row, 1, QTableWidgetItem(target_str))
+                
+                # Dates
+                goals_table.setItem(row, 2, QTableWidgetItem(goal.get("start_date", "N/A")))
+                goals_table.setItem(row, 3, QTableWidgetItem(goal.get("end_date", "N/A")))
+                
+                # Status
+                progress_info = self._calculate_goal_progress(goal, stats)
+                status_str = f"{progress_info['percentage']}% ({progress_info['status']})"
+                goals_table.setItem(row, 4, QTableWidgetItem(status_str))
+                
+                # Delete button
+                delete_btn = QPushButton("Delete")
+                goal_id = goal.get("id", "")
+                
+                def make_delete_handler(goal_id, goal_category):
+                    def handler():
+                        # Confirm deletion
+                        reply = QMessageBox.question(dialog, "Delete Goal",
+                                                     "Are you sure you want to delete this goal?",
+                                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        if reply == QMessageBox.StandardButton.Yes:
+                            # Remove goal from appropriate list
+                            if goal_category == "weekly" or goal_category == "monthly":
+                                goal_list_key = "weekly_goals" if goal_category == "weekly" else "monthly_goals"
+                                goals_data[goal_list_key] = [g for g in goals_data[goal_list_key] if g.get("id") != goal_id]
+                            elif goal_category == "song":
+                                goals_data["song_goals"] = [g for g in goals_data["song_goals"] if g.get("id") != goal_id]
+                            
+                            self._save_practice_goals(goals_data)
+                            refresh_goals_table()
+                    return handler
+                
+                delete_btn.clicked.connect(make_delete_handler(goal_id, goal.get("category")))
+                goals_table.setCellWidget(row, 5, delete_btn)
+        
+        refresh_goals_table()
+        manage_layout.addWidget(goals_table)
+        
+        tabs.addTab(manage_tab, "Manage Goals")
+        
+        # Update form based on goal type selection
+        def update_form_fields():
+            goal_type_index = goal_category_combo.currentIndex()
+            
+            # Enable/disable song input
+            if goal_type_index >= 4:  # Song goals
+                song_input.setEnabled(True)
+            else:
+                song_input.setEnabled(False)
+                song_input.clear()
+            
+            # Update target suffix and default value
+            if goal_type_index in [0, 1]:  # Time goals
+                target_spin.setSuffix(" minutes")
+                target_spin.setValue(300)  # 5 hours default
+            elif goal_type_index in [2, 3]:  # Session count goals
+                target_spin.setSuffix(" sessions")
+                target_spin.setValue(3)  # 3 sessions default
+            elif goal_type_index == 4:  # Song practice count
+                target_spin.setSuffix(" practices")
+                target_spin.setValue(5)  # 5 practices default
+            elif goal_type_index == 5:  # Song best take
+                target_spin.setSuffix("")
+                target_spin.setValue(1)  # 1 best take
+                target_spin.setEnabled(False)
+            else:
+                target_spin.setSuffix("")
+                target_spin.setEnabled(True)
+            
+            # Update date range defaults
+            if goal_type_index in [0, 2, 4]:  # Weekly goals
+                end_date_edit.setDate(QDate.currentDate().addDays(7))
+            elif goal_type_index in [1, 3]:  # Monthly goals
+                end_date_edit.setDate(QDate.currentDate().addDays(30))
+            elif goal_type_index == 5:  # Song best take
+                end_date_edit.setDate(QDate.currentDate().addDays(30))
+        
+        goal_category_combo.currentIndexChanged.connect(update_form_fields)
+        update_form_fields()  # Initialize
+        
+        # Create goal button handler
+        def create_new_goal():
+            goal_type_index = goal_category_combo.currentIndex()
+            
+            # Determine goal category and type
+            goal_category = ""
+            goal_type = ""
+            
+            if goal_type_index == 0:  # Weekly Time Goal
+                goal_category = "weekly"
+                goal_type = "time"
+            elif goal_type_index == 1:  # Monthly Time Goal
+                goal_category = "monthly"
+                goal_type = "time"
+            elif goal_type_index == 2:  # Weekly Session Count
+                goal_category = "weekly"
+                goal_type = "session_count"
+            elif goal_type_index == 3:  # Monthly Session Count
+                goal_category = "monthly"
+                goal_type = "session_count"
+            elif goal_type_index == 4:  # Song Practice Count
+                goal_category = "song"
+                goal_type = "practice_count"
+            elif goal_type_index == 5:  # Song Best Take
+                goal_category = "song"
+                goal_type = "best_take"
+            
+            # Validate song name for song goals
+            if goal_category == "song":
+                song_name = song_input.text().strip()
+                if not song_name:
+                    QMessageBox.warning(dialog, "Invalid Input", "Please enter a song name for song-specific goals.")
+                    return
+            else:
+                song_name = ""
+            
+            # Get target value
+            target_value = target_spin.value()
+            
+            # Get date range
+            start_date = start_date_edit.date().toString("yyyy-MM-dd")
+            end_date = end_date_edit.date().toString("yyyy-MM-dd")
+            
+            # Validate date range
+            if start_date >= end_date:
+                QMessageBox.warning(dialog, "Invalid Date Range", "End date must be after start date.")
+                return
+            
+            # Create goal object
+            new_goal = {
+                "id": str(uuid.uuid4()),
+                "type": goal_type,
+                "target": target_value,
+                "start_date": start_date,
+                "end_date": end_date,
+                "created": datetime.now().isoformat()
+            }
+            
+            if goal_category == "song":
+                new_goal["song_name"] = song_name
+            
+            # Add to appropriate list
+            if goal_category in ["weekly", "monthly"]:
+                goal_list_key = "weekly_goals" if goal_category == "weekly" else "monthly_goals"
+                if goal_list_key not in goals_data:
+                    goals_data[goal_list_key] = []
+                goals_data[goal_list_key].append(new_goal)
+            elif goal_category == "song":
+                if "song_goals" not in goals_data:
+                    goals_data["song_goals"] = []
+                goals_data["song_goals"].append(new_goal)
+            
+            # Save and refresh
+            self._save_practice_goals(goals_data)
+            refresh_goals_table()
+            
+            # Show confirmation
+            QMessageBox.information(dialog, "Goal Created", "Your practice goal has been created successfully!")
+            
+            # Switch to Active Goals tab to see the new goal
+            tabs.setCurrentIndex(0)
+        
+        create_goal_btn.clicked.connect(create_new_goal)
+        
+        # Close button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        main_layout.addLayout(button_layout)
         
         dialog.exec()
 
