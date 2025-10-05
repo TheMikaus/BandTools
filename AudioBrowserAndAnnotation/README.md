@@ -20,8 +20,8 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Has an undo chain
 - **Recent Folders**: Quick access menu to recently opened practice folders for faster workflow. See [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) for details.
 - **Preferences Dialog**: Centralized application settings (undo limit, theme, etc.) with simplified toolbar. See [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) for details.
-- **Dark Mode Theme**: Choose between light and dark color themes for comfortable viewing in any lighting condition. Change theme in File → Preferences.
-- **Export Best Takes Package**: Export all your Best Take files along with annotations to a single ZIP file for easy archiving or sharing (File → Export Best Takes Package…).
+- **Dark Mode Theme**: Choose between light and dark color themes for comfortable viewing in any lighting condition. Change theme in File → Preferences. See [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) for detailed instructions.
+- **Export Best Takes Package**: Export all your Best Take files along with annotations to a single ZIP file for easy archiving or sharing (File → Export Best Takes Package…). See [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) for complete guide.
 - **Color Consistency**: Ensures consistent visual appearance across different machines and display setups
 - **Automatic Backup System**: Creates timestamped backups of metadata files before modifications
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software

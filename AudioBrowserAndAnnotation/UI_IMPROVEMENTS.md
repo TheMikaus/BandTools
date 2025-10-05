@@ -178,6 +178,7 @@ Many operations have keyboard shortcuts for even faster workflow. See **Help →
 
 ## Related Documentation
 
+- [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) - Step-by-step guide for new features (Dark Mode, Export Best Takes)
 - [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned and implemented interface improvements
 - [CHANGELOG.md](CHANGELOG.md) - Complete version history with all changes
 - [README.md](README.md) - Main application documentation
