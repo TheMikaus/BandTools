@@ -5,6 +5,18 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Annotation Categories/Tags**: Enhanced annotation system with category tagging for better organization
+  - Four predefined categories: ⏱️ Timing, ⚡ Energy, 🎵 Harmony, 📊 Dynamics
+  - Quick-access category buttons in Annotations tab for one-click categorization
+  - Color-coded category badges in annotation table for visual identification
+  - Category column added to annotation table (shows icon + label)
+  - Category filter dropdown to show only annotations of specific categories
+  - "No Category" filter option to find uncategorized annotations
+  - Categories persist with annotations in metadata files
+  - Categories included in annotation exports with labels
+  - Selected category automatically clears after adding annotation
+  - Makes it easy to filter and organize practice feedback by type
+  - Addresses Section 2.4 "Annotation Enhancements" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Enhanced Auto-Labeling Preview with Selective Application**: Improved fingerprint auto-labeling workflow with visual preview and confidence scores
   - Auto-labeling suggestions now shown in Library table with visual highlighting (light yellow background)
   - Confidence scores displayed for each suggestion (color-coded: green for high, yellow for medium, red for low)

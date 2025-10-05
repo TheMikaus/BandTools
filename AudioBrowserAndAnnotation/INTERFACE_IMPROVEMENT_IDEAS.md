@@ -263,34 +263,41 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 2.4 Annotation Enhancements
+### 2.4 Annotation Enhancements ✅ **IMPLEMENTED** (Categories/Tags)
 
 **Current State:**
 - Can add point annotations and clip annotations
 - Can mark as "important"
 - Export to text file
+- Categories/tags system with four predefined categories
+- Color-coded category badges in annotation table
+- Category filtering
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Annotation Categories:**
-   - Tag annotations: #timing, #energy, #harmony, #dynamics
-   - Filter by tag in table
-   - Color-code by category
-   - Quick buttons for common categories
+1. **Annotation Categories:** ✅
+   - Four predefined categories: ⏱️ Timing, ⚡ Energy, 🎵 Harmony, 📊 Dynamics
+   - Quick-access category buttons in Annotations tab
+   - Filter by category in table via dropdown
+   - Color-coded category badges (unique color per category)
+   - Category column in annotation table with icons and labels
+   - Categories persist in metadata and included in exports
+
+**Future Enhancement Ideas:**
 
 2. **Annotation Linking:**
-   - Link annotation to similar moment in another take
-   - "Compare with Take 2 at 1:30" button
-   - Visual connection on waveform
+   - 💡 Link annotation to similar moment in another take
+   - 💡 "Compare with Take 2 at 1:30" button
+   - 💡 Visual connection on waveform
 
 3. **Timestamp Formats:**
-   - Show timestamp in measures/beats if tempo known
-   - "Measure 2, Bar 4" as well as the time "2:15"
-   - Would require tempo/structure input (note: the "sections" specification in the meta data is the "structure" of the song, verse, verse2, chorus, prechorus, etc...)
+   - 💡 Show timestamp in measures/beats if tempo known
+   - 💡 "Measure 2, Bar 4" as well as the time "2:15"
+   - 💡 Would require tempo/structure input (note: the "sections" specification in the meta data is the "structure" of the song, verse, verse2, chorus, prechorus, etc...)
 
 4. **Annotation Export Formats:**
-   - Export to PDF
-   - Export to HTML with embedded player
+   - 💡 Export to PDF
+   - 💡 Export to HTML with embedded player
 
 **Why:** Annotations are core feature; making them more powerful enhances the review process.
 
@@ -673,7 +680,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 2. ✅ **A-B loop sections** for targeted practice (Section 3.4) - **IMPLEMENTED**
 3. ✅ **Practice statistics dashboard** (Section 3.1) - **IMPLEMENTED**
 4. ✅ **Improved auto-labeling preview** (Section 2.2) - **IMPLEMENTED**
-5. **Annotation categories/tags** (Section 2.4)
+5. ✅ **Annotation categories/tags** (Section 2.4) - **IMPLEMENTED**
 
 ### Long-Term Features (High Impact, Higher Effort):
 1. **Setlist builder** for performance prep (Section 3.2)
