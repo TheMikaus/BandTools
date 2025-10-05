@@ -5,6 +5,22 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Practice Goals**: Set and track practice goals to stay motivated and focused
+  - New "Practice Goals" dialog accessible via Help menu or Ctrl+Shift+G
+  - Create weekly/monthly practice time goals (in minutes)
+  - Create weekly/monthly session count goals
+  - Create per-song practice count goals
+  - Create per-song best take goals
+  - Visual progress bars show goal completion percentage
+  - Color-coded status indicators (green=complete, red=expired, blue/orange=in progress)
+  - Days remaining countdown for active goals
+  - Goal management tab for creating, viewing, and deleting goals
+  - Active goals tab shows current progress on all goals
+  - Goals persist across sessions in `.practice_goals.json` file
+  - Automatic goal progress calculation based on practice folder analysis
+  - Goal achievement notifications with celebratory messages
+  - Expired goals automatically filtered out after 7 days
+  - Implements Section 3.1.2 "Practice Goals" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Workspace Layouts**: Save and restore custom window and panel configurations
   - New "View" menu with layout management options
   - "Save Window Layout" (Ctrl+Shift+L) saves current window size and splitter position

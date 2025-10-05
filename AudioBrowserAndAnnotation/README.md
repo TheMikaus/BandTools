@@ -28,6 +28,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - **Automatic Backup System**: Creates timestamped backups of metadata files before modifications
 - **Backup Restoration**: Can restore any metadata file to a previous backed up version from within the software
 - **Practice Statistics**: Analyzes your practice folders to show which songs you've practiced, frequency, and recording counts. View comprehensive analytics via Help menu or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for complete guide.
+- **Practice Goals**: Set and track practice goals including weekly/monthly time goals, session count goals, and per-song practice goals. Visual progress indicators show how close you are to achieving your goals. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`. See [PRACTICE_GOALS_GUIDE.md](PRACTICE_GOALS_GUIDE.md) for complete user guide.
 
 # Expected Workflow
 - Have band practice. Record each song as a separate audio file.
@@ -38,6 +39,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Mark your favorite recordings as "Best Take" either from the Library tab or from the Annotations tab while listening.
 - Mark incomplete but potentially useful recordings as "Partial Take" for later reference.
 - **Practice Statistics**: Analyze your practice folders to see which songs you've practiced, how often, and when! Access via Help menu → "Practice Statistics" or `Ctrl+Shift+S`. See [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) for details.
+- **Practice Goals**: Set and track practice goals to stay motivated! Create weekly/monthly time goals, session count goals, or per-song practice goals. Visual progress bars show your progress and days remaining. Access via Help menu → "Practice Goals" or `Ctrl+Shift+G`.
 - **Note**: The application automatically creates backups of your metadata before making changes. If you need to restore previous annotations or song names, use "Restore from Backup..." from the toolbar.
 
 # Backup System
