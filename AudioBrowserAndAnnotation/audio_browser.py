@@ -192,7 +192,8 @@ SONG_RENAMES_JSON = ".song_renames.json"
 PRACTICE_STATS_JSON = ".practice_stats.json"
 PRACTICE_GOALS_JSON = ".practice_goals.json"
 SETLISTS_JSON = ".setlists.json"
-RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON, SETLISTS_JSON}
+TEMPO_JSON = ".tempo.json"
+RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON, SETLISTS_JSON, TEMPO_JSON}
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
@@ -4577,6 +4578,12 @@ class AudioBrowser(QMainWindow):
         self.provided_names: Dict[str, str] = {}
         self.played_durations: Dict[str, int] = self._load_duration_cache()
         
+        # Tempo tracking (BPM per file)
+        self.tempo_data: Dict[str, float] = {}  # {filename: bpm}
+        self.metronome_enabled: bool = False
+        self.metronome_thread: Optional[threading.Thread] = None
+        self.metronome_stop_event: Optional[threading.Event] = None
+        
         # Song rename tracking for propagation across folders
         self.song_renames: List[Dict[str, Any]] = []  # List of {old_name, new_name, timestamp}
         
@@ -4994,6 +5001,7 @@ class AudioBrowser(QMainWindow):
         self.played_durations = self._load_duration_cache()
         self.file_proxy.duration_cache = self.played_durations
         self._load_names(); self._load_song_renames(); self._load_notes(); self._ensure_uids()
+        self.tempo_data = self._load_tempo_data()  # Load tempo (BPM) data for current folder
         self._refresh_set_combo()
         self._refresh_right_table()
         self._load_annotations_for_current()
@@ -5744,6 +5752,30 @@ class AudioBrowser(QMainWindow):
         
         return songs_details
 
+    # ----- Tempo & Metronome Management -----
+    def _tempo_json_path(self) -> Path:
+        """Return path to tempo JSON file."""
+        return self.current_practice_folder / TEMPO_JSON
+    
+    def _load_tempo_data(self) -> Dict[str, float]:
+        """Load tempo data (BPM per file) from JSON.
+        
+        Returns dict with structure:
+        {filename: bpm}
+        """
+        tempo_data = load_json(self._tempo_json_path(), {}) or {}
+        return tempo_data
+    
+    def _save_tempo_data(self):
+        """Save tempo data to JSON file."""
+        save_json(self._tempo_json_path(), self.tempo_data)
+    
+    def _get_current_bpm(self) -> Optional[float]:
+        """Get BPM for currently playing file."""
+        if self.current_audio_file:
+            return self.tempo_data.get(self.current_audio_file.name)
+        return None
+
     # ----- UI -----
     def _init_ui(self):
         self.resize(1360, 900); self.setStatusBar(QStatusBar(self))
@@ -6237,13 +6269,14 @@ class AudioBrowser(QMainWindow):
         
         lib_layout.addWidget(self.fp_group)
         
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "BPM", "Provided Name (editable)"])
         hh = self.table.horizontalHeader(); hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # BPM
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Provided Name
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.SelectedClicked)
         # Enable multi-selection with Ctrl+Click and Shift+Click
@@ -8212,26 +8245,28 @@ class AudioBrowser(QMainWindow):
         # Adjust column count based on whether we're in auto-label preview mode
         if self.auto_label_in_progress:
             # Add columns for: Apply checkbox and Confidence
-            self.table.setColumnCount(7)
-            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)", "Apply?", "Confidence"])
+            self.table.setColumnCount(8)
+            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "BPM", "Provided Name (editable)", "Apply?", "Confidence"])
             hh = self.table.horizontalHeader()
             hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
             hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
             hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
-            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
-            hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Apply?
-            hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Confidence
+            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # BPM
+            hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Provided Name
+            hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Apply?
+            hh.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Confidence
         else:
             # Normal mode
-            self.table.setColumnCount(5)
-            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)"])
+            self.table.setColumnCount(6)
+            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "BPM", "Provided Name (editable)"])
             hh = self.table.horizontalHeader()
             hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
             hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
             hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
-            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
+            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # BPM
+            hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Provided Name
         
         self.table.blockSignals(True)
         self.table.setRowCount(len(files))
@@ -8286,11 +8321,17 @@ class AudioBrowser(QMainWindow):
             reviewed_cb.toggled.connect(lambda checked, filename=p.name: self._on_reviewed_toggled(filename, checked))
             reviewed_layout.addWidget(reviewed_cb)
             
+            # BPM item (editable)
+            bpm_value = self.tempo_data.get(p.name, 0)
+            item_bpm = QTableWidgetItem(f"{int(bpm_value)}" if bpm_value > 0 else "")
+            item_bpm.setToolTip("Double-click to edit BPM (Beats Per Minute)")
+            
             self.table.setItem(row, 0, item_file)
             self.table.setCellWidget(row, 1, reviewed_widget)  # Reviewed checkbox
             self.table.setCellWidget(row, 2, best_take_widget)  # Use setCellWidget for custom widget
             self.table.setCellWidget(row, 3, partial_take_widget)  # Use setCellWidget for custom widget  
-            self.table.setItem(row, 4, item_name)
+            self.table.setItem(row, 4, item_bpm)  # BPM
+            self.table.setItem(row, 5, item_name)
             
             # Add suggestion-specific columns if in preview mode
             if self.auto_label_in_progress and has_suggestion:
@@ -8305,7 +8346,7 @@ class AudioBrowser(QMainWindow):
                 apply_cb.setChecked(suggestion.get('selected', True))
                 apply_cb.toggled.connect(lambda checked, filename=p.name: self._on_suggestion_toggled(filename, checked))
                 apply_layout.addWidget(apply_cb)
-                self.table.setCellWidget(row, 5, apply_widget)
+                self.table.setCellWidget(row, 6, apply_widget)
                 
                 # Confidence score
                 confidence = suggestion['confidence']
@@ -8324,7 +8365,7 @@ class AudioBrowser(QMainWindow):
                     conf_item.setForeground(QColor(200, 0, 0))  # Red
                     
                 conf_item.setToolTip(f"Matched from: {suggestion.get('source_folder', 'Unknown')}")
-                self.table.setItem(row, 6, conf_item)
+                self.table.setItem(row, 7, conf_item)
             elif self.auto_label_in_progress:
                 # File without suggestion - leave cells empty
                 pass
@@ -8450,7 +8491,32 @@ class AudioBrowser(QMainWindow):
         if not file_item: return
         filename = self._strip_remote_prefix(file_item.text())
         
-        if item.column() == 3:  # Provided Name (editable) - now column 3
+        if item.column() == 4:  # BPM (editable)
+            bpm_text = item.text().strip()
+            if bpm_text:
+                try:
+                    bpm = float(bpm_text)
+                    if bpm > 0 and bpm <= 300:  # Reasonable BPM range
+                        self.tempo_data[filename] = bpm
+                        self._save_tempo_data()
+                        # Update display to show integer value
+                        item.setText(f"{int(bpm)}")
+                    else:
+                        # Invalid BPM, revert to previous value
+                        old_bpm = self.tempo_data.get(filename, 0)
+                        item.setText(f"{int(old_bpm)}" if old_bpm > 0 else "")
+                        QMessageBox.warning(self, "Invalid BPM", 
+                                          "BPM must be between 1 and 300.")
+                except ValueError:
+                    # Not a valid number, revert to previous value
+                    old_bpm = self.tempo_data.get(filename, 0)
+                    item.setText(f"{int(old_bpm)}" if old_bpm > 0 else "")
+            else:
+                # Empty string, remove BPM
+                if filename in self.tempo_data:
+                    del self.tempo_data[filename]
+                    self._save_tempo_data()
+        elif item.column() == 5:  # Provided Name (editable) - now column 5
             self.provided_names[filename] = sanitize(item.text())
             self._save_names()
 
