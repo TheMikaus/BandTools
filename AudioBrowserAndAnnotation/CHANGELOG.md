@@ -5,6 +5,20 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Recent Folders Menu**: Quick access to recently opened practice folders
+  - New "Recent Folders" submenu in File menu
+  - Lists up to 10 most recently opened practice folders
+  - Click folder name to quickly switch to that folder
+  - Shows folder name with full path in tooltip
+  - "Clear Recent Folders" option to reset the list
+  - Automatically filters out folders that no longer exist
+  - Implements Section 2.3.2 "Recent Folders" from INTERFACE_IMPROVEMENT_IDEAS.md
+- **Preferences Dialog**: Centralized application preferences
+  - New "Preferences" menu item in File menu
+  - Configure undo limit in a dedicated dialog (10-1000 operations)
+  - Cleaner toolbar with undo limit spinner removed
+  - Changes apply immediately and persist across sessions
+  - Implements Section 1.5.2 "Toolbar Simplification" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Annotation Categories/Tags**: Enhanced annotation system with category tagging for better organization
   - Four predefined categories: ⏱️ Timing, ⚡ Energy, 🎵 Harmony, 📊 Dynamics
   - Quick-access category buttons in Annotations tab for one-click categorization
@@ -177,6 +191,10 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Works seamlessly with existing cross-folder fingerprint matching system
 
 ### Changed
+- **Simplified Toolbar**: Removed Undo Limit spinner from toolbar for cleaner interface
+  - Undo limit setting moved to Preferences dialog (File menu → Preferences)
+  - Toolbar now shows only: Undo/Redo, Up navigation, Auto-switch checkbox, and Sync button
+  - Cleaner, less cluttered interface following Section 1.5.2 from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Hidden System Folders in File Tree**: The `.waveforms` folder is now hidden from the file tree display
   - `.waveforms` folder no longer appears in the file browser
   - Matches existing behavior for `.backup` and `.backups` folders
