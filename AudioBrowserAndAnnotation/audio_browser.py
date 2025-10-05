@@ -176,6 +176,7 @@ SETTINGS_KEY_AUTO_GEN_TIMING = "auto_generation_timing"  # "boot" or "folder_sel
 SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio_output_device"
 SETTINGS_KEY_GDRIVE_FOLDER = "gdrive_sync_folder"  # Google Drive folder name for sync
 SETTINGS_KEY_RECENT_FOLDERS = "recent_folders"  # List of recently opened practice folders
+SETTINGS_KEY_THEME = "color_theme"  # Color theme: "light" or "dark"
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 SESSION_STATE_JSON = ".session_state.json"
@@ -606,6 +607,7 @@ class ColorManager:
     
     def __init__(self):
         self._color_cache = {}
+        self._theme = "light"  # Default theme: "light" or "dark"
         
     def get_standardized_color(self, base_color: str, purpose: str = "general") -> QColor:
         """
@@ -673,29 +675,63 @@ class ColorManager:
     
     def get_waveform_colors(self) -> dict:
         """Get standardized waveform colors."""
-        return {
-            'background': self.get_standardized_color("#101114", "ui_accent"),
-            'axis': self.get_standardized_color("#2a2c31", "ui_accent"),
-            'left_channel': self.get_standardized_color("#58a6ff", "waveform"),
-            'right_channel': self.get_standardized_color("#ff6b58", "waveform"),
-            'playhead': self.get_standardized_color("#ff5555", "waveform"),
-            'selected': self.get_standardized_color("#ffa500", "selection"),
-            'message': self.get_standardized_color("#8a8f98", "text")
-        }
+        if self._theme == "dark":
+            return {
+                'background': self.get_standardized_color("#181a1f", "ui_accent"),
+                'axis': self.get_standardized_color("#353841", "ui_accent"),
+                'left_channel': self.get_standardized_color("#58a6ff", "waveform"),
+                'right_channel': self.get_standardized_color("#ff6b58", "waveform"),
+                'playhead': self.get_standardized_color("#ff6666", "waveform"),
+                'selected': self.get_standardized_color("#ffa500", "selection"),
+                'message': self.get_standardized_color("#9aa0a8", "text")
+            }
+        else:
+            return {
+                'background': self.get_standardized_color("#101114", "ui_accent"),
+                'axis': self.get_standardized_color("#2a2c31", "ui_accent"),
+                'left_channel': self.get_standardized_color("#58a6ff", "waveform"),
+                'right_channel': self.get_standardized_color("#ff6b58", "waveform"),
+                'playhead': self.get_standardized_color("#ff5555", "waveform"),
+                'selected': self.get_standardized_color("#ffa500", "selection"),
+                'message': self.get_standardized_color("#8a8f98", "text")
+            }
     
     def get_ui_colors(self) -> dict:
         """Get standardized UI element colors."""
-        return {
-            'success': self.get_standardized_color("#4CAF50", "ui_accent"),
-            'danger': self.get_standardized_color("#f44336", "ui_accent"),
-            'info': self.get_standardized_color("#2196F3", "ui_accent"),
-            'warning': self.get_standardized_color("#ff9800", "ui_accent"),
-            'text_secondary': self.get_standardized_color("#666666", "text"),
-            'text_muted': self.get_standardized_color("#999999", "text"),
-            'background_light': self.get_standardized_color("#f8f8f8", "ui_accent"),
-            'background_medium': self.get_standardized_color("#f0f0f0", "ui_accent"),
-            'border': self.get_standardized_color("#cccccc", "ui_accent")
-        }
+        if self._theme == "dark":
+            return {
+                'success': self.get_standardized_color("#66bb6a", "ui_accent"),
+                'danger': self.get_standardized_color("#ef5350", "ui_accent"),
+                'info': self.get_standardized_color("#42a5f5", "ui_accent"),
+                'warning': self.get_standardized_color("#ffa726", "ui_accent"),
+                'text_secondary': self.get_standardized_color("#b0b0b0", "text"),
+                'text_muted': self.get_standardized_color("#808080", "text"),
+                'background_light': self.get_standardized_color("#2a2a2a", "ui_accent"),
+                'background_medium': self.get_standardized_color("#353535", "ui_accent"),
+                'border': self.get_standardized_color("#505050", "ui_accent")
+            }
+        else:
+            return {
+                'success': self.get_standardized_color("#4CAF50", "ui_accent"),
+                'danger': self.get_standardized_color("#f44336", "ui_accent"),
+                'info': self.get_standardized_color("#2196F3", "ui_accent"),
+                'warning': self.get_standardized_color("#ff9800", "ui_accent"),
+                'text_secondary': self.get_standardized_color("#666666", "text"),
+                'text_muted': self.get_standardized_color("#999999", "text"),
+                'background_light': self.get_standardized_color("#f8f8f8", "ui_accent"),
+                'background_medium': self.get_standardized_color("#f0f0f0", "ui_accent"),
+                'border': self.get_standardized_color("#cccccc", "ui_accent")
+            }
+    
+    def set_theme(self, theme: str):
+        """Set the color theme (light or dark)."""
+        if theme in ("light", "dark"):
+            self._theme = theme
+            self._color_cache.clear()  # Clear cache to regenerate colors
+    
+    def get_theme(self) -> str:
+        """Get the current theme."""
+        return self._theme
 
 # Global color manager instance
 _color_manager = ColorManager()
@@ -3709,13 +3745,14 @@ class AutoGenerationSettingsDialog(QDialog):
 class PreferencesDialog(QDialog):
     """Dialog for application preferences."""
     
-    def __init__(self, current_undo_limit: int, parent=None):
+    def __init__(self, current_undo_limit: int, current_theme: str = "light", parent=None):
         super().__init__(parent)
         self.undo_limit = current_undo_limit
+        self.theme = current_theme
         
         self.setWindowTitle("Preferences")
         self.setModal(True)
-        self.resize(400, 200)
+        self.resize(450, 250)
         
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -3745,6 +3782,20 @@ class PreferencesDialog(QDialog):
         undo_row.addStretch(1)
         settings_layout.addLayout(undo_row)
         
+        # Theme setting
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(QLabel("Theme:"))
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Light", "light")
+        self.theme_combo.addItem("Dark", "dark")
+        # Set current theme
+        theme_idx = 0 if current_theme == "light" else 1
+        self.theme_combo.setCurrentIndex(theme_idx)
+        self.theme_combo.setToolTip("Select light or dark color theme (requires restart)")
+        theme_row.addWidget(self.theme_combo)
+        theme_row.addStretch(1)
+        settings_layout.addLayout(theme_row)
+        
         main_layout.addWidget(settings_group)
         main_layout.addStretch(1)
         
@@ -3764,13 +3815,18 @@ class PreferencesDialog(QDialog):
         main_layout.addLayout(button_layout)
     
     def accept(self):
-        """Handle OK button click - save undo limit."""
+        """Handle OK button click - save settings."""
         self.undo_limit = self.undo_spin.value()
+        self.theme = self.theme_combo.currentData()
         super().accept()
     
     def get_undo_limit(self):
         """Return the configured undo limit."""
         return self.undo_limit
+    
+    def get_theme(self):
+        """Return the configured theme."""
+        return self.theme
 
 
 # ========== Main window ==========
@@ -4088,6 +4144,11 @@ class AudioBrowser(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} - {VERSION_STRING}"); self._apply_app_icon()
 
         self.settings = QSettings(APP_ORG, APP_NAME)
+        
+        # Apply theme from settings
+        theme = self.settings.value(SETTINGS_KEY_THEME, "light")
+        _color_manager.set_theme(theme)
+        
         self.root_path: Path = self._load_root_silently()
         self.current_practice_folder: Path = self.root_path  # Initially same as root
         self._needs_root_selection: bool = not self._has_stored_root()
@@ -5124,6 +5185,10 @@ class AudioBrowser(QMainWindow):
         self.export_action = QAction("&Export Annotations…", self)
         self.export_action.triggered.connect(self._export_annotations)
         file_menu.addAction(self.export_action)
+        
+        self.export_best_takes_action = QAction("Export &Best Takes Package…", self)
+        self.export_best_takes_action.triggered.connect(self._export_best_takes_package)
+        file_menu.addAction(self.export_best_takes_action)
         
         file_menu.addSeparator()
         
@@ -9768,6 +9833,154 @@ class AudioBrowser(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Export Failed", f"Couldn't write file:\n{e}")
 
+    def _export_best_takes_package(self):
+        """Export all Best Take files along with their annotations to a ZIP package."""
+        from zipfile import ZipFile, ZIP_DEFLATED
+        from datetime import datetime
+        
+        # Find all files marked as Best Take
+        best_takes = []
+        for fname, fmeta in self.provided_names.items():
+            if fmeta.get("is_best_take", False):
+                fpath = self.current_practice_folder / fname
+                if fpath.exists():
+                    best_takes.append((fname, fpath, fmeta.get("provided_name", "")))
+        
+        if not best_takes:
+            QMessageBox.information(
+                self,
+                "No Best Takes",
+                "No files are marked as Best Take in this practice folder.\n\n"
+                "Mark some files as Best Take first, then try exporting again.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+        
+        # Ask user for export location
+        folder_name = self.current_practice_folder.name
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"{folder_name}_BestTakes_{timestamp}.zip"
+        default_path = str((self.current_practice_folder.parent / default_filename).resolve())
+        
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Best Takes Package",
+            default_path,
+            "ZIP Files (*.zip);;All Files (*)"
+        )
+        if not save_path:
+            return
+        
+        # Show progress dialog
+        progress = QProgressDialog("Preparing export...", "Cancel", 0, len(best_takes) + 2, self)
+        progress.setWindowTitle("Exporting Best Takes")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setValue(0)
+        
+        try:
+            with ZipFile(save_path, 'w', ZIP_DEFLATED) as zipf:
+                # Step 1: Create summary document
+                progress.setLabelText("Creating summary document...")
+                progress.setValue(1)
+                if progress.wasCanceled():
+                    return
+                
+                summary_lines = []
+                summary_lines.append(f"Best Takes Export from {folder_name}")
+                summary_lines.append(f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                summary_lines.append(f"Total files: {len(best_takes)}")
+                summary_lines.append("")
+                summary_lines.append("=" * 60)
+                summary_lines.append("")
+                
+                for i, (fname, fpath, provided_name) in enumerate(best_takes, 1):
+                    summary_lines.append(f"{i}. {fname}")
+                    if provided_name:
+                        summary_lines.append(f"   Song: {provided_name}")
+                    
+                    # Add annotations for this file
+                    has_annotations = False
+                    for s in self.annotation_sets:
+                        if not bool(s.get("visible", True)):
+                            continue
+                        meta = (s.get("files", {}) or {}).get(fname)
+                        if not meta:
+                            continue
+                        
+                        overview = (meta.get("general", "") or "").strip()
+                        notes = sorted(meta.get("notes", []) or [], key=lambda n: int(n.get("ms", 0)))
+                        
+                        if overview or notes:
+                            if not has_annotations:
+                                summary_lines.append("   Annotations:")
+                                has_annotations = True
+                            
+                            set_name = s.get("name", "Unknown Set")
+                            summary_lines.append(f"   [{set_name}]")
+                            
+                            if overview:
+                                for ln in overview.replace("\r\n", "\n").split("\n"):
+                                    summary_lines.append(f"     Overview: {ln.rstrip()}")
+                            
+                            for n in notes:
+                                ts = human_time_ms(int(n.get("ms", 0)))
+                                txt = str(n.get("text", "")).replace("\n", " ").strip()
+                                category = n.get("category", "")
+                                if category:
+                                    cat_label, _ = self._get_category_display(category)
+                                    summary_lines.append(f"     {ts} [{cat_label}] {txt}")
+                                else:
+                                    summary_lines.append(f"     {ts} {txt}")
+                    
+                    summary_lines.append("")
+                
+                # Write summary to ZIP
+                summary_content = "\n".join(summary_lines)
+                zipf.writestr("SUMMARY.txt", summary_content)
+                
+                # Step 2: Add audio files
+                for i, (fname, fpath, provided_name) in enumerate(best_takes, 1):
+                    progress.setLabelText(f"Adding {fname}... ({i}/{len(best_takes)})")
+                    progress.setValue(i + 1)
+                    if progress.wasCanceled():
+                        return
+                    
+                    # Add audio file
+                    zipf.write(fpath, arcname=f"audio/{fname}")
+                    
+                    # Add annotation file if it exists
+                    for s in self.annotation_sets:
+                        ann_fname = Path(s.get("file_path", "")).name
+                        ann_path = self.current_practice_folder / ann_fname
+                        if ann_path.exists() and ann_fname not in zipf.namelist():
+                            zipf.write(ann_path, arcname=f"annotations/{ann_fname}")
+                
+                progress.setValue(len(best_takes) + 2)
+            
+            # Success message
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"Best Takes package exported successfully!\n\n"
+                f"Files exported: {len(best_takes)}\n"
+                f"Package location:\n{save_path}\n\n"
+                f"The package includes:\n"
+                f"• All Best Take audio files\n"
+                f"• Annotation files\n"
+                f"• Summary document (SUMMARY.txt)",
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to create export package:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+        finally:
+            progress.close()
+
     # ----- Helper for single file rename with metadata updates -----
     def _rename_single_file(self, old_path: Path, new_path: Path) -> bool:
         """
@@ -10942,11 +11155,12 @@ class AudioBrowser(QMainWindow):
 
     def _show_preferences_dialog(self):
         """Show preferences dialog."""
-        # Get current undo limit
+        # Get current settings
         current_undo_limit = int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100))
+        current_theme = self.settings.value(SETTINGS_KEY_THEME, "light")
         
         # Show dialog
-        dialog = PreferencesDialog(current_undo_limit, self)
+        dialog = PreferencesDialog(current_undo_limit, current_theme, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Apply new undo limit
             new_undo_limit = dialog.get_undo_limit()
@@ -10961,6 +11175,20 @@ class AudioBrowser(QMainWindow):
                 self._undo_history.pop(0)
             
             log_print(f"Undo limit updated to: {new_undo_limit}")
+            
+            # Apply new theme
+            new_theme = dialog.get_theme()
+            if new_theme != current_theme:
+                self.settings.setValue(SETTINGS_KEY_THEME, new_theme)
+                log_print(f"Theme changed to: {new_theme}")
+                # Show message that restart is required
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Theme Changed",
+                    "Theme preference saved. Please restart the application for the theme change to take effect.",
+                    QMessageBox.StandardButton.Ok
+                )
 
     def _show_about_dialog(self):
         """Show About dialog with version information."""
@@ -12279,14 +12507,38 @@ def main():
     else:
         log_print(f"Using default Qt style (available: {', '.join(available_styles)})")
     
+    # Apply theme before creating the main window
+    # Load theme from settings
+    settings = QSettings(APP_ORG, APP_NAME)
+    theme = settings.value(SETTINGS_KEY_THEME, "light")
+    _color_manager.set_theme(theme)
+    
     # Apply consistent application-wide color scheme
     # This ensures consistent appearance regardless of system theme
     app_palette = app.palette()
     colors = _color_manager.get_ui_colors()
     
-    # Set standard colors for consistent appearance
-    app_palette.setColor(app_palette.ColorRole.Highlight, colors['info'])
-    app_palette.setColor(app_palette.ColorRole.HighlightedText, QColor("white"))
+    if theme == "dark":
+        # Apply dark theme palette
+        app_palette.setColor(app_palette.ColorRole.Window, QColor(colors['background_medium']))
+        app_palette.setColor(app_palette.ColorRole.WindowText, QColor("#e0e0e0"))
+        app_palette.setColor(app_palette.ColorRole.Base, QColor(colors['background_light']))
+        app_palette.setColor(app_palette.ColorRole.AlternateBase, QColor(colors['background_medium']))
+        app_palette.setColor(app_palette.ColorRole.ToolTipBase, QColor("#3a3a3a"))
+        app_palette.setColor(app_palette.ColorRole.ToolTipText, QColor("#e0e0e0"))
+        app_palette.setColor(app_palette.ColorRole.Text, QColor("#e0e0e0"))
+        app_palette.setColor(app_palette.ColorRole.Button, QColor(colors['background_medium']))
+        app_palette.setColor(app_palette.ColorRole.ButtonText, QColor("#e0e0e0"))
+        app_palette.setColor(app_palette.ColorRole.Link, QColor("#58a6ff"))
+        app_palette.setColor(app_palette.ColorRole.Highlight, colors['info'])
+        app_palette.setColor(app_palette.ColorRole.HighlightedText, QColor("white"))
+        log_print("Dark theme applied")
+    else:
+        # Apply light theme (default)
+        app_palette.setColor(app_palette.ColorRole.Highlight, colors['info'])
+        app_palette.setColor(app_palette.ColorRole.HighlightedText, QColor("white"))
+        log_print("Light theme applied")
+    
     app.setPalette(app_palette)
     
     w = AudioBrowser(); w.show(); sys.exit(app.exec())
