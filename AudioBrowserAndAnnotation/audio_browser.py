@@ -11706,8 +11706,10 @@ class AudioBrowser(QMainWindow):
             # Update the undo capacity in the history
             self._undo_capacity = new_undo_limit
             # Trim undo history if new limit is smaller
-            while len(self._undo_history) > self._undo_capacity:
-                self._undo_history.pop(0)
+            overflow = len(self._undo_stack) - self._undo_capacity
+            if overflow > 0:
+                del self._undo_stack[0:overflow]
+                self._undo_index = max(0, self._undo_index - overflow)
             
             log_print(f"Undo limit updated to: {new_undo_limit}")
             
