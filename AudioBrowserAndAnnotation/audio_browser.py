@@ -2814,6 +2814,9 @@ class WaveformView(QWidget):
         # A-B Loop markers (separate from clip export markers)
         self._loop_start_ms: Optional[int] = None
         self._loop_end_ms: Optional[int] = None
+        
+        # Tempo markers (BPM-based measure lines)
+        self._tempo_bpm: Optional[float] = None
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -2846,6 +2849,11 @@ class WaveformView(QWidget):
         """Set the A-B loop markers to be displayed on the waveform."""
         self._loop_start_ms = start_ms
         self._loop_end_ms = end_ms
+        self.update()
+    
+    def set_tempo(self, bpm: Optional[float]):
+        """Set the tempo (BPM) for displaying measure markers on the waveform."""
+        self._tempo_bpm = bpm
         self.update()
 
     def clear(self):
@@ -3295,6 +3303,40 @@ class WaveformView(QWidget):
                     painter.setPen(QPen(QColor("#00bfff")))
                     painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
                     painter.drawText(int(loop_end_x) - 15, 15, "B")
+        
+        # Tempo markers (measure lines based on BPM)
+        if self._tempo_bpm is not None and self._tempo_bpm > 0 and self._duration_ms > 0:
+            # Calculate milliseconds per measure (assuming 4/4 time signature)
+            # 1 measure = 4 beats, so ms_per_measure = (60000 / bpm) * 4
+            ms_per_measure = (60000.0 / self._tempo_bpm) * 4.0
+            
+            # Draw measure lines every measure
+            measure_num = 0
+            while True:
+                measure_ms = int(measure_num * ms_per_measure)
+                if measure_ms > self._duration_ms:
+                    break
+                
+                measure_x = self._ms_to_x(measure_ms)
+                if 0 <= measure_x <= self.width():
+                    # Draw measure line (subtle gray, dashed)
+                    measure_pen = QPen(QColor("#888888"))
+                    measure_pen.setWidth(1)
+                    measure_pen.setStyle(Qt.PenStyle.DashLine)
+                    painter.setPen(measure_pen)
+                    painter.drawLine(int(measure_x), 0, int(measure_x), self.height())
+                    
+                    # Draw measure number at the top (every 4th measure to avoid clutter)
+                    if measure_num % 4 == 0 and measure_num > 0:
+                        painter.setPen(QPen(QColor("#666666")))
+                        painter.setFont(QFont("Arial", 8))
+                        painter.drawText(int(measure_x) + 2, 12, f"M{measure_num}")
+                
+                measure_num += 1
+                
+                # Safety check: stop if we've drawn too many lines
+                if measure_num > 1000:
+                    break
 
         # Playhead
         dur = self._effective_duration()
@@ -7832,6 +7874,7 @@ class AudioBrowser(QMainWindow):
                 self._update_channel_muting_state()  # Update channel muting state even on error
             self._update_waveform_annotations()
             self._load_loop_markers()  # Load loop markers for this file
+            self._update_waveform_tempo()  # Update tempo markers on waveform
         else:
             # Defer expensive operations when not on annotations tab and not auto-switching
             # Use QTimer.singleShot to defer waveform and annotation loading
@@ -7856,6 +7899,8 @@ class AudioBrowser(QMainWindow):
                 self.waveform.clear()
                 self._update_stereo_button_state()  # Update button state even on error
                 self._update_channel_muting_state()  # Update channel muting state even on error
+            self._load_loop_markers()  # Load loop markers for this file (if not already loaded earlier)
+            self._update_waveform_tempo()  # Update tempo markers on waveform
             self._update_waveform_annotations()
             self._load_loop_markers()  # Load loop markers for this file
 
@@ -8501,6 +8546,9 @@ class AudioBrowser(QMainWindow):
                         self._save_tempo_data()
                         # Update display to show integer value
                         item.setText(f"{int(bpm)}")
+                        # Update waveform if this is the current file
+                        if self.current_audio_file and self.current_audio_file.name == filename:
+                            self._update_waveform_tempo()
                     else:
                         # Invalid BPM, revert to previous value
                         old_bpm = self.tempo_data.get(filename, 0)
@@ -8516,6 +8564,9 @@ class AudioBrowser(QMainWindow):
                 if filename in self.tempo_data:
                     del self.tempo_data[filename]
                     self._save_tempo_data()
+                    # Update waveform if this is the current file
+                    if self.current_audio_file and self.current_audio_file.name == filename:
+                        self._update_waveform_tempo()
         elif item.column() == 5:  # Provided Name (editable) - now column 5
             self.provided_names[filename] = sanitize(item.text())
             self._save_names()
@@ -9809,6 +9860,18 @@ class AudioBrowser(QMainWindow):
                 pairs = [(int(n.get("uid",0)), int(n.get("ms",0))) for n in (meta.get("notes") or [])]
             payload[s["id"]] = {"color": s.get("color","#00cc66"), "visible": bool(s.get("visible",True)), "pairs": pairs}
         self.waveform.set_annotations_multi(payload)
+    
+    def _update_waveform_tempo(self):
+        """Update the waveform to display tempo markers based on current file's BPM."""
+        if not self.current_audio_file:
+            self.waveform.set_tempo(None)
+            return
+        
+        # Get BPM for current file
+        fname = self.current_audio_file.name
+        bpm = self.tempo_data.get(fname)
+        self.waveform.set_tempo(bpm)
+    
     # ----- Issue #4: event filter for waveform Shift+click selection -----
     def eventFilter(self, obj, event):
         try:
