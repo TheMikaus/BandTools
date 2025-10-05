@@ -205,29 +205,31 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 2.2 Improved Auto-Labeling Workflow
+### 2.2 Improved Auto-Labeling Workflow ✅ **IMPLEMENTED**
 
 **Current State:**
-- Auto-labeling requires Generate Fingerprints → Auto-Label → Apply/Cancel
-- Can't easily review suggestions before applying
+- Auto-labeling with preview, confidence scores, and selective application implemented
+- Visual preview in Library table with color highlighting
+- Individual checkboxes for selective application
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Preview Mode:**
-   - Show suggested names in Library table with different color/icon
-   - Allow editing suggestions before applying
-   - Show confidence score (70%, 85%, etc.)
+1. **Preview Mode:** ✅
+   - Show suggested names in Library table with different color/icon (light yellow background)
+   - Confidence score displayed for each suggestion (color-coded by confidence level)
+   - Suggestions default to selected, allowing easy deselection
 
-2. **Partial Application:**
-   - Checkboxes next to each suggestion
-   - Apply only selected suggestions
-   - "Apply all >80% confidence" button
+2. **Partial Application:** ✅
+   - Checkboxes next to each suggestion for selective application
+   - Apply only selected suggestions via "Apply Selected" button
+   - "Select All ≥X% confidence" button with adjustable confidence threshold slider
+   - Confidence threshold control (0-100%) to filter suggestions
 
 3. **Multi-Algorithm Consensus:**
-   - Run many algorithms, show when they agree
-   - Higher confidence when multiple algorithms agree
-   - Warning when algorithms disagree
-   - Allow the user to specify which algorithms to use at one time
+   - 💡 Run many algorithms, show when they agree (future enhancement)
+   - 💡 Higher confidence when multiple algorithms agree (future enhancement)
+   - 💡 Warning when algorithms disagree (future enhancement)
+   - 💡 Allow the user to specify which algorithms to use at one time (future enhancement)
 
 **Why:** Makes auto-labeling less all-or-nothing; builds trust through transparency.
 
@@ -670,7 +672,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
 2. ✅ **A-B loop sections** for targeted practice (Section 3.4) - **IMPLEMENTED**
 3. ✅ **Practice statistics dashboard** (Section 3.1) - **IMPLEMENTED**
-4. **Improved auto-labeling preview** (Section 2.2)
+4. ✅ **Improved auto-labeling preview** (Section 2.2) - **IMPLEMENTED**
 5. **Annotation categories/tags** (Section 2.4)
 
 ### Long-Term Features (High Impact, Higher Effort):

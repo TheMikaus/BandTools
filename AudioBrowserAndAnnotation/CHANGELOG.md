@@ -5,6 +5,17 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Enhanced Auto-Labeling Preview with Selective Application**: Improved fingerprint auto-labeling workflow with visual preview and confidence scores
+  - Auto-labeling suggestions now shown in Library table with visual highlighting (light yellow background)
+  - Confidence scores displayed for each suggestion (color-coded: green for high, yellow for medium, red for low)
+  - Individual checkboxes to selectively apply suggestions on a per-file basis
+  - Confidence threshold slider (0-100%) to filter suggestions by minimum confidence
+  - "Select All ≥X%" button to automatically select all suggestions meeting the confidence threshold
+  - "Apply Selected" button applies only the checked suggestions
+  - Suggestions show source folder in tooltip for transparency
+  - All suggestions default to selected, allowing easy deselection of unwanted matches
+  - Makes auto-labeling less all-or-nothing and builds trust through transparency
+  - Fully integrated with existing Apply/Cancel workflow
 - **Practice Statistics Dashboard**: Comprehensive practice tracking and analytics
   - Track total practice time across all sessions
   - View current session duration in real-time

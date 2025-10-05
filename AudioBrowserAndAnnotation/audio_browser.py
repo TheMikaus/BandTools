@@ -4158,6 +4158,7 @@ class AudioBrowser(QMainWindow):
         # Auto-labeling state management
         self.auto_label_in_progress: bool = False
         self.auto_label_backup_names: Dict[str, str] = {}
+        self.auto_label_suggestions: Dict[str, Dict[str, Any]] = {}  # filename -> {suggested_name, confidence, selected}
 
         # Auto-generation preferences
         self.auto_gen_waveforms: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, 0)))
@@ -5372,8 +5373,31 @@ class AudioBrowser(QMainWindow):
         
         # Apply/Cancel buttons for auto-labeling (initially hidden)
         self.auto_label_buttons_row = QHBoxLayout()
+        
+        # Confidence filter controls
+        conf_label = QLabel("Min Confidence:")
+        self.auto_label_buttons_row.addWidget(conf_label)
+        
+        self.auto_label_conf_slider = QSlider(Qt.Orientation.Horizontal)
+        self.auto_label_conf_slider.setMinimum(0)
+        self.auto_label_conf_slider.setMaximum(100)
+        self.auto_label_conf_slider.setValue(80)
+        self.auto_label_conf_slider.setMaximumWidth(150)
+        self.auto_label_conf_slider.valueChanged.connect(self._on_confidence_threshold_changed)
+        self.auto_label_buttons_row.addWidget(self.auto_label_conf_slider)
+        
+        self.auto_label_conf_display = QLabel("80%")
+        self.auto_label_conf_display.setMinimumWidth(40)
+        self.auto_label_buttons_row.addWidget(self.auto_label_conf_display)
+        
+        select_all_btn = QPushButton("Select All ≥80%")
+        select_all_btn.clicked.connect(self._on_select_by_confidence)
+        self.auto_label_buttons_row.addWidget(select_all_btn)
+        self.auto_label_select_all_btn = select_all_btn  # Store reference for updating label
+        
         self.auto_label_buttons_row.addStretch(1)  # Push buttons to the right
-        self.auto_label_apply_btn = QPushButton("Apply")
+        
+        self.auto_label_apply_btn = QPushButton("Apply Selected")
         self.auto_label_apply_btn.clicked.connect(self._on_auto_label_apply)
         colors = get_consistent_stylesheet_colors()
         self.auto_label_apply_btn.setStyleSheet(f"QPushButton {{ background-color: {colors['success']}; color: white; font-weight: bold; }}")
@@ -7299,11 +7323,39 @@ class AudioBrowser(QMainWindow):
     
     def _refresh_right_table(self):
         files = self._list_audio_in_current_dir()
-        self.table.blockSignals(True); self.table.setRowCount(len(files))
+        
+        # Adjust column count based on whether we're in auto-label preview mode
+        if self.auto_label_in_progress:
+            # Add columns for: Apply checkbox and Confidence
+            self.table.setColumnCount(7)
+            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)", "Apply?", "Confidence"])
+            hh = self.table.horizontalHeader()
+            hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
+            hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
+            hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
+            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
+            hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Apply?
+            hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Confidence
+        else:
+            # Normal mode
+            self.table.setColumnCount(5)
+            self.table.setHorizontalHeaderLabels(["File", "Reviewed", "Best Take", "Partial Take", "Provided Name (editable)"])
+            hh = self.table.horizontalHeader()
+            hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Reviewed
+            hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Best Take
+            hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Partial Take
+            hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Provided Name
+        
+        self.table.blockSignals(True)
+        self.table.setRowCount(len(files))
+        
         for row, p in enumerate(files):
             # Add "R " prefix if file exists on remote
             display_name = f"R {p.name}" if p.name in self.remote_files else p.name
-            item_file = QTableWidgetItem(display_name); item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
+            item_file = QTableWidgetItem(display_name)
+            item_file.setFlags(item_file.flags() ^ Qt.ItemFlag.ItemIsEditable)
             
             # Get all best takes for this file from all visible annotation sets
             best_take_sets = self._get_all_best_takes_for_file(p.name)
@@ -7319,7 +7371,12 @@ class AudioBrowser(QMainWindow):
             partial_take_widget = PartialTakeIndicatorWidget(partial_take_sets, self.current_set_id, self.table)
             partial_take_widget.on_partial_take_clicked = lambda row=row: self._on_partial_take_widget_clicked(row)
             
-            item_name = QTableWidgetItem(self.provided_names.get(p.name, "")); item_name.setToolTip("Double-click to edit your Provided Name")
+            item_name = QTableWidgetItem(self.provided_names.get(p.name, ""))
+            item_name.setToolTip("Double-click to edit your Provided Name")
+            
+            # Check if this file has a suggestion in preview mode
+            has_suggestion = p.name in self.auto_label_suggestions
+            suggestion_color = QColor(255, 255, 200)  # Light yellow for suggestions
             
             # Set light background for files with any best takes or partial takes
             if best_take_sets or partial_take_sets:
@@ -7329,6 +7386,10 @@ class AudioBrowser(QMainWindow):
                     light_color = QColor(255, 248, 220)  # Very light yellow for partial takes
                 item_file.setBackground(light_color)
                 item_name.setBackground(light_color)
+            elif has_suggestion:
+                # Highlight suggested files with a different color
+                item_file.setBackground(suggestion_color)
+                item_name.setBackground(suggestion_color)
             
             # Create reviewed checkbox
             reviewed_widget = QWidget()
@@ -7345,6 +7406,44 @@ class AudioBrowser(QMainWindow):
             self.table.setCellWidget(row, 2, best_take_widget)  # Use setCellWidget for custom widget
             self.table.setCellWidget(row, 3, partial_take_widget)  # Use setCellWidget for custom widget  
             self.table.setItem(row, 4, item_name)
+            
+            # Add suggestion-specific columns if in preview mode
+            if self.auto_label_in_progress and has_suggestion:
+                suggestion = self.auto_label_suggestions[p.name]
+                
+                # Apply checkbox
+                apply_widget = QWidget()
+                apply_layout = QHBoxLayout(apply_widget)
+                apply_layout.setContentsMargins(0, 0, 0, 0)
+                apply_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                apply_cb = QCheckBox()
+                apply_cb.setChecked(suggestion.get('selected', True))
+                apply_cb.toggled.connect(lambda checked, filename=p.name: self._on_suggestion_toggled(filename, checked))
+                apply_layout.addWidget(apply_cb)
+                self.table.setCellWidget(row, 5, apply_widget)
+                
+                # Confidence score
+                confidence = suggestion['confidence']
+                conf_item = QTableWidgetItem(f"{confidence:.0%}")
+                conf_item.setFlags(conf_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+                conf_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                
+                # Color code confidence: green for high, yellow for medium, red for low
+                if confidence >= 0.90:
+                    conf_item.setForeground(QColor(0, 128, 0))  # Dark green
+                elif confidence >= 0.80:
+                    conf_item.setForeground(QColor(100, 150, 0))  # Yellow-green
+                elif confidence >= 0.70:
+                    conf_item.setForeground(QColor(200, 100, 0))  # Orange
+                else:
+                    conf_item.setForeground(QColor(200, 0, 0))  # Red
+                    
+                conf_item.setToolTip(f"Matched from: {suggestion.get('source_folder', 'Unknown')}")
+                self.table.setItem(row, 6, conf_item)
+            elif self.auto_label_in_progress:
+                # File without suggestion - leave cells empty
+                pass
+                
         self.table.blockSignals(False)
 
     def _on_best_take_widget_clicked(self, row: int):
@@ -10321,7 +10420,16 @@ class AudioBrowser(QMainWindow):
             if match_result:
                 matched_filename, score, source_folder, provided_name = match_result
                 
-                # Use the provided name from the matched fingerprint's folder
+                # Store suggestion for preview
+                self.auto_label_suggestions[audio_file.name] = {
+                    'suggested_name': provided_name,
+                    'confidence': score,
+                    'selected': True,  # Default to selected
+                    'source_folder': source_folder.name,
+                    'matched_file': matched_filename
+                }
+                
+                # Use the provided name from the matched fingerprint's folder (for preview)
                 self.provided_names[audio_file.name] = provided_name
                 matches_found += 1
                 
@@ -10381,17 +10489,56 @@ class AudioBrowser(QMainWindow):
             
             QMessageBox.information(self, "Auto-Labeling Complete", result_message)
 
-    def _on_auto_label_apply(self):
-        """Apply the auto-labeling changes and hide the apply/cancel buttons."""
+    def _on_suggestion_toggled(self, filename: str, checked: bool):
+        """Handle toggling of suggestion apply checkbox."""
+        if filename in self.auto_label_suggestions:
+            self.auto_label_suggestions[filename]['selected'] = checked
+    
+    def _on_confidence_threshold_changed(self, value: int):
+        """Update the confidence threshold display and select button label."""
+        self.auto_label_conf_display.setText(f"{value}%")
+        self.auto_label_select_all_btn.setText(f"Select All ≥{value}%")
+    
+    def _on_select_by_confidence(self):
+        """Select all suggestions that meet the confidence threshold."""
         if not self.auto_label_in_progress:
             return
-            
+        
+        threshold = self.auto_label_conf_slider.value() / 100.0
+        selected_count = 0
+        
+        for filename, suggestion in self.auto_label_suggestions.items():
+            if suggestion['confidence'] >= threshold:
+                suggestion['selected'] = True
+                selected_count += 1
+            else:
+                suggestion['selected'] = False
+        
+        # Refresh the table to show updated selections
+        self._refresh_right_table()
+        
+        QMessageBox.information(self, "Selection Updated", 
+                              f"Selected {selected_count} suggestions with confidence ≥{threshold:.0%}")
+    
+    def _on_auto_label_apply(self):
+        """Apply the selected auto-labeling changes and hide the apply/cancel buttons."""
+        if not self.auto_label_in_progress:
+            return
+        
+        # Apply only selected suggestions
+        applied_count = 0
+        for filename, suggestion in self.auto_label_suggestions.items():
+            if suggestion.get('selected', False):
+                self.provided_names[filename] = suggestion['suggested_name']
+                applied_count += 1
+        
         # Save the changes
         self._save_names()
         
         # Reset state
         self.auto_label_in_progress = False
         self.auto_label_backup_names.clear()
+        self.auto_label_suggestions.clear()
         self.auto_label_buttons_widget.setVisible(False)
         
         # Update UI state
@@ -10399,7 +10546,7 @@ class AudioBrowser(QMainWindow):
         
         # Show confirmation
         QMessageBox.information(self, "Changes Applied", 
-                              "Auto-labeling changes have been saved successfully.")
+                              f"Successfully applied {applied_count} auto-labeling suggestions.")
 
     def _on_auto_label_cancel(self):
         """Cancel the auto-labeling changes and restore the previous state."""
@@ -10413,6 +10560,7 @@ class AudioBrowser(QMainWindow):
         # Reset state
         self.auto_label_in_progress = False
         self.auto_label_backup_names.clear()
+        self.auto_label_suggestions.clear()
         self.auto_label_buttons_widget.setVisible(False)
         
         # Update UI state
