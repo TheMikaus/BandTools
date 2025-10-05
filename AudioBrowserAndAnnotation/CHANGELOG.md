@@ -5,6 +5,25 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Workspace Layouts**: Save and restore custom window and panel configurations
+  - New "View" menu with layout management options
+  - "Save Window Layout" (Ctrl+Shift+L) saves current window size and splitter position
+  - "Restore Window Layout" (Ctrl+Shift+R) restores saved layout
+  - "Reset to Default Layout" returns to original 1360x900 size and 40:60 splitter ratio
+  - Saved layout automatically restored on application startup
+  - Layout settings persist in QSettings
+  - Allows users to optimize workspace for their screen and workflow
+  - Implements Section 2.3.3 "Workspace Layouts" from INTERFACE_IMPROVEMENT_IDEAS.md
+- **Status Bar Progress Indicators**: Visual progress feedback for background operations
+  - Progress bar in status bar (right side) shows percentage completion
+  - Progress label shows operation name, file count, and current filename
+  - Progress indicators appear during waveform generation
+  - Progress indicators appear during fingerprint generation
+  - Auto-hides when operations complete or are canceled
+  - Non-intrusive design doesn't interfere with other status messages
+  - Long filenames truncated to prevent layout issues
+  - Reduces user uncertainty during long operations
+  - Implements Section 1.5.3 "Status Bar Progress Indicators" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Dark Mode Theme**: Full dark color theme support for improved usability in low-light environments
   - Theme selection in Preferences dialog (Light/Dark)
   - Dark theme applies to all UI elements, waveforms, and dialogs

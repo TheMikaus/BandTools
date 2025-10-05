@@ -157,13 +157,16 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Toolbar Simplification:** ✅ **IMPLEMENTED**
    - Move Undo Limit spinner to Preferences dialog
 
-3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics)
+3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics, Progress Indicators)
    - ✅ Show more context: "12 files | 5 reviewed | 3 without names | 2 best takes | 1 partial take"
    - ✅ Automatically updates when files are marked, named, or reviewed
    - ✅ Comprehensive file statistics at a glance
+   - ✅ **Progress Indicators**: Visual progress bars for waveform and fingerprint generation
+     - Shows operation name, current/total files, and current filename
+     - Progress bar with percentage completion
+     - Auto-hides when operation completes
    
 **Future Enhancements:**
-   - 💡 Show current operation progress (waveform generation, fingerprinting)
    - 💡 Clickable status items to filter/navigate
 
 **Why:** Reduces cognitive load for new users; power users can enable advanced features.
@@ -235,7 +238,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 2.3 Session Management ✅ **IMPLEMENTED** (Reviewed Tracking, Recent Folders)
+### 2.3 Session Management ✅ **IMPLEMENTED** (Reviewed Tracking, Recent Folders, Workspace Layouts)
 
 **Current State:**
 - Each practice folder is independent
@@ -254,10 +257,13 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Pin favorite folders to top (accessible via submenu)
    - Show last modified date (shown in tooltip)
 
-3. **Workspace Layouts:**
-   - Save tab positions, splitter sizes, visible columns
-   - "Band practice layout" vs "Solo review layout"
-   - Quick switch between layouts
+3. **Workspace Layouts:** ✅ **IMPLEMENTED**
+   - ✅ Save window geometry and splitter sizes
+   - ✅ Persistent layouts across sessions
+   - ✅ "Save Window Layout" (Ctrl+Shift+L)
+   - ✅ "Restore Window Layout" (Ctrl+Shift+R)
+   - ✅ "Reset to Default Layout" option
+   - 💡 Multiple named layout presets (future enhancement)
 
 **Why:** Supports the weekly review workflow; reduces setup time when returning to work.
 
@@ -683,6 +689,8 @@ Based on potential impact vs. implementation effort, here are top recommendation
 6. ✅ **Recent folders menu** for quick folder access (Section 2.3.2) - **IMPLEMENTED**
 7. ✅ **Toolbar simplification** (move undo limit to preferences) (Section 1.5.2) - **IMPLEMENTED**
 8. ✅ **Dark mode theme** for better visibility in low-light conditions (Section 4.1.2) - **IMPLEMENTED**
+9. ✅ **Workspace layouts** for persistent window/panel configuration (Section 2.3.3) - **IMPLEMENTED**
+10. ✅ **Status bar progress indicators** for background operations (Section 1.5.3) - **IMPLEMENTED**
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
