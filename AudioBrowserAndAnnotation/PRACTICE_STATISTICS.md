@@ -150,7 +150,7 @@ Bottom 5 songs that might need more attention:
 - A: Statistics are stored in `.practice_stats.json` in each practice folder. You can delete this file to reset (but you'll lose all history). Alternatively, edit the JSON file directly for manual adjustments.
 
 **Q: Do statistics sync across computers?**
-- A: If you're using Google Drive sync, the `.practice_stats.json` file will sync automatically as part of the metadata files.
+- A: No, practice statistics are intentionally local-only (not synced via Google Drive). This allows each band member to track their own practice time independently. If you want to share statistics, you can manually copy the `.practice_stats.json` file.
 
 **Q: What if I practice in multiple folders?**
 - A: Each practice folder maintains independent statistics. This is intentional - you might have separate projects or time periods you want to track separately.
