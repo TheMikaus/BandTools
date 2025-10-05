@@ -167,7 +167,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 2. **Toolbar Simplification:** ✅ **IMPLEMENTED**
    - Move Undo Limit spinner to Preferences dialog
 
-3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics, Progress Indicators)
+3. **Status Bar Improvements:** ✅ **IMPLEMENTED** (Enhanced Statistics, Progress Indicators, Clickable Items)
    - ✅ Show more context: "12 files | 5 reviewed | 3 without names | 2 best takes | 1 partial take"
    - ✅ Automatically updates when files are marked, named, or reviewed
    - ✅ Comprehensive file statistics at a glance
@@ -175,9 +175,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
      - Shows operation name, current/total files, and current filename
      - Progress bar with percentage completion
      - Auto-hides when operation completes
-   
-**Future Enhancements:**
-   - 💡 Clickable status items to filter/navigate
+   - ✅ **Clickable Status Items**: Click statistics to filter/navigate
+     - Click "X reviewed" to see list of reviewed files
+     - Click "X without names" to jump to Library tab and see files needing names
+     - Click "X best takes" to jump to Library tab and see best take files
+     - Click "X partial takes" to jump to Library tab and see partial take files
+     - Visual feedback with underlined blue text, hand cursor, and bold on hover
 
 **Why:** Reduces cognitive load for new users; power users can enable advanced features.
 
@@ -718,6 +721,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 9. ✅ **Workspace layouts** for persistent window/panel configuration (Section 2.3.3) - **IMPLEMENTED**
 10. ✅ **Status bar progress indicators** for background operations (Section 1.5.3) - **IMPLEMENTED**
 11. ✅ **Now Playing Panel** for persistent playback and quick annotations (Section 1.4) - **IMPLEMENTED**
+12. ✅ **Clickable status items** for quick filtering and navigation (Section 1.5.3) - **IMPLEMENTED**
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
