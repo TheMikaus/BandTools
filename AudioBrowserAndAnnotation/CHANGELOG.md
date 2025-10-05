@@ -5,6 +5,21 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Now Playing Panel**: Persistent playback and annotation controls accessible from any tab
+  - Always-visible compact panel positioned below player bar and above tabs
+  - Shows current file name with music note icon (♪)
+  - Mini waveform display with visual progress indicator
+  - Play/pause button synchronized with main player controls
+  - Time display showing current position and total duration
+  - Quick annotation entry: type note and press Enter to add at current position
+  - "Add Note" button for mouse-based annotation adding
+  - Collapsible/expandable panel with ▼/▶ toggle button
+  - Panel state (collapsed/expanded) persists across application sessions
+  - Reduces need to switch to Annotations tab during playback
+  - Enables quick annotation workflow without interrupting review process
+  - Seamlessly integrates with existing annotation system (undo, categories work as expected)
+  - Panel automatically updates when files are loaded or playback stops
+  - Implements Section 1.4 "Unified Now Playing Panel" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Setlist Builder**: Complete performance preparation and setlist management system
   - New "Setlist Builder" dialog accessible via Tools menu or Ctrl+Shift+T
   - Create, rename, and delete named setlists (e.g., "Summer Tour 2024")
