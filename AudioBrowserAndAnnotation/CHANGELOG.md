@@ -5,6 +5,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Dark Mode Theme**: Full dark color theme support for improved usability in low-light environments
+  - Theme selection in Preferences dialog (Light/Dark)
+  - Dark theme applies to all UI elements, waveforms, and dialogs
+  - Separate color schemes for light and dark themes via ColorManager
+  - Theme preference persists across sessions
+  - Requires application restart to apply theme changes
+  - Implements Section 4.1.2 "Dark Mode" from INTERFACE_IMPROVEMENT_IDEAS.md
+- **Export Best Takes Package**: Export all Best Take files with annotations as a ZIP package
+  - New "Export Best Takes Package…" menu item in File menu
+  - Creates ZIP file containing:
+    - All Best Take audio files (in audio/ folder)
+    - All annotation files (in annotations/ folder)
+    - Summary document (SUMMARY.txt) with song list and all annotations
+  - Progress dialog shows export status
+  - Organized folder structure within ZIP for easy navigation
+  - Timestamped filename includes practice folder name
+  - Perfect for archiving or sharing your best performances
+  - Implements Section 3.7.2 "Practice Package" from INTERFACE_IMPROVEMENT_IDEAS.md
 - **Recent Folders Menu**: Quick access to recently opened practice folders
   - New "Recent Folders" submenu in File menu
   - Lists up to 10 most recently opened practice folders

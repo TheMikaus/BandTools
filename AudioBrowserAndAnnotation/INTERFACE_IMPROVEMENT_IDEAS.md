@@ -497,25 +497,30 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 3.7 Export & Sharing for Practice
+### 3.7 Export & Sharing for Practice ✅ **IMPLEMENTED** (Best Takes Package Export)
 
 **Current State:**
 - Export audio with boost
 - Export annotations to text
 - Sync to Google Drive
+- Export Best Takes Package as ZIP
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Practice Mix Exports:**
-   - "Export with click track"
-   - Automatic normalization across tracks
-
-2. **Practice Package:**
+1. **Best Takes Package Export:** ✅ **IMPLEMENTED**
    - Export folder as ZIP with:
-     - All Best Takes
-     - All annotations
-     - Setlist PDF
-     - Practice notes
+     - All Best Take audio files
+     - All annotation files
+     - Summary document (SUMMARY.txt) with song list and annotations
+   - Accessible via File menu → "Export Best Takes Package…"
+   - Progress dialog during export
+   - Organized structure within ZIP (audio/, annotations/ folders)
+
+**Future Enhancement Ideas:**
+
+2. **Practice Mix Exports:**
+   - 💡 "Export with click track"
+   - 💡 Automatic normalization across tracks
  
 **Why:** Makes it easier to take work out of the app and into practice situations.
 
@@ -523,12 +528,12 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ## 4. User Interface Modernization
 
-### 4.1 Visual Design Updates
+### 4.1 Visual Design Updates ✅ **IMPLEMENTED** (Dark Mode)
 
 **Current State:**
 - Functional Qt-based interface
 - Uses consistent color scheme
-- Could be more modern/polished
+- Dark mode theme available
 
 **Improvement Ideas:**
 
@@ -537,10 +542,11 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
    - Smoother animations and transitions
    - Custom-styled controls
 
-2. **Dark Mode:**
-   - Full dark theme option
-   - Auto-switch based on OS preference
+2. **Dark Mode:** ✅ **IMPLEMENTED**
+   - Full dark theme option (light/dark selection in Preferences)
+   - Theme applies to all UI elements and waveforms
    - Separate waveform colors for dark mode
+   - 💡 Auto-switch based on OS preference (future enhancement)
 
 3. **Customizable Themes:**
    - User-selectable color schemes
@@ -676,6 +682,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 5. ✅ **Session state** (remember reviewed files, resume position) (Section 2.3) - **IMPLEMENTED**
 6. ✅ **Recent folders menu** for quick folder access (Section 2.3.2) - **IMPLEMENTED**
 7. ✅ **Toolbar simplification** (move undo limit to preferences) (Section 1.5.2) - **IMPLEMENTED**
+8. ✅ **Dark mode theme** for better visibility in low-light conditions (Section 4.1.2) - **IMPLEMENTED**
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**
@@ -683,6 +690,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 3. ✅ **Practice statistics dashboard** (Section 3.1) - **IMPLEMENTED**
 4. ✅ **Improved auto-labeling preview** (Section 2.2) - **IMPLEMENTED**
 5. ✅ **Annotation categories/tags** (Section 2.4) - **IMPLEMENTED**
+6. ✅ **Export best takes package** for easy sharing/archiving (Section 3.7.2) - **IMPLEMENTED**
 
 ### Long-Term Features (High Impact, Higher Effort):
 1. **Setlist builder** for performance prep (Section 3.2)
