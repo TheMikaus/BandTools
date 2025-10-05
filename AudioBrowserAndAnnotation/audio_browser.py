@@ -180,6 +180,7 @@ SETTINGS_KEY_RECENT_FOLDERS = "recent_folders"  # List of recently opened practi
 SETTINGS_KEY_THEME = "color_theme"  # Color theme: "light" or "dark"
 SETTINGS_KEY_WINDOW_GEOMETRY = "window_geometry"  # Window geometry for workspace layouts
 SETTINGS_KEY_SPLITTER_STATE = "splitter_state"  # Main splitter state for workspace layouts
+SETTINGS_KEY_NOW_PLAYING_COLLAPSED = "now_playing_panel_collapsed"  # Now Playing Panel collapsed state
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 SESSION_STATE_JSON = ".session_state.json"
@@ -3385,6 +3386,209 @@ class WaveformView(QWidget):
         # Call parent implementation for other keys
         super().keyPressEvent(event)
 
+# ========== Now Playing Panel ==========
+class NowPlayingPanel(QWidget):
+    """Persistent panel showing current playback status and quick annotation entry."""
+    
+    annotationRequested = pyqtSignal(str)  # Emitted when user wants to add annotation with text
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._player: Optional[QMediaPlayer] = None
+        self._current_file: Optional[Path] = None
+        self._duration_ms: int = 0
+        self._is_collapsed: bool = False
+        
+        self._init_ui()
+    
+    def _init_ui(self):
+        """Initialize the UI components."""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+        main_layout.setSpacing(4)
+        
+        # Header with collapse button
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.collapse_btn = QPushButton("▼")
+        self.collapse_btn.setFixedSize(20, 20)
+        self.collapse_btn.setToolTip("Collapse/Expand Now Playing Panel")
+        self.collapse_btn.clicked.connect(self._toggle_collapse)
+        header_layout.addWidget(self.collapse_btn)
+        
+        self.title_label = QLabel("Now Playing")
+        self.title_label.setStyleSheet("font-weight: bold;")
+        header_layout.addWidget(self.title_label)
+        
+        header_layout.addStretch(1)
+        main_layout.addLayout(header_layout)
+        
+        # Content widget (collapsible)
+        self.content_widget = QWidget()
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(4)
+        
+        # File info
+        self.file_label = QLabel("No file loaded")
+        self.file_label.setStyleSheet("font-style: italic;")
+        self.file_label.setWordWrap(True)
+        content_layout.addWidget(self.file_label)
+        
+        # Mini waveform
+        self.mini_waveform = QLabel()
+        self.mini_waveform.setMinimumHeight(40)
+        self.mini_waveform.setMaximumHeight(60)
+        self.mini_waveform.setStyleSheet("background-color: #1a1a1a; border: 1px solid #444;")
+        self.mini_waveform.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        content_layout.addWidget(self.mini_waveform)
+        
+        # Playback controls
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(8)
+        
+        self.play_btn = QPushButton()
+        self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.play_btn.setFixedSize(32, 32)
+        self.play_btn.setToolTip("Play/Pause (Space)")
+        self.play_btn.setEnabled(False)
+        self.play_btn.clicked.connect(self._on_play_clicked)
+        controls_layout.addWidget(self.play_btn)
+        
+        self.time_label = QLabel("0:00 / 0:00")
+        self.time_label.setMinimumWidth(100)
+        controls_layout.addWidget(self.time_label)
+        
+        controls_layout.addStretch(1)
+        content_layout.addLayout(controls_layout)
+        
+        # Quick annotation entry
+        annotation_layout = QHBoxLayout()
+        annotation_layout.setSpacing(4)
+        
+        self.annotation_input = QLineEdit()
+        self.annotation_input.setPlaceholderText("Type note + Enter to annotate at current position")
+        self.annotation_input.returnPressed.connect(self._on_annotation_entered)
+        self.annotation_input.setEnabled(False)
+        annotation_layout.addWidget(self.annotation_input, 1)
+        
+        self.annotation_btn = QPushButton("Add Note")
+        self.annotation_btn.setToolTip("Add annotation at current playback position")
+        self.annotation_btn.setEnabled(False)
+        self.annotation_btn.clicked.connect(self._on_annotation_entered)
+        annotation_layout.addWidget(self.annotation_btn)
+        
+        content_layout.addLayout(annotation_layout)
+        
+        main_layout.addWidget(self.content_widget)
+        
+        # Set initial collapsed state
+        self._update_collapse_state()
+    
+    def bind_player(self, player: QMediaPlayer):
+        """Bind to the media player to track playback state."""
+        self._player = player
+        if player:
+            player.positionChanged.connect(self._update_time_display)
+            player.playbackStateChanged.connect(self._update_play_button)
+            player.durationChanged.connect(self._on_duration_changed)
+    
+    def set_current_file(self, file_path: Optional[Path]):
+        """Update the panel with the current file."""
+        self._current_file = file_path
+        
+        if file_path:
+            self.file_label.setText(f"♪ {file_path.name}")
+            self.play_btn.setEnabled(True)
+            self.annotation_input.setEnabled(True)
+            self.annotation_btn.setEnabled(True)
+        else:
+            self.file_label.setText("No file loaded")
+            self.play_btn.setEnabled(False)
+            self.annotation_input.setEnabled(False)
+            self.annotation_btn.setEnabled(False)
+            self.time_label.setText("0:00 / 0:00")
+    
+    def _update_time_display(self, position_ms: int):
+        """Update the time display."""
+        if not self._player or self._duration_ms <= 0:
+            return
+        
+        current = human_time_ms(position_ms)
+        total = human_time_ms(self._duration_ms)
+        self.time_label.setText(f"{current} / {total}")
+        
+        # Update mini waveform playhead position if we have it
+        self._update_mini_waveform_playhead(position_ms)
+    
+    def _update_play_button(self, state):
+        """Update play/pause button icon based on playback state."""
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+        else:
+            self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+    
+    def _on_duration_changed(self, duration_ms: int):
+        """Handle duration change."""
+        self._duration_ms = duration_ms
+        self._update_time_display(0)
+    
+    def _on_play_clicked(self):
+        """Handle play/pause button click."""
+        if not self._player:
+            return
+        
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
+        else:
+            self._player.play()
+    
+    def _on_annotation_entered(self):
+        """Handle annotation entry."""
+        text = self.annotation_input.text().strip()
+        if text:
+            self.annotationRequested.emit(text)
+            self.annotation_input.clear()
+    
+    def _toggle_collapse(self):
+        """Toggle the collapsed state of the panel."""
+        self._is_collapsed = not self._is_collapsed
+        self._update_collapse_state()
+    
+    def _update_collapse_state(self):
+        """Update the UI based on collapsed state."""
+        if self._is_collapsed:
+            self.content_widget.hide()
+            self.collapse_btn.setText("▶")
+            self.collapse_btn.setToolTip("Expand Now Playing Panel")
+        else:
+            self.content_widget.show()
+            self.collapse_btn.setText("▼")
+            self.collapse_btn.setToolTip("Collapse Now Playing Panel")
+    
+    def _update_mini_waveform_playhead(self, position_ms: int):
+        """Update the mini waveform with a playhead indicator."""
+        # For now, just update the background color based on progress
+        # In the future, we could draw an actual mini waveform here
+        if self._duration_ms > 0:
+            progress = position_ms / self._duration_ms
+            # Simple visual feedback: change background intensity
+            intensity = int(26 + progress * 20)  # 26 to 46
+            self.mini_waveform.setStyleSheet(
+                f"background-color: #{intensity:02x}{intensity:02x}{intensity:02x}; border: 1px solid #444;"
+            )
+    
+    def is_collapsed(self) -> bool:
+        """Return whether the panel is collapsed."""
+        return self._is_collapsed
+    
+    def set_collapsed(self, collapsed: bool):
+        """Set the collapsed state."""
+        if self._is_collapsed != collapsed:
+            self._is_collapsed = collapsed
+            self._update_collapse_state()
+
 # ========== FileInfo proxy to show Size/Time ==========
 class FileInfoProxyModel(QSortFilterProxyModel):
     def __init__(self, parent_model: QFileSystemModel, duration_cache: Dict[str, int], audio_browser, parent=None):
@@ -5721,6 +5925,12 @@ class AudioBrowser(QMainWindow):
         self.now_playing = QLabel("No selection"); self.now_playing.setStyleSheet(f"color: {colors['text_secondary']};")
         right_layout.addWidget(self.now_playing)
 
+        # Now Playing Panel - persistent playback and annotation controls
+        self.now_playing_panel = NowPlayingPanel()
+        self.now_playing_panel.bind_player(self.player)
+        self.now_playing_panel.annotationRequested.connect(self._on_now_playing_annotation_requested)
+        right_layout.addWidget(self.now_playing_panel)
+
         # Tabs
         self.tabs = QTabWidget(); right_layout.addWidget(self.tabs, 1)
         self.tabs.setDocumentMode(True); self.tabs.setTabPosition(QTabWidget.TabPosition.North)
@@ -7423,6 +7633,9 @@ class AudioBrowser(QMainWindow):
         self.pending_note_start_ms = None  # Store original path, not temp file
         self._update_captured_time_label()
         
+        # Update Now Playing Panel
+        self.now_playing_panel.set_current_file(path)
+        
         # Practice statistics are now generated from folder analysis, not playback tracking
         # (removed _track_playback_start call)
         
@@ -7590,6 +7803,9 @@ class AudioBrowser(QMainWindow):
         self._refresh_best_take_field()
         self._refresh_partial_take_field()
         self._refresh_reference_song_field()
+        
+        # Update Now Playing Panel
+        self.now_playing_panel.set_current_file(None)
 
     def _update_mono_button_state(self):
         """Update the mono conversion button enabled/disabled state based on current selection."""
@@ -8430,6 +8646,24 @@ class AudioBrowser(QMainWindow):
     def _update_captured_time_label(self):
         self.captured_time_label.setText("" if self.pending_note_start_ms is None else human_time_ms(int(self.pending_note_start_ms)))
 
+    def _on_now_playing_annotation_requested(self, text: str):
+        """Handle annotation request from Now Playing Panel."""
+        if not text or not self.current_audio_file:
+            return
+        
+        # Add annotation at current playback position
+        ms = int(self.player.position())
+        fname = self.current_audio_file.name
+        uid = self._uid_counter; self._uid_counter += 1
+        
+        # Create point annotation (no category from quick add)
+        entry = {'uid': uid, 'ms': int(ms), 'text': text, 'important': False}
+        
+        self.notes_by_file.setdefault(fname, []).append(entry)
+        self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
+        self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
+        self._schedule_save_notes()
+    
     def _on_note_return_pressed(self):
         txt = self.note_input.text().strip()
         if not txt or not self.current_audio_file:
@@ -11501,6 +11735,9 @@ class AudioBrowser(QMainWindow):
             # Save splitter state
             self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, self.main_splitter.saveState())
             
+            # Save Now Playing Panel collapsed state
+            self.settings.setValue(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, self.now_playing_panel.is_collapsed())
+            
             self.statusBar().showMessage("Window layout saved", 3000)
             log_print("Workspace layout saved")
         except Exception as e:
@@ -11521,6 +11758,11 @@ class AudioBrowser(QMainWindow):
             if splitter_state:
                 self.main_splitter.restoreState(splitter_state)
                 log_print("Splitter state restored")
+            
+            # Restore Now Playing Panel collapsed state
+            collapsed = self.settings.value(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, False, type=bool)
+            self.now_playing_panel.set_collapsed(collapsed)
+            log_print(f"Now Playing Panel state restored: {'collapsed' if collapsed else 'expanded'}")
         except Exception as e:
             log_print(f"Error restoring workspace layout: {e}")
     

@@ -118,25 +118,35 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 1.4 Unified "Now Playing" Panel
+### 1.4 Unified "Now Playing" Panel ✅ **IMPLEMENTED**
 
 **Current State:**
-- Player controls, waveform, and annotation controls spread across interface
-- Must scroll in Annotations tab to see waveform when adding annotations
+- Persistent Now Playing Panel implemented and accessible from any tab
+- Panel is collapsible/expandable with state persisting across sessions
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Persistent Now Playing Section:**
-   - Always-visible compact panel at top or bottom
-   - Shows: Thumbnail waveform, current time, play/pause, quick annotation button
-   - Could be collapsible/expandable
+1. **Persistent Now Playing Section:** ✅
+   - Always-visible compact panel between player bar and tabs
+   - Shows: Current file name, mini waveform progress indicator, play/pause button, time display
+   - Collapsible/expandable with ▼/▶ toggle button
    - Accessible from any tab without switching
+   - Panel state (collapsed/expanded) persists in QSettings
 
-2. **Quick Annotation Entry:**
-   - Small text box in Now Playing panel: "Type note + Enter to annotate at current position"
+2. **Quick Annotation Entry:** ✅
+   - Text input field: "Type note + Enter to annotate at current position"
+   - "Add Note" button for mouse-based annotation
+   - Annotations added at current playback position
    - Reduces tab switching during review workflow
+   - Integrates seamlessly with main annotation system
 
 **Why:** Keeps critical playback and annotation functions always accessible, reducing tab switching.
+
+**Access**: Panel appears automatically below player bar in main window. Click ▼/▶ to collapse/expand.
+
+**Documentation**:
+- [TEST_PLAN_NOW_PLAYING_PANEL.md](TEST_PLAN_NOW_PLAYING_PANEL.md) - Complete test plan
+- [IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md) - Technical details
 
 ---
 
@@ -707,6 +717,7 @@ Based on potential impact vs. implementation effort, here are top recommendation
 8. ✅ **Dark mode theme** for better visibility in low-light conditions (Section 4.1.2) - **IMPLEMENTED**
 9. ✅ **Workspace layouts** for persistent window/panel configuration (Section 2.3.3) - **IMPLEMENTED**
 10. ✅ **Status bar progress indicators** for background operations (Section 1.5.3) - **IMPLEMENTED**
+11. ✅ **Now Playing Panel** for persistent playback and quick annotations (Section 1.4) - **IMPLEMENTED**
 
 ### Medium-Term Improvements (High Impact, Medium Effort):
 1. ✅ **Multi-select batch operations** (Section 2.1) - **IMPLEMENTED**

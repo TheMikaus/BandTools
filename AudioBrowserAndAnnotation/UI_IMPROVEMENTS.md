@@ -234,6 +234,53 @@ Visual progress feedback for background operations:
 
 ---
 
+## Now Playing Panel
+
+**Location**: Below player bar, above tabs (main window)
+
+The Now Playing Panel provides persistent playback controls and quick annotation entry that are always accessible, regardless of which tab you're viewing:
+
+### How to Use
+
+**Panel is always visible when you load a file:**
+1. Select and play any audio file
+2. The Now Playing Panel automatically updates with the file name
+3. Use the controls in the panel to play/pause and add annotations
+4. Click the ▼/▶ button to collapse/expand the panel
+
+**Quick Annotation Entry:**
+1. While playing a file, type your note in the text field
+2. Press **Enter** or click **Add Note**
+3. Annotation is added at the current playback position
+4. The annotation appears in the Annotations tab (you can switch to verify)
+
+### Features
+- **Always Visible**: Panel stays visible regardless of which tab is active
+- **Current File Display**: Shows currently playing file name with music note icon (♪)
+- **Mini Waveform**: Visual progress indicator shows playback progress
+- **Play/Pause Button**: Quick playback control synchronized with main player
+- **Time Display**: Shows current position and total duration (e.g., "1:23 / 3:45")
+- **Quick Annotation**: Add annotations without switching to Annotations tab
+- **Collapsible**: Click ▼ to collapse panel, ▶ to expand it
+- **Persistent State**: Collapsed/expanded state saved and restored across sessions
+- **Seamless Integration**: Annotations added via panel work with undo, categories, etc.
+
+### Why This Helps
+- **Reduces Tab Switching**: Add annotations without leaving Library or Folder Notes tab
+- **Faster Workflow**: Quick access to essential playback and annotation controls
+- **Always Available**: Critical functions accessible from any tab
+- **Unobtrusive**: Can be collapsed when not needed
+- **Efficient Review**: Keep annotating while reviewing other information
+
+### Tips
+- Use the quick annotation field for short notes during initial review
+- Switch to Annotations tab for more detailed annotations with categories and clips
+- Collapse the panel if you need more screen space for other content
+- Panel state (collapsed/expanded) is saved when you use "Save Window Layout" (Ctrl+Shift+L)
+- Quick annotations are point annotations at the current playback time (not clips)
+
+---
+
 ## Tips for Best Experience
 
 ### Recent Folders
@@ -271,6 +318,13 @@ Visual progress feedback for background operations:
 - If a specific file seems stuck, the progress label shows which file is being processed
 - Progress indicators are most useful for folders with 20+ audio files
 
+### Now Playing Panel
+- Use quick annotation for rapid note-taking during initial playback
+- Collapse the panel when you need more screen space for tabs
+- Panel is most useful when working in Library or Folder Notes tabs
+- Quick annotations integrate with the main annotation system (visible in Annotations tab)
+- Panel state is saved with workspace layouts (Ctrl+Shift+L)
+
 ### Keyboard Shortcuts
 Many operations have keyboard shortcuts for even faster workflow. See **Help → Keyboard Shortcuts** for a complete list.
 
@@ -279,6 +333,8 @@ Many operations have keyboard shortcuts for even faster workflow. See **Help →
 ## Related Documentation
 
 - [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) - Step-by-step guide for new features (Dark Mode, Export Best Takes)
+- [TEST_PLAN_NOW_PLAYING_PANEL.md](TEST_PLAN_NOW_PLAYING_PANEL.md) - Comprehensive test plan for Now Playing Panel
+- [IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md) - Technical details of Now Playing Panel implementation
 - [TEST_PLAN_WORKSPACE_PROGRESS.md](TEST_PLAN_WORKSPACE_PROGRESS.md) - Comprehensive test plan for workspace layouts and progress indicators
 - [IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md) - Technical details of workspace layouts and progress indicators implementation
 - [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned and implemented interface improvements
