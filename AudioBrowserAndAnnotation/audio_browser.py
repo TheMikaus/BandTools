@@ -4040,6 +4040,7 @@ class AudioBrowser(QMainWindow):
         # Playback speed for practice
         self.playback_speed: float = 1.0
         self.annotation_filter: str = 'all'
+        self.category_filter: str = 'all'
         self._programmatic_selection = False
         self._uid_counter: int = 1
         self._suspend_ann_change = False
@@ -5597,9 +5598,50 @@ class AudioBrowser(QMainWindow):
         filter_row.addWidget(QLabel("Show:"))
         self.ann_filter_combo = QComboBox()
         self.ann_filter_combo.addItems(["All", "Points", "Clips", "Sub-sections"])
-        filter_row.addWidget(self.ann_filter_combo); filter_row.addStretch(1)
+        filter_row.addWidget(self.ann_filter_combo)
+        
+        # Category filter
+        filter_row.addWidget(QLabel("Category:"))
+        self.category_filter_combo = QComboBox()
+        self.category_filter_combo.addItems(["All", "⏱️ Timing", "⚡ Energy", "🎵 Harmony", "📊 Dynamics", "No Category"])
+        self.category_filter_combo.currentIndexChanged.connect(self._on_category_filter_changed)
+        filter_row.addWidget(self.category_filter_combo)
+        
+        filter_row.addStretch(1)
         ann_layout.addLayout(filter_row)
 
+
+        # Category buttons row
+        category_row = QHBoxLayout()
+        category_row.addWidget(QLabel("Category:"))
+        
+        self.category_buttons = {}
+        self.selected_category = None
+        
+        # Define categories with colors and icons
+        categories = [
+            ("timing", "⏱️ Timing", "#FF6B6B"),
+            ("energy", "⚡ Energy", "#4ECDC4"),
+            ("harmony", "🎵 Harmony", "#95E1D3"),
+            ("dynamics", "📊 Dynamics", "#FFE66D")
+        ]
+        
+        for cat_id, cat_label, cat_color in categories:
+            btn = QPushButton(cat_label)
+            btn.setCheckable(True)
+            btn.setProperty("category", cat_id)
+            btn.setProperty("category_color", cat_color)
+            btn.clicked.connect(lambda checked, c=cat_id: self._on_category_button_clicked(c))
+            self.category_buttons[cat_id] = btn
+            category_row.addWidget(btn)
+        
+        # Clear category button
+        clear_cat_btn = QPushButton("❌ None")
+        clear_cat_btn.clicked.connect(self._on_clear_category)
+        category_row.addWidget(clear_cat_btn)
+        
+        category_row.addStretch(1)
+        ann_layout.addLayout(category_row)
 
         top_controls = QHBoxLayout()
         self.captured_time_label = QLabel(""); self.captured_time_label.setMinimumWidth(90)
@@ -7618,21 +7660,23 @@ class AudioBrowser(QMainWindow):
     def _configure_annotation_table(self):
         self.annotation_table.clear()
         if self.show_all_sets:
-            self.annotation_table.setColumnCount(4)
-            self.annotation_table.setHorizontalHeaderLabels(["Set", "!", "Time", "Note"])
-            self._c_set, self._c_imp, self._c_time, self._c_note = 0, 1, 2, 3
+            self.annotation_table.setColumnCount(5)
+            self.annotation_table.setHorizontalHeaderLabels(["Set", "!", "Time", "Category", "Note"])
+            self._c_set, self._c_imp, self._c_time, self._c_category, self._c_note = 0, 1, 2, 3, 4
             ah = self.annotation_table.horizontalHeader()
             ah.setSectionResizeMode(self._c_set, QHeaderView.ResizeMode.ResizeToContents)
             ah.setSectionResizeMode(self._c_imp, QHeaderView.ResizeMode.ResizeToContents)
             ah.setSectionResizeMode(self._c_time, QHeaderView.ResizeMode.ResizeToContents)
+            ah.setSectionResizeMode(self._c_category, QHeaderView.ResizeMode.ResizeToContents)
             ah.setSectionResizeMode(self._c_note, QHeaderView.ResizeMode.Stretch)
         else:
-            self.annotation_table.setColumnCount(3)
-            self.annotation_table.setHorizontalHeaderLabels(["!", "Time", "Note"])
-            self._c_set, self._c_imp, self._c_time, self._c_note = -1, 0, 1, 2
+            self.annotation_table.setColumnCount(4)
+            self.annotation_table.setHorizontalHeaderLabels(["!", "Time", "Category", "Note"])
+            self._c_set, self._c_imp, self._c_time, self._c_category, self._c_note = -1, 0, 1, 2, 3
             ah = self.annotation_table.horizontalHeader()
             ah.setSectionResizeMode(self._c_imp, QHeaderView.ResizeMode.ResizeToContents)
             ah.setSectionResizeMode(self._c_time, QHeaderView.ResizeMode.ResizeToContents)
+            ah.setSectionResizeMode(self._c_category, QHeaderView.ResizeMode.ResizeToContents)
             ah.setSectionResizeMode(self._c_note, QHeaderView.ResizeMode.Stretch)
         self.annotation_table.verticalHeader().setVisible(False)
         self.annotation_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -7705,6 +7749,11 @@ class AudioBrowser(QMainWindow):
             if self.annotation_filter == 'points' and entry.get('end_ms') is not None: continue
             if self.annotation_filter == 'clips' and entry.get('end_ms') is None: continue
             if self.annotation_filter == 'sub-sections' and not entry.get('subsection'): continue
+            # Category filter
+            entry_category = entry.get('category', '')
+            if self.category_filter != 'all':
+                if self.category_filter == 'none' and entry_category: continue
+                if self.category_filter != 'none' and entry_category != self.category_filter: continue
             self._append_annotation_row(entry, set_id=set_id, set_name=set_name, editable=editable)
 
         self.annotation_table.blockSignals(False); self.general_edit.blockSignals(False)
@@ -7715,11 +7764,22 @@ class AudioBrowser(QMainWindow):
         self._refresh_partial_take_field()
         self._refresh_reference_song_field()
 
+    def _get_category_display(self, category: str) -> tuple[str, str]:
+        """Get display label and color for a category."""
+        category_map = {
+            "timing": ("⏱️ Timing", "#FF6B6B"),
+            "energy": ("⚡ Energy", "#4ECDC4"),
+            "harmony": ("🎵 Harmony", "#95E1D3"),
+            "dynamics": ("📊 Dynamics", "#FFE66D")
+        }
+        return category_map.get(category, ("", ""))
+
     def _append_annotation_row(self, entry: Dict, *, set_id: Optional[str]=None, set_name: Optional[str]=None, editable: bool=True):
         ms = int(entry.get("ms", 0))
         text = str(entry.get("text", ""))
         important = bool(entry.get("important", False))
         uid = int(entry.get("uid", 0))
+        category = entry.get("category", "")
 
         r = self.annotation_table.rowCount(); self.annotation_table.insertRow(r)
 
@@ -7744,6 +7804,17 @@ class AudioBrowser(QMainWindow):
         t.setData(Qt.ItemDataRole.UserRole + 2, str(set_id or self.current_set_id or ""))
         t.setFlags((t.flags() | Qt.ItemFlag.ItemIsEditable) if editable else (Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled))
         self.annotation_table.setItem(r, self._c_time, t)
+
+        # Category column
+        cat_label, cat_color = self._get_category_display(category)
+        cat_item = QTableWidgetItem(cat_label)
+        cat_item.setData(Qt.ItemDataRole.UserRole, str(category))
+        cat_item.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
+        cat_item.setData(Qt.ItemDataRole.UserRole + 2, str(set_id or self.current_set_id or ""))
+        if cat_color:
+            cat_item.setBackground(QColor(cat_color))
+        cat_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        self.annotation_table.setItem(r, self._c_category, cat_item)
 
         n = QTableWidgetItem(text)
         n.setData(Qt.ItemDataRole.UserRole + 1, int(uid))
@@ -7820,6 +7891,35 @@ class AudioBrowser(QMainWindow):
             set_id, uid = keep_pair
             self.waveform.set_selected_uid(set_id, uid)
 
+    def _on_category_button_clicked(self, category: str):
+        """Handle category button selection."""
+        # Uncheck all other category buttons
+        for cat_id, btn in self.category_buttons.items():
+            if cat_id != category:
+                btn.setChecked(False)
+        
+        # Toggle the selected category
+        if self.category_buttons[category].isChecked():
+            self.selected_category = category
+            # Update button style to show selection
+            color = self.category_buttons[category].property("category_color")
+            self.category_buttons[category].setStyleSheet(f"QPushButton {{ background-color: {color}; color: black; font-weight: bold; }}")
+        else:
+            self.selected_category = None
+            self.category_buttons[category].setStyleSheet("")
+        
+        # Update styles for other buttons
+        for cat_id, btn in self.category_buttons.items():
+            if cat_id != category:
+                btn.setStyleSheet("")
+    
+    def _on_clear_category(self):
+        """Clear the selected category."""
+        self.selected_category = None
+        for btn in self.category_buttons.values():
+            btn.setChecked(False)
+            btn.setStyleSheet("")
+
     def _on_note_text_edited(self, _txt: str):
         if self.pending_note_start_ms is None:
             self.pending_note_start_ms = int(self.player.position()); self._update_captured_time_label()
@@ -7849,12 +7949,19 @@ class AudioBrowser(QMainWindow):
             # Clip annotation: time range with start and end
             entry = {'uid': uid, 'ms': int(self.clip_sel_start_ms), 'end_ms': int(self.clip_sel_end_ms), 'text': txt, 'important': False}
         
+        # Add category if one is selected
+        if self.selected_category:
+            entry['category'] = self.selected_category
+        
         self.notes_by_file.setdefault(fname, []).append(entry)
         self._push_undo({"type":"add","set":self.current_set_id,"file":fname,"entry":entry})
         self._resort_and_rebuild_table_preserving_selection(keep_pair=(self.current_set_id, uid))
         self.note_input.clear()
         self._on_clip_cancel_clicked()
         self._schedule_save_notes()
+        
+        # Clear category selection after adding note
+        self._on_clear_category()
 
     def _on_annotation_double_clicked(self, item: QTableWidgetItem):
         row = item.row(); titem = self.annotation_table.item(row, self._c_time)
@@ -8969,6 +9076,17 @@ class AudioBrowser(QMainWindow):
         elif "sub-section" in txt: self.annotation_filter = "sub-sections"
         else: self.annotation_filter = "all"
         self._load_annotations_for_current()
+    
+    def _on_category_filter_changed(self, idx: int):
+        """Handle category filter changes."""
+        txt = (self.category_filter_combo.currentText() or "All").lower()
+        if "timing" in txt: self.category_filter = "timing"
+        elif "energy" in txt: self.category_filter = "energy"
+        elif "harmony" in txt: self.category_filter = "harmony"
+        elif "dynamics" in txt: self.category_filter = "dynamics"
+        elif "no category" in txt: self.category_filter = "none"
+        else: self.category_filter = "all"
+        self._load_annotations_for_current()
 
     def _on_subsection_label_clicked(self):
         """Label a sub-section using clip start/end and name."""
@@ -9495,7 +9613,12 @@ class AudioBrowser(QMainWindow):
                 for n in notes:
                     ts = human_time_ms(int(n.get("ms", 0)))
                     txt = str(n.get("text", "")).replace("\n", " ").strip()
-                    lines.append(f"{ts} {txt}")
+                    category = n.get("category", "")
+                    if category:
+                        cat_label, _ = self._get_category_display(category)
+                        lines.append(f"{ts} [{cat_label}] {txt}")
+                    else:
+                        lines.append(f"{ts} {txt}")
             lines.append("")
         try:
             out = "\r\n".join(lines).rstrip("\r\n") + "\r\n"

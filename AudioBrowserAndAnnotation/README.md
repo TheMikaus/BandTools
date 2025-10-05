@@ -9,6 +9,7 @@ This tool is to help with listening, critiquing, and cataloging a band's band pr
 - Can bulk rename the folder based off of the song name/meta names provided
 - Can leave a comment at a specific timestamp in the file (an annotation)
 - Can mark that annotation as "important"
+- **Annotation Categories**: Tag annotations with categories (⏱️ Timing, ⚡ Energy, 🎵 Harmony, 📊 Dynamics) for better organization and filtering. See [ANNOTATION_CATEGORIES.md](ANNOTATION_CATEGORIES.md) for complete guide.
 - Per folder can see all important annotations in one spot, as well as an overall comment
 - Can bulk convert wave -> mp3 if you have ffmpeg installed
 - Can create a clip of a file. This is like an annotation that spans a timeframe.
