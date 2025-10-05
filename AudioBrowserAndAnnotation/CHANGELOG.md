@@ -4,6 +4,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **Now Playing Panel Mini Waveform**: Replaced black box placeholder with actual waveform visualization
+  - Mini waveform now displays real waveform shape from audio file
+  - Added playhead indicator (red vertical line) showing current playback position
+  - Supports both mono and stereo audio files (displays left channel for stereo)
+  - Uses consistent color scheme from main waveform view
+  - Automatically updates when waveform data is loaded
+  - Provides better visual context for song navigation
+  - Resolves issue where mini waveform appeared as just a dark box
+
 ### Added
 - **Now Playing Panel**: Persistent playback and annotation controls accessible from any tab
   - Always-visible compact panel positioned below player bar and above tabs

@@ -3387,6 +3387,111 @@ class WaveformView(QWidget):
         super().keyPressEvent(event)
 
 # ========== Now Playing Panel ==========
+class MiniWaveformWidget(QWidget):
+    """Mini waveform display widget for the Now Playing panel."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(60)
+        self._peaks: Optional[List] = None
+        self._duration_ms: int = 0
+        self._position_ms: int = 0
+        
+        # Use standardized waveform colors
+        waveform_colors = _color_manager.get_waveform_colors()
+        self._bg = waveform_colors['background']
+        self._wave = waveform_colors['left_channel']
+        self._playhead = waveform_colors['playhead']
+        
+    def set_waveform_data(self, peaks: Optional[List], duration_ms: int):
+        """Set the waveform data to display."""
+        self._peaks = peaks
+        self._duration_ms = duration_ms
+        self.update()
+    
+    def set_position(self, position_ms: int):
+        """Update the playback position."""
+        self._position_ms = position_ms
+        self.update()
+    
+    def clear(self):
+        """Clear the waveform display."""
+        self._peaks = None
+        self._duration_ms = 0
+        self._position_ms = 0
+        self.update()
+    
+    def paintEvent(self, event):
+        """Draw the mini waveform."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        
+        W = self.width()
+        H = self.height()
+        
+        # Fill background
+        painter.fillRect(0, 0, W, H, self._bg)
+        
+        # Draw border
+        painter.setPen(QColor("#444"))
+        painter.drawRect(0, 0, W - 1, H - 1)
+        
+        # If we have waveform data, draw it
+        if self._peaks and len(self._peaks) > 0:
+            mid = H // 2
+            
+            # Check if this is stereo data (use only left channel for mini display)
+            is_stereo = isinstance(self._peaks[0], list) and len(self._peaks[0]) == 2 and isinstance(self._peaks[0][0], list)
+            
+            # Resample peaks to widget width
+            draw_peaks = resample_peaks(self._peaks, W)
+            
+            # Draw waveform
+            pen_wave = QPen(self._wave)
+            pen_wave.setWidth(1)
+            painter.setPen(pen_wave)
+            
+            for x, peak_data in enumerate(draw_peaks):
+                try:
+                    if is_stereo:
+                        # For stereo, use left channel only
+                        if isinstance(peak_data, list) and len(peak_data) >= 1:
+                            left_peak = peak_data[0]
+                            if isinstance(left_peak, list) and len(left_peak) >= 2:
+                                mn, mx = left_peak[0], left_peak[1]
+                            else:
+                                continue
+                        else:
+                            continue
+                    else:
+                        # Mono format
+                        if isinstance(peak_data, (tuple, list)) and len(peak_data) >= 2:
+                            mn, mx = peak_data[0], peak_data[1]
+                        else:
+                            continue
+                    
+                    # Scale to widget height
+                    y1 = int(mid - mn * (H/2 - 2))
+                    y2 = int(mid - mx * (H/2 - 2))
+                    if y1 > y2:
+                        y1, y2 = y2, y1
+                    painter.drawLine(x, y1, x, y2)
+                except Exception:
+                    # Skip any problematic data points
+                    continue
+        
+        # Draw playhead indicator
+        if self._duration_ms > 0 and self._position_ms >= 0:
+            progress = self._position_ms / self._duration_ms
+            x_pos = int(progress * W)
+            pen_playhead = QPen(self._playhead)
+            pen_playhead.setWidth(2)
+            painter.setPen(pen_playhead)
+            painter.drawLine(x_pos, 0, x_pos, H)
+        
+        painter.end()
+
 class NowPlayingPanel(QWidget):
     """Persistent panel showing current playback status and quick annotation entry."""
     
@@ -3437,11 +3542,7 @@ class NowPlayingPanel(QWidget):
         content_layout.addWidget(self.file_label)
         
         # Mini waveform
-        self.mini_waveform = QLabel()
-        self.mini_waveform.setMinimumHeight(40)
-        self.mini_waveform.setMaximumHeight(60)
-        self.mini_waveform.setStyleSheet("background-color: #1a1a1a; border: 1px solid #444;")
-        self.mini_waveform.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mini_waveform = MiniWaveformWidget()
         content_layout.addWidget(self.mini_waveform)
         
         # Playback controls
@@ -3509,6 +3610,11 @@ class NowPlayingPanel(QWidget):
             self.annotation_input.setEnabled(False)
             self.annotation_btn.setEnabled(False)
             self.time_label.setText("0:00 / 0:00")
+            self.mini_waveform.clear()
+    
+    def set_waveform_data(self, peaks: Optional[List], duration_ms: int):
+        """Update the mini waveform with waveform data."""
+        self.mini_waveform.set_waveform_data(peaks, duration_ms)
     
     def _update_time_display(self, position_ms: int):
         """Update the time display."""
@@ -3569,15 +3675,7 @@ class NowPlayingPanel(QWidget):
     
     def _update_mini_waveform_playhead(self, position_ms: int):
         """Update the mini waveform with a playhead indicator."""
-        # For now, just update the background color based on progress
-        # In the future, we could draw an actual mini waveform here
-        if self._duration_ms > 0:
-            progress = position_ms / self._duration_ms
-            # Simple visual feedback: change background intensity
-            intensity = int(26 + progress * 20)  # 26 to 46
-            self.mini_waveform.setStyleSheet(
-                f"background-color: #{intensity:02x}{intensity:02x}{intensity:02x}; border: 1px solid #444;"
-            )
+        self.mini_waveform.set_position(position_ms)
     
     def is_collapsed(self) -> bool:
         """Return whether the panel is collapsed."""
@@ -4602,6 +4700,7 @@ class AudioBrowser(QMainWindow):
         self.waveform.annotationClicked.connect(self._on_waveform_annotation_clicked_multi)
         self.waveform.waveformReady.connect(self._update_stereo_button_state)
         self.waveform.waveformReady.connect(self._update_channel_muting_state)
+        self.waveform.waveformReady.connect(self._update_now_playing_waveform)
 
         # Toggles
         self._restore_toggles()
@@ -8026,6 +8125,13 @@ class AudioBrowser(QMainWindow):
             self.right_channel_cb.setChecked(True)
             self.left_channel_cb.blockSignals(False)
             self.right_channel_cb.blockSignals(False)
+    
+    def _update_now_playing_waveform(self):
+        """Update the Now Playing panel with waveform data from the main waveform view."""
+        if self.waveform._peaks and self.waveform._duration_ms > 0:
+            self.now_playing_panel.set_waveform_data(self.waveform._peaks, self.waveform._duration_ms)
+        else:
+            self.now_playing_panel.set_waveform_data(None, 0)
 
     # ----- Library table helpers -----
     def _list_audio_in_root(self) -> List[Path]:
