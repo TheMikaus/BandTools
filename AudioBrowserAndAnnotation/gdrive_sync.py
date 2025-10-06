@@ -37,12 +37,115 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 # Version file name
 VERSION_FILE = '.sync_version.json'
 
+# Sync history file name
+SYNC_HISTORY_FILE = '.sync_history.json'
+
+# Sync rules configuration file name
+SYNC_RULES_FILE = '.sync_rules.json'
+
 # Files and directories that should never be synced
 SYNC_EXCLUDED = {'.backup', '.backups', '.waveforms', '.git', '__pycache__'}
 
 # Annotation file patterns that user can modify
 ANNOTATION_PATTERNS = ['.audio_notes_', '.provided_names.json', '.duration_cache.json', 
                        '.audio_fingerprints.json', '.user_colors.json', '.song_renames.json']
+
+
+class SyncHistory:
+    """Manages sync history tracking."""
+    
+    def __init__(self, entries: Optional[List[Dict]] = None):
+        self.entries = entries or []
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SyncHistory':
+        """Load history from dictionary."""
+        return cls(entries=data.get('entries', []))
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization."""
+        return {'entries': self.entries}
+    
+    def add_entry(self, operation_type: str, files_count: int, user: str, 
+                  timestamp: Optional[str] = None, details: Optional[str] = None):
+        """Add a sync history entry."""
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+        
+        self.entries.append({
+            'operation': operation_type,  # 'upload', 'download', 'conflict_resolved'
+            'files_count': files_count,
+            'user': user,
+            'timestamp': timestamp,
+            'details': details
+        })
+        
+        # Keep only last 100 entries to prevent file bloat
+        if len(self.entries) > 100:
+            self.entries = self.entries[-100:]
+    
+    def get_recent_entries(self, count: int = 10) -> List[Dict]:
+        """Get most recent sync entries."""
+        return self.entries[-count:] if self.entries else []
+
+
+class SyncRules:
+    """Manages selective sync rules."""
+    
+    def __init__(self, max_file_size_mb: float = 0, 
+                 sync_audio_files: bool = True,
+                 sync_annotations_only: bool = False,
+                 auto_sync_enabled: bool = False,
+                 auto_download_best_takes: bool = False):
+        self.max_file_size_mb = max_file_size_mb  # 0 = no limit
+        self.sync_audio_files = sync_audio_files
+        self.sync_annotations_only = sync_annotations_only
+        self.auto_sync_enabled = auto_sync_enabled
+        self.auto_download_best_takes = auto_download_best_takes
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SyncRules':
+        """Load rules from dictionary."""
+        return cls(
+            max_file_size_mb=data.get('max_file_size_mb', 0),
+            sync_audio_files=data.get('sync_audio_files', True),
+            sync_annotations_only=data.get('sync_annotations_only', False),
+            auto_sync_enabled=data.get('auto_sync_enabled', False),
+            auto_download_best_takes=data.get('auto_download_best_takes', False)
+        )
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            'max_file_size_mb': self.max_file_size_mb,
+            'sync_audio_files': self.sync_audio_files,
+            'sync_annotations_only': self.sync_annotations_only,
+            'auto_sync_enabled': self.auto_sync_enabled,
+            'auto_download_best_takes': self.auto_download_best_takes
+        }
+    
+    def should_sync_file(self, file_path: Path, file_size_bytes: int = 0) -> bool:
+        """Check if a file should be synced based on rules."""
+        # Check file size limit
+        if self.max_file_size_mb > 0:
+            size_mb = file_size_bytes / (1024 * 1024)
+            if size_mb > self.max_file_size_mb:
+                return False
+        
+        # Check if annotations only
+        if self.sync_annotations_only:
+            # Only sync metadata/annotation files
+            is_annotation = any(pattern in file_path.name for pattern in ANNOTATION_PATTERNS)
+            is_annotation = is_annotation or file_path.name in [VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE]
+            return is_annotation
+        
+        # Check if audio files should be synced
+        if not self.sync_audio_files:
+            audio_extensions = {'.wav', '.mp3', '.flac', '.ogg', '.m4a'}
+            if file_path.suffix.lower() in audio_extensions:
+                return False
+        
+        return True
 
 
 class SyncVersion:
@@ -606,3 +709,47 @@ def deduplicate_operations(operations: List[Dict]) -> List[Dict]:
         latest_ops[path] = op
     
     return list(latest_ops.values())
+
+
+def load_sync_history(local_dir: Path) -> SyncHistory:
+    """Load sync history from local directory."""
+    history_path = local_dir / SYNC_HISTORY_FILE
+    if history_path.exists():
+        try:
+            data = json.loads(history_path.read_text())
+            return SyncHistory.from_dict(data)
+        except Exception as e:
+            logger.error(f"Error loading sync history: {e}")
+    
+    return SyncHistory()
+
+
+def save_sync_history(local_dir: Path, history: SyncHistory):
+    """Save sync history to local directory."""
+    history_path = local_dir / SYNC_HISTORY_FILE
+    try:
+        history_path.write_text(json.dumps(history.to_dict(), indent=2))
+    except Exception as e:
+        logger.error(f"Error saving sync history: {e}")
+
+
+def load_sync_rules(local_dir: Path) -> SyncRules:
+    """Load sync rules from local directory."""
+    rules_path = local_dir / SYNC_RULES_FILE
+    if rules_path.exists():
+        try:
+            data = json.loads(rules_path.read_text())
+            return SyncRules.from_dict(data)
+        except Exception as e:
+            logger.error(f"Error loading sync rules: {e}")
+    
+    return SyncRules()
+
+
+def save_sync_rules(local_dir: Path, rules: SyncRules):
+    """Save sync rules to local directory."""
+    rules_path = local_dir / SYNC_RULES_FILE
+    try:
+        rules_path.write_text(json.dumps(rules.to_dict(), indent=2))
+    except Exception as e:
+        logger.error(f"Error saving sync rules: {e}")
