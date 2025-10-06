@@ -111,7 +111,7 @@ Item {
             autoGenerate: true
             
             onAnnotationDoubleClicked: function(annotationData) {
-                var index = annotationsTable.currentRow
+                var index = annotationsTable.selectedRow
                 if (index >= 0) {
                     openEditDialog(index)
                 }
@@ -155,17 +155,17 @@ Item {
                     
                     StyledButton {
                         text: "Edit"
-                        enabled: annotationsTable.currentRow >= 0
+                        enabled: annotationsTable.selectedRow >= 0
                         Layout.preferredWidth: 80
-                        onClicked: openEditDialog(annotationsTable.currentRow)
+                        onClicked: openEditDialog(annotationsTable.selectedRow)
                     }
                     
                     StyledButton {
                         text: "Delete"
                         danger: true
-                        enabled: annotationsTable.currentRow >= 0
+                        enabled: annotationsTable.selectedRow >= 0
                         Layout.preferredWidth: 80
-                        onClicked: deleteAnnotation(annotationsTable.currentRow)
+                        onClicked: deleteAnnotation(annotationsTable.selectedRow)
                     }
                     
                     StyledButton {
@@ -268,7 +268,7 @@ Item {
                         
                         model: annotationsModel
                         
-                        property int currentRow: -1
+                        property int selectedRow: -1
                         
                         // Column widths
                         columnWidthProvider: function(column) {
@@ -283,7 +283,7 @@ Item {
                         
                         delegate: Rectangle {
                             implicitHeight: 32
-                            color: annotationsTable.currentRow === row ? 
+                            color: annotationsTable.selectedRow === row ? 
                                    Theme.backgroundLight : 
                                    (row % 2 === 0 ? Theme.backgroundColor : Theme.backgroundLight)
                             
@@ -301,7 +301,7 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
-                                    annotationsTable.currentRow = row
+                                    annotationsTable.selectedRow = row
                                     // Seek to annotation time
                                     var annotations = annotationManager.getAnnotations()
                                     if (row < annotations.length) {
@@ -309,7 +309,7 @@ Item {
                                     }
                                 }
                                 onDoubleClicked: {
-                                    annotationsTable.currentRow = row
+                                    annotationsTable.selectedRow = row
                                     openEditDialog(row)
                                 }
                             }
@@ -392,7 +392,7 @@ Item {
     
     // Helper functions
     function openAddDialog() {
-        annotationDialog.reset()
+        annotationDialog.resetDialog()
         annotationDialog.timestampMs = audioEngine.getPosition()
         annotationDialog.updateFields()
         annotationDialog.open()
@@ -418,7 +418,7 @@ Item {
     function deleteAnnotation(index) {
         if (index >= 0) {
             annotationManager.deleteAnnotation(index)
-            annotationsTable.currentRow = -1
+            annotationsTable.selectedRow = -1
         }
     }
     
