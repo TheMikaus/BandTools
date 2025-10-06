@@ -11,6 +11,8 @@ Item {
     
     // Properties
     property string currentDirectory: ""
+    property string sortField: "filename"
+    property bool sortAscending: true
     
     // Folder picker dialog
     FileDialog {
@@ -152,7 +154,7 @@ Item {
                     }
                 }
                 
-                // Column Headers
+                // Column Headers (clickable for sorting)
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 28
@@ -164,30 +166,99 @@ Item {
                         anchors.rightMargin: Theme.spacingNormal
                         spacing: Theme.spacingNormal
                         
-                        Label {
-                            text: "Name"
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.bold: true
-                            color: Theme.textColor
+                        // Name column header
+                        Rectangle {
                             Layout.fillWidth: true
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                text: "Name " + (sortField === "filename" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "filename" ? Theme.accentPrimary : Theme.textColor
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "filename") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "filename"
+                                        sortAscending = true
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
                         }
                         
-                        Label {
-                            text: "Duration"
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.bold: true
-                            color: Theme.textColor
+                        // Duration column header
+                        Rectangle {
                             Layout.preferredWidth: 80
-                            horizontalAlignment: Text.AlignRight
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.rightMargin: 4
+                                text: "Duration " + (sortField === "duration" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "duration" ? Theme.accentPrimary : Theme.textColor
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "duration") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "duration"
+                                        sortAscending = false  // Default to longest first
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
                         }
                         
-                        Label {
-                            text: "Size"
-                            font.pixelSize: Theme.fontSizeSmall
-                            font.bold: true
-                            color: Theme.textColor
+                        // Size column header
+                        Rectangle {
                             Layout.preferredWidth: 80
-                            horizontalAlignment: Text.AlignRight
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.rightMargin: 4
+                                text: "Size " + (sortField === "filesize" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "filesize" ? Theme.accentPrimary : Theme.textColor
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "filesize") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "filesize"
+                                        sortAscending = false  // Default to largest first
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
                         }
                     }
                 }

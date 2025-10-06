@@ -171,6 +171,41 @@ class FileListModel(QAbstractListModel):
             if file_data.get("filepath") == file_path:
                 return i
         return -1
+    
+    @pyqtSlot(str, bool)
+    def sortBy(self, field: str, ascending: bool = True) -> None:
+        """
+        Sort files by a specific field.
+        
+        Args:
+            field: Field name to sort by ("filename", "filesize", "duration")
+            ascending: True for ascending order, False for descending
+        """
+        self.beginResetModel()
+        
+        try:
+            # Map field names to dict keys
+            field_map = {
+                "filename": "filename",
+                "name": "filename",
+                "size": "filesize",
+                "filesize": "filesize",
+                "duration": "duration",
+            }
+            
+            sort_key = field_map.get(field.lower(), "filename")
+            
+            # Sort the files
+            self._files.sort(
+                key=lambda f: f.get(sort_key, 0) if sort_key != "filename" else f.get(sort_key, "").lower(),
+                reverse=not ascending
+            )
+            
+        except Exception as e:
+            print(f"Error sorting files: {e}")
+        
+        self.endResetModel()
+        self.filesChanged.emit()
 
 
 class AnnotationsModel(QAbstractTableModel):
