@@ -115,6 +115,7 @@ Access all documentation directly from the application:
   - **QML_MIGRATION_STRATEGY.md** (Qt Quick/QML modernization plan) 🆕
   - **CURRENT_ARCHITECTURE_INVENTORY.md** (architecture analysis) 🆕
   - **SIMPLIFICATION_EXAMPLES.md** (code simplification patterns) 🆕
+  - **IMMEDIATE_SIMPLIFICATION_GUIDE.md** (step-by-step implementation guide) 🆕
   - BUILD.md (build instructions)
 - **Test Plans**: TEST_PLAN_* files with comprehensive test cases
 
