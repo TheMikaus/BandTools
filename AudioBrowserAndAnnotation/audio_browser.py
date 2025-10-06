@@ -771,6 +771,218 @@ def get_consistent_stylesheet_colors():
         'border': ui_colors['border'].name()
     }
 
+# ========== ConfigManager (centralized settings management) ==========
+class ConfigManager:
+    """Centralized configuration management using QSettings."""
+    
+    def __init__(self, org_name: str = APP_ORG, app_name: str = APP_NAME):
+        self.settings = QSettings(org_name, app_name)
+    
+    # Geometry and layout
+    def get_geometry(self) -> Optional[bytes]:
+        return self.config.get_geometry()
+    
+    def set_geometry(self, geometry: bytes):
+        self.settings.setValue(SETTINGS_KEY_WINDOW_GEOMETRY, geometry)
+    
+    def get_splitter_state(self) -> Optional[bytes]:
+        return self.config.get_splitter_state()
+    
+    def set_splitter_state(self, state: bytes):
+        self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, state)
+    
+    def get_now_playing_collapsed(self) -> bool:
+        return self.config.get_now_playing_collapsed()
+    
+    def set_now_playing_collapsed(self, collapsed: bool):
+        self.settings.setValue(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, collapsed)
+    
+    # Recent folders
+    def get_recent_folders(self) -> List[str]:
+        folders = self.settings.value(SETTINGS_KEY_RECENT_FOLDERS, [])
+        return folders if isinstance(folders, list) else []
+    
+    def add_recent_folder(self, folder_path: str, max_recent: int = 10):
+        recent = self.get_recent_folders()
+        if folder_path in recent:
+            recent.remove(folder_path)
+        recent.insert(0, folder_path)
+        recent = recent[:max_recent]
+        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, recent)
+    
+    def clear_recent_folders(self):
+        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, [])
+    
+    # Root directory
+    def get_root_dir(self) -> str:
+        return self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+    
+    def set_root_dir(self, path: str):
+        self.settings.setValue(SETTINGS_KEY_ROOT, path)
+    
+    # Preferences
+    def get_undo_limit(self) -> int:
+        return int(self.config.get_undo_limit())
+    
+    def set_undo_limit(self, limit: int):
+        self.settings.setValue(SETTINGS_KEY_UNDO_CAP, int(limit))
+    
+    def get_theme(self) -> str:
+        return self.config.get_theme()
+    
+    def set_theme(self, theme: str):
+        self.settings.setValue(SETTINGS_KEY_THEME, theme)
+    
+    def get_volume(self) -> int:
+        vol_raw = self.settings.value(SETTINGS_KEY_VOLUME, 90)
+        return int(vol_raw) if vol_raw is not None else 90
+    
+    def set_volume(self, volume: int):
+        self.settings.setValue(SETTINGS_KEY_VOLUME, int(volume))
+    
+    def get_volume_boost(self) -> int:
+        boost_raw = self.settings.value(SETTINGS_KEY_VOLUME_BOOST, 100)
+        return int(boost_raw) if boost_raw is not None else 100
+    
+    def set_volume_boost(self, boost: int):
+        self.settings.setValue(SETTINGS_KEY_VOLUME_BOOST, int(boost))
+    
+    def get_playback_speed(self) -> float:
+        speed_raw = self.settings.value("playback_speed", 1.0)
+        return float(speed_raw) if speed_raw is not None else 1.0
+    
+    def set_playback_speed(self, speed: float):
+        self.settings.setValue("playback_speed", speed)
+    
+    # Current set
+    def get_current_set(self) -> str:
+        return self.config.get_current_set()
+    
+    def set_current_set(self, set_id: str):
+        self.settings.setValue(SETTINGS_KEY_CUR_SET, set_id)
+    
+    # Show all sets
+    def get_show_all_sets(self) -> bool:
+        show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
+        return bool(int(show_all_raw))
+    
+    def set_show_all_sets(self, show_all: bool):
+        self.settings.setValue(SETTINGS_KEY_SHOW_ALL, int(show_all))
+    
+    def get_show_all_folder_notes(self) -> bool:
+        show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, 0)
+        return bool(int(show_all_raw))
+    
+    def set_show_all_folder_notes(self, show_all: bool):
+        self.settings.setValue(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, int(show_all))
+    
+    # Auto-generation settings
+    def get_auto_waveforms(self) -> bool:
+        return bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, 0)))
+    
+    def set_auto_waveforms(self, enabled: bool):
+        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(enabled))
+    
+    def get_auto_fingerprints(self) -> bool:
+        return bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, 0)))
+    
+    def set_auto_fingerprints(self, enabled: bool):
+        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(enabled))
+    
+    def get_auto_gen_timing(self) -> str:
+        return self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
+    
+    def set_auto_gen_timing(self, timing: str):
+        self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, timing)
+    
+    # Pagination settings
+    def get_pagination_enabled(self) -> bool:
+        return bool(int(self.settings.value(SETTINGS_KEY_PAGINATION_ENABLED, 1)))
+    
+    def set_pagination_enabled(self, enabled: bool):
+        self.settings.setValue(SETTINGS_KEY_PAGINATION_ENABLED, int(enabled))
+    
+    def get_chunk_size(self) -> int:
+        return int(self.settings.value(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, DEFAULT_PAGINATION_CHUNK_SIZE))
+    
+    def set_chunk_size(self, size: int):
+        self.settings.setValue(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, size)
+    
+    def get_parallel_workers(self) -> int:
+        return int(self.settings.value(SETTINGS_KEY_PARALLEL_WORKERS, DEFAULT_PARALLEL_WORKERS))
+    
+    def set_parallel_workers(self, count: int):
+        self.settings.setValue(SETTINGS_KEY_PARALLEL_WORKERS, count)
+    
+    # Audio device
+    def get_audio_output_device(self) -> str:
+        return self.settings.value(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, "")
+    
+    def set_audio_output_device(self, device_id: str):
+        self.config.set_audio_output_device(device_id)
+    
+    # Fingerprint settings
+    def get_fingerprint_dir(self) -> str:
+        return self.settings.value(SETTINGS_KEY_FINGERPRINT_DIR, "")
+    
+    def set_fingerprint_dir(self, path: str):
+        self.settings.setValue(SETTINGS_KEY_FINGERPRINT_DIR, path)
+    
+    def get_fingerprint_threshold(self) -> float:
+        return float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
+    
+    def set_fingerprint_threshold(self, threshold: float):
+        self.settings.setValue(SETTINGS_KEY_FINGERPRINT_THRESHOLD, threshold)
+    
+    def get_fingerprint_algorithm(self) -> str:
+        return self.settings.value(SETTINGS_KEY_FINGERPRINT_ALGORITHM, DEFAULT_ALGORITHM)
+    
+    def set_fingerprint_algorithm(self, algorithm: str):
+        self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, algorithm)
+    
+    def get_fingerprint_section_expanded(self) -> bool:
+        return self.config.get_fingerprint_section_expanded()
+    
+    def set_fingerprint_section_expanded(self, expanded: bool):
+        self.settings.setValue("fingerprint_section_expanded", expanded)
+    
+    # Tabs order
+    def get_tabs_order(self) -> str:
+        return self.config.get_tabs_order()
+    
+    def set_tabs_order(self, order: str):
+        self.settings.setValue(SETTINGS_KEY_TABS_ORDER, order)
+    
+    # Auto-progress and auto-switch
+    def get_auto_progress(self) -> Optional[bool]:
+        ap = self.config.get_auto_progress()
+        return bool(int(ap)) if ap is not None else None
+    
+    def set_auto_progress(self, enabled: bool):
+        self.settings.setValue(SETTINGS_KEY_AUTOPROGRESS, int(enabled))
+    
+    def get_auto_switch(self) -> Optional[bool]:
+        asw = self.config.get_auto_switch()
+        return bool(int(asw)) if asw is not None else None
+    
+    def set_auto_switch(self, enabled: bool):
+        self.settings.setValue(SETTINGS_KEY_AUTOSWITCH, int(enabled))
+    
+    # Google Drive folder
+    def get_gdrive_folder(self) -> str:
+        folder = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER, "")
+        return folder if folder else ""
+    
+    def set_gdrive_folder(self, folder_name: str):
+        self.settings.setValue(SETTINGS_KEY_GDRIVE_FOLDER, folder_name)
+    
+    # Remove settings
+    def remove_geometry(self):
+        self.config.remove_geometry()
+    
+    def remove_splitter_state(self):
+        self.config.remove_splitter_state()
+
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
 class SeekSlider(QSlider):
@@ -4894,10 +5106,10 @@ class AudioBrowser(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} - {VERSION_STRING}"); self._apply_app_icon()
 
-        self.settings = QSettings(APP_ORG, APP_NAME)
+        self.config = ConfigManager()
         
         # Apply theme from settings
-        theme = self.settings.value(SETTINGS_KEY_THEME, "light")
+        theme = self.config.get_theme()
         _color_manager.set_theme(theme)
         
         self.root_path: Path = self._load_root_silently()
@@ -4941,13 +5153,13 @@ class AudioBrowser(QMainWindow):
         # Undo/Redo
         self._undo_stack: List[dict] = []
         self._undo_index: int = 0
-        self._undo_capacity: int = int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100))
+        self._undo_capacity: int = self.config.get_undo_limit()
 
         # Media - Initialize with default or persisted audio device
         self.media_instance = QMediaDevices()
         
         # Try to load persisted device or use system default
-        persisted_device_id = self.settings.value(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, "")
+        persisted_device_id = self.config.get_audio_output_device()
         selected_device = None
         
         if persisted_device_id:
@@ -4972,20 +5184,14 @@ class AudioBrowser(QMainWindow):
         # Listen for audio device changes
         self.media_instance.audioOutputsChanged.connect(self._refresh_output_devices)
 
-        vol_raw = self.settings.value(SETTINGS_KEY_VOLUME, 90)
-        vol = int(vol_raw) if isinstance(vol_raw, (int, str)) else 90
+        vol = self.config.get_volume()
         self.audio_output.setVolume(max(0.0, min(1.0, vol / 100.0)))
         
         # Volume boost (stored as 100-400 for 1.0x-4.0x)
-        boost_raw = self.settings.value(SETTINGS_KEY_VOLUME_BOOST, 100)
-        self.volume_boost = int(boost_raw) if isinstance(boost_raw, (int, str)) else 100
+        self.volume_boost = self.config.get_volume_boost()
         
         # Load playback speed from settings
-        speed_raw = self.settings.value("playback_speed", 1.0)
-        try:
-            self.playback_speed = float(speed_raw) if speed_raw is not None else 1.0
-        except (ValueError, TypeError):
-            self.playback_speed = 1.0
+        self.playback_speed = self.config.get_playback_speed()
 
         # Provided names & duration cache
         self.provided_names: Dict[str, str] = {}
@@ -5023,21 +5229,19 @@ class AudioBrowser(QMainWindow):
         self.folder_notes: str = ""
 
         # Show-all toggle
-        show_all_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL, 0)
-        self.show_all_sets: bool = bool(int(show_all_raw)) if isinstance(show_all_raw, (int, str)) else False
+        self.show_all_sets: bool = self.config.get_show_all_sets()
         
         # Show-all folder notes toggle
-        show_all_folder_notes_raw = self.settings.value(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, 0)
-        self.show_all_folder_notes: bool = bool(int(show_all_folder_notes_raw)) if isinstance(show_all_folder_notes_raw, (int, str)) else False
+        self.show_all_folder_notes: bool = self.config.get_show_all_folder_notes()
 
         # Fingerprinting
         self.fingerprint_reference_dir: Optional[Path] = None
-        ref_dir_str = self.settings.value(SETTINGS_KEY_FINGERPRINT_DIR, "")
+        ref_dir_str = self.config.get_fingerprint_dir()
         if ref_dir_str and Path(ref_dir_str).exists():
             self.fingerprint_reference_dir = Path(ref_dir_str)
         
-        self.fingerprint_threshold: float = float(self.settings.value(SETTINGS_KEY_FINGERPRINT_THRESHOLD, 0.7))
-        self.fingerprint_algorithm: str = self.settings.value(SETTINGS_KEY_FINGERPRINT_ALGORITHM, DEFAULT_ALGORITHM)
+        self.fingerprint_threshold: float = self.config.get_fingerprint_threshold()
+        self.fingerprint_algorithm: str = self.config.get_fingerprint_algorithm()
         # Validate the algorithm exists
         if self.fingerprint_algorithm not in FINGERPRINT_ALGORITHMS:
             self.fingerprint_algorithm = DEFAULT_ALGORITHM
@@ -5049,14 +5253,14 @@ class AudioBrowser(QMainWindow):
         self.auto_label_suggestions: Dict[str, Dict[str, Any]] = {}  # filename -> {suggested_name, confidence, selected}
 
         # Auto-generation preferences
-        self.auto_gen_waveforms: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, 0)))
-        self.auto_gen_fingerprints: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, 0)))
-        self.auto_gen_timing: str = self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
+        self.auto_gen_waveforms: bool = self.config.get_auto_waveforms()
+        self.auto_gen_fingerprints: bool = self.config.get_auto_fingerprints()
+        self.auto_gen_timing: str = self.config.get_auto_gen_timing()
         
         # Performance preferences
-        self.pagination_enabled: bool = bool(int(self.settings.value(SETTINGS_KEY_PAGINATION_ENABLED, 1)))
-        self.pagination_chunk_size: int = int(self.settings.value(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, DEFAULT_PAGINATION_CHUNK_SIZE))
-        self.parallel_workers: int = int(self.settings.value(SETTINGS_KEY_PARALLEL_WORKERS, DEFAULT_PARALLEL_WORKERS))
+        self.pagination_enabled: bool = self.config.get_pagination_enabled()
+        self.pagination_chunk_size: int = self.config.get_chunk_size()
+        self.parallel_workers: int = self.config.get_parallel_workers()
         
         # Pagination state
         self._current_chunk_start: int = 0  # Start index of current chunk
@@ -5087,7 +5291,7 @@ class AudioBrowser(QMainWindow):
         
         # Google Drive sync
         self.gdrive_sync_manager = None  # Will be initialized when needed
-        self.gdrive_folder_name: Optional[str] = self.settings.value(SETTINGS_KEY_GDRIVE_FOLDER, "")
+        self.gdrive_folder_name: Optional[str] = self.config.get_gdrive_folder()
         self.remote_files: Set[str] = set()  # Track which files exist on remote
         
         # Setlists
@@ -5364,7 +5568,7 @@ class AudioBrowser(QMainWindow):
     # ----- Settings & metadata -----
     def _has_stored_root(self) -> bool:
         """Check if a root directory is stored in settings and exists."""
-        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        stored = self.config.get_root_dir()
         return bool(stored and Path(stored).exists())
     
     def _has_valid_root(self) -> bool:
@@ -5373,7 +5577,7 @@ class AudioBrowser(QMainWindow):
     
     def _load_root_silently(self) -> Path:
         """Load root path from settings without showing any dialogs."""
-        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        stored = self.config.get_root_dir()
         if stored and Path(stored).exists():
             return Path(stored)
         # Return home directory as fallback - don't show dialog yet
@@ -5389,7 +5593,7 @@ class AudioBrowser(QMainWindow):
         dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
         if dlg.exec():
             p = Path(dlg.selectedFiles()[0])
-            self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
+            self.config.set_root_dir(str(p))
             self._save_root(p)  # This will update UI and reload data
             self._needs_root_selection = False  # Mark as resolved
         else:
@@ -5400,17 +5604,17 @@ class AudioBrowser(QMainWindow):
             # Don't set _needs_root_selection to False so dialog shows again if needed
 
     def _load_or_ask_root(self) -> Path:
-        stored = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        stored = self.config.get_root_dir()
         if stored and Path(stored).exists(): return Path(stored)
         dlg = QFileDialog(self, "Select your root band practice folder")
         dlg.setFileMode(QFileDialog.FileMode.Directory)
         dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
         if dlg.exec():
-            p = Path(dlg.selectedFiles()[0]); self.settings.setValue(SETTINGS_KEY_ROOT, str(p)); return p
-        home = Path.home(); self.settings.setValue(SETTINGS_KEY_ROOT, str(home)); return home
+            p = Path(dlg.selectedFiles()[0]); self.config.set_root_dir(str(p)); return p
+        home = Path.home(); self.config.set_root_dir(str(home)); return home
 
     def _save_root(self, p: Path):
-        self.root_path = p; self.settings.setValue(SETTINGS_KEY_ROOT, str(p))
+        self.root_path = p; self.config.set_root_dir(str(p))
         self._add_to_recent_folders(p)  # Track in recent folders
         self.current_practice_folder = p  # Reset to root when changing root
         self.path_label.setText(f"Band Practice Directory: {self.root_path}")
@@ -5440,28 +5644,13 @@ class AudioBrowser(QMainWindow):
     
     def _get_recent_folders(self) -> list[str]:
         """Get list of recent folders from settings."""
-        recent = self.settings.value(SETTINGS_KEY_RECENT_FOLDERS, [])
-        if not isinstance(recent, list):
-            return []
+        recent = self.config.get_recent_folders()
         # Filter out folders that no longer exist
         return [f for f in recent if Path(f).exists()]
     
     def _add_to_recent_folders(self, folder_path: Path):
         """Add folder to recent folders list, maintaining max size of 10."""
-        folder_str = str(folder_path)
-        recent = self._get_recent_folders()
-        
-        # Remove if already in list
-        if folder_str in recent:
-            recent.remove(folder_str)
-        
-        # Add to front of list
-        recent.insert(0, folder_str)
-        
-        # Keep only the 10 most recent
-        recent = recent[:10]
-        
-        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, recent)
+        self.config.add_recent_folder(str(folder_path))
         self._update_recent_folders_menu()
     
     def _update_recent_folders_menu(self):
@@ -5494,7 +5683,7 @@ class AudioBrowser(QMainWindow):
     
     def _clear_recent_folders(self):
         """Clear the recent folders list."""
-        self.settings.setValue(SETTINGS_KEY_RECENT_FOLDERS, [])
+        self.config.clear_recent_folders()
         self._update_recent_folders_menu()
 
     def _names_json_path(self) -> Path: 
@@ -5594,7 +5783,7 @@ class AudioBrowser(QMainWindow):
                     "notes": list((carry_notes or {}).get(fname, []))
                 }
         self.annotation_sets = [aset]; self.current_set_id = sid
-        self.settings.setValue(SETTINGS_KEY_CUR_SET, sid)
+        self.config.set_current_set(sid)
         self._load_current_set_into_fields()
 
     def _load_notes(self):
@@ -5661,7 +5850,7 @@ class AudioBrowser(QMainWindow):
                     # Convert "Default" set to user-based name if needed
                     cleaned = self._convert_default_to_user_set(cleaned)
                     self.annotation_sets = cleaned
-                    cur = self.settings.value(SETTINGS_KEY_CUR_SET, "", type=str) or ""
+                    cur = self.config.get_current_set()
                     if not any(s["id"] == cur for s in self.annotation_sets): cur = self.annotation_sets[0]["id"]
                     self.current_set_id = cur
                     self._load_current_set_into_fields()
@@ -6564,7 +6753,7 @@ class AudioBrowser(QMainWindow):
         colors = get_consistent_stylesheet_colors()
         self.fp_group = QGroupBox("Audio Fingerprinting")
         self.fp_group.setCheckable(True)
-        self.fp_group.setChecked(bool(self.settings.value("fingerprint_section_expanded", True)))
+        self.fp_group.setChecked(self.config.get_fingerprint_section_expanded())
         self.fp_group.toggled.connect(self._on_fingerprint_section_toggled)
         self.fp_group.setStyleSheet(f"""
             QGroupBox {{
@@ -7100,7 +7289,7 @@ class AudioBrowser(QMainWindow):
         if not new_id: return
         self._sync_fields_into_current_set()
         self.current_set_id = new_id
-        self.settings.setValue(SETTINGS_KEY_CUR_SET, new_id)
+        self.config.set_current_set(new_id)
         self._load_current_set_into_fields()
         self._load_annotations_for_current()
         aset = self._get_current_set()
@@ -7158,7 +7347,7 @@ class AudioBrowser(QMainWindow):
         sid = uuid.uuid4().hex[:8]
         self.annotation_sets.append({"id": sid, "name": name.strip(), "color": color, "visible": True, "files": {}})
         self.current_set_id = sid
-        self.settings.setValue(SETTINGS_KEY_CUR_SET, sid)
+        self.config.set_current_set(sid)
         self._load_current_set_into_fields()
         self._refresh_set_combo()
         self._load_annotations_for_current()
@@ -7193,7 +7382,7 @@ class AudioBrowser(QMainWindow):
                 try: Path(src_path).unlink()
                 except Exception: pass
         self.current_set_id = self.annotation_sets[0]["id"]
-        self.settings.setValue(SETTINGS_KEY_CUR_SET, self.current_set_id)
+        self.config.set_current_set(self.current_set_id)
         self._load_current_set_into_fields()
         self._refresh_set_combo()
         self._load_annotations_for_current()
@@ -7205,13 +7394,13 @@ class AudioBrowser(QMainWindow):
     # ----- Show-all toggle -----
     def _on_show_all_toggled(self, _state):
         self.show_all_sets = bool(self.show_all_cb.isChecked())
-        self.settings.setValue(SETTINGS_KEY_SHOW_ALL, int(self.show_all_sets))
+        self.config.set_show_all_sets(self.show_all_sets)
         self._configure_annotation_table()
         self._load_annotations_for_current()
 
     def _on_show_all_folder_notes_toggled(self, _state):
         self.show_all_folder_notes = bool(self.show_all_folder_notes_cb.isChecked())
-        self.settings.setValue(SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES, int(self.show_all_folder_notes))
+        self.config.set_show_all_folder_notes(self.show_all_folder_notes)
         self._update_folder_notes_ui()
 
     # ----- Tab order -----
@@ -7222,7 +7411,7 @@ class AudioBrowser(QMainWindow):
 
     def _on_tab_moved(self, *_):
         order = [self.tabs.tabText(i) for i in range(self.tabs.count())]
-        self.settings.setValue(SETTINGS_KEY_TABS_ORDER, "|".join(order))
+        self.config.set_tabs_order("|".join(order))
 
     def _on_tab_changed(self, index: int):
         """Handle tab changes to trigger deferred loading when switching to Annotations tab."""
@@ -7234,7 +7423,7 @@ class AudioBrowser(QMainWindow):
                 QTimer.singleShot(50, self._deferred_annotation_load)
 
     def _restore_tab_order(self):
-        saved = self.settings.value(SETTINGS_KEY_TABS_ORDER, "", type=str) or ""
+        saved = self.config.get_tabs_order()
         if not saved: return
         desired = [s for s in saved.split("|") if s in {"Folder Notes", "Library", "Annotations"}]
         if not desired: return
@@ -7245,14 +7434,14 @@ class AudioBrowser(QMainWindow):
 
     # ----- Toggles -----
     def _restore_toggles(self):
-        ap = self.settings.value(SETTINGS_KEY_AUTOPROGRESS, None)
+        ap = self.config.get_auto_progress()
         self.auto_progress_cb.setChecked(bool(int(ap)) if isinstance(ap, str) and ap else bool(ap) if ap is not None else False)
-        asw = self.settings.value(SETTINGS_KEY_AUTOSWITCH, None)
+        asw = self.config.get_auto_switch()
         self.auto_switch_cb.setChecked(bool(int(asw)) if isinstance(asw, str) and asw else bool(asw) if asw is not None else True)
         self.auto_progress_cb.stateChanged.connect(lambda _:
-            self.settings.setValue(SETTINGS_KEY_AUTOPROGRESS, int(self.auto_progress_cb.isChecked())))
+            self.config.set_auto_progress(self.auto_progress_cb.isChecked()))
         self.auto_switch_cb.stateChanged.connect(lambda _:
-            self.settings.setValue(SETTINGS_KEY_AUTOSWITCH, int(self.auto_switch_cb.isChecked())))
+            self.config.set_auto_switch(self.auto_switch_cb.isChecked()))
 
     # ----- Volume -----
     def _on_volume_changed(self, val: int):
@@ -7261,13 +7450,13 @@ class AudioBrowser(QMainWindow):
         boost_factor = self.volume_boost / 100.0
         effective_volume = base_volume * boost_factor
         self.audio_output.setVolume(effective_volume)
-        self.settings.setValue(SETTINGS_KEY_VOLUME, int(val))
+        self.config.set_volume(int(val))
     
     def _on_boost_changed(self, val: int):
         # Update boost value and label
         self.volume_boost = val
         self.boost_label.setText(f"{val / 100.0:.1f}x")
-        self.settings.setValue(SETTINGS_KEY_VOLUME_BOOST, int(val))
+        self.config.set_volume_boost(int(val))
         # Reapply volume with new boost
         current_volume = self.volume_slider.value()
         self._on_volume_changed(current_volume)
@@ -7276,7 +7465,7 @@ class AudioBrowser(QMainWindow):
         """Handle playback speed slider changes."""
         self.playback_speed = val / 100.0
         self.speed_label.setText(f"{self.playback_speed:.1f}x")
-        self.settings.setValue("playback_speed", self.playback_speed)
+        self.config.set_playback_speed(self.playback_speed)
         # Apply the speed change to the player
         self.player.setPlaybackRate(self.playback_speed)
 
@@ -7314,7 +7503,7 @@ class AudioBrowser(QMainWindow):
         
         # Persist the device selection
         device_id = device.id()
-        self.settings.setValue(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, device_id)
+        self.config.set_audio_output_device(device_id)
             
         # Store current playback state
         was_playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -11673,7 +11862,7 @@ class AudioBrowser(QMainWindow):
     # ----- Undo/Redo -----
     def _on_undo_capacity_changed(self, v: int):
         self._undo_capacity = int(v)
-        self.settings.setValue(SETTINGS_KEY_UNDO_CAP, int(v))
+        self.config.set_undo_limit(int(v))
         overflow = len(self._undo_stack) - self._undo_capacity
         if overflow > 0:
             del self._undo_stack[0:overflow]
@@ -11915,25 +12104,25 @@ class AudioBrowser(QMainWindow):
         if dlg.exec():
             ref_path = Path(dlg.selectedFiles()[0])
             self.fingerprint_reference_dir = ref_path
-            self.settings.setValue(SETTINGS_KEY_FINGERPRINT_DIR, str(ref_path))
+            self.config.set_fingerprint_dir(str(ref_path))
             self._update_fingerprint_ui()
 
     def _on_fingerprint_threshold_changed(self, value):
         """Handle threshold change."""
         self.fingerprint_threshold = value / 100.0
-        self.settings.setValue(SETTINGS_KEY_FINGERPRINT_THRESHOLD, self.fingerprint_threshold)
+        self.config.set_fingerprint_threshold(self.fingerprint_threshold)
 
     def _on_fingerprint_algorithm_changed(self):
         """Handle algorithm change."""
         selected_data = self.algorithm_combo.currentData()
         if selected_data and selected_data in FINGERPRINT_ALGORITHMS:
             self.fingerprint_algorithm = selected_data
-            self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, self.fingerprint_algorithm)
+            self.config.set_fingerprint_algorithm(self.fingerprint_algorithm)
             self._update_fingerprint_ui()
 
     def _on_fingerprint_section_toggled(self, checked: bool):
         """Handle fingerprinting section expand/collapse."""
-        self.settings.setValue("fingerprint_section_expanded", checked)
+        self.config.set_fingerprint_section_expanded(checked)
 
     # ----- Auto-generation callbacks -----
     def _generate_fingerprints_for_folder(self):
@@ -12439,12 +12628,12 @@ class AudioBrowser(QMainWindow):
             log_print(f"  Parallel workers: {self.parallel_workers}")
             
             # Save to persistent settings
-            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
-            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
-            self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
-            self.settings.setValue(SETTINGS_KEY_PAGINATION_ENABLED, int(self.pagination_enabled))
-            self.settings.setValue(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, self.pagination_chunk_size)
-            self.settings.setValue(SETTINGS_KEY_PARALLEL_WORKERS, self.parallel_workers)
+            self.config.set_auto_waveforms(self.auto_gen_waveforms)
+            self.config.set_auto_fingerprints(self.auto_gen_fingerprints)
+            self.config.set_auto_gen_timing(self.auto_gen_timing)
+            self.config.set_pagination_enabled(self.pagination_enabled)
+            self.config.set_chunk_size(self.pagination_chunk_size)
+            self.config.set_parallel_workers(self.parallel_workers)
             
             # If folder is loaded and pagination settings changed, refresh display
             if self.root_path:
@@ -12453,8 +12642,8 @@ class AudioBrowser(QMainWindow):
     def _show_preferences_dialog(self):
         """Show preferences dialog."""
         # Get current settings
-        current_undo_limit = int(self.settings.value(SETTINGS_KEY_UNDO_CAP, 100))
-        current_theme = self.settings.value(SETTINGS_KEY_THEME, "light")
+        current_undo_limit = int(self.config.get_undo_limit())
+        current_theme = self.config.get_theme()
         
         # Show dialog
         dialog = PreferencesDialog(current_undo_limit, current_theme, self)
@@ -12463,7 +12652,7 @@ class AudioBrowser(QMainWindow):
             new_undo_limit = dialog.get_undo_limit()
             
             # Save to persistent settings
-            self.settings.setValue(SETTINGS_KEY_UNDO_CAP, new_undo_limit)
+            self.config.set_undo_limit(new_undo_limit)
             
             # Update the undo capacity in the history
             self._undo_capacity = new_undo_limit
@@ -12478,7 +12667,7 @@ class AudioBrowser(QMainWindow):
             # Apply new theme
             new_theme = dialog.get_theme()
             if new_theme != current_theme:
-                self.settings.setValue(SETTINGS_KEY_THEME, new_theme)
+                self.config.set_theme(new_theme)
                 log_print(f"Theme changed to: {new_theme}")
                 # Show message that restart is required
                 from PyQt6.QtWidgets import QMessageBox
@@ -12494,13 +12683,13 @@ class AudioBrowser(QMainWindow):
         """Save current window geometry and splitter state."""
         try:
             # Save window geometry
-            self.settings.setValue(SETTINGS_KEY_WINDOW_GEOMETRY, self.saveGeometry())
+            self.config.set_geometry(self.saveGeometry())
             
             # Save splitter state
-            self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, self.main_splitter.saveState())
+            self.config.set_splitter_state(self.main_splitter.saveState())
             
             # Save Now Playing Panel collapsed state
-            self.settings.setValue(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, self.now_playing_panel.is_collapsed())
+            self.config.set_now_playing_collapsed(self.now_playing_panel.is_collapsed())
             
             self.statusBar().showMessage("Window layout saved", 3000)
             log_print("Workspace layout saved")
@@ -12512,19 +12701,19 @@ class AudioBrowser(QMainWindow):
         """Restore saved window geometry and splitter state."""
         try:
             # Restore window geometry
-            geometry = self.settings.value(SETTINGS_KEY_WINDOW_GEOMETRY)
+            geometry = self.config.get_geometry()
             if geometry:
                 self.restoreGeometry(geometry)
                 log_print("Window geometry restored")
             
             # Restore splitter state
-            splitter_state = self.settings.value(SETTINGS_KEY_SPLITTER_STATE)
+            splitter_state = self.config.get_splitter_state()
             if splitter_state:
                 self.main_splitter.restoreState(splitter_state)
                 log_print("Splitter state restored")
             
             # Restore Now Playing Panel collapsed state
-            collapsed = self.settings.value(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, False, type=bool)
+            collapsed = self.config.get_now_playing_collapsed()
             self.now_playing_panel.set_collapsed(collapsed)
             log_print(f"Now Playing Panel state restored: {'collapsed' if collapsed else 'expanded'}")
         except Exception as e:
@@ -12543,8 +12732,8 @@ class AudioBrowser(QMainWindow):
             self.main_splitter.setSizes([left_width, right_width])
             
             # Clear saved settings
-            self.settings.remove(SETTINGS_KEY_WINDOW_GEOMETRY)
-            self.settings.remove(SETTINGS_KEY_SPLITTER_STATE)
+            self.config.remove_geometry()
+            self.config.remove_splitter_state()
             
             self.statusBar().showMessage("Layout reset to default", 3000)
             log_print("Workspace layout reset to default")
@@ -14139,7 +14328,7 @@ class AudioBrowser(QMainWindow):
                     return
                 
                 self.gdrive_folder_name = folder_dialog.folder_name
-                self.settings.setValue(SETTINGS_KEY_GDRIVE_FOLDER, self.gdrive_folder_name)
+                self.config.set_gdrive_folder(self.gdrive_folder_name)
             
             # Select/create the remote folder
             self.statusBar().showMessage(f"Connecting to folder: {self.gdrive_folder_name}...", 3000)
@@ -15322,8 +15511,8 @@ def main():
     
     # Apply theme before creating the main window
     # Load theme from settings
-    settings = QSettings(APP_ORG, APP_NAME)
-    theme = settings.value(SETTINGS_KEY_THEME, "light")
+    config = ConfigManager()
+    theme = config.get_theme()
     _color_manager.set_theme(theme)
     
     # Apply consistent application-wide color scheme

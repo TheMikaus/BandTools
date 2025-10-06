@@ -110,7 +110,13 @@ Access all documentation directly from the application:
 
 - **User Guides**: HOWTO_NEW_FEATURES.md, PRACTICE_GOALS_GUIDE.md, SETLIST_BUILDER_GUIDE.md, UI_IMPROVEMENTS.md
 - **Visual Guides**: UI_SCREENSHOTS.md, VISUAL_GUIDE_* files with ASCII diagrams
-- **Technical**: INTERFACE_IMPROVEMENT_IDEAS.md (feature roadmap), BUILD.md (build instructions)
+- **Technical**: 
+  - INTERFACE_IMPROVEMENT_IDEAS.md (feature roadmap)
+  - **QML_MIGRATION_STRATEGY.md** (Qt Quick/QML modernization plan) 🆕
+  - **CURRENT_ARCHITECTURE_INVENTORY.md** (architecture analysis) 🆕
+  - **SIMPLIFICATION_EXAMPLES.md** (code simplification patterns) 🆕
+  - **IMMEDIATE_SIMPLIFICATION_GUIDE.md** (step-by-step implementation guide) 🆕
+  - BUILD.md (build instructions)
 - **Test Plans**: TEST_PLAN_* files with comprehensive test cases
 
 # Note
