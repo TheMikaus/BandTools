@@ -59,14 +59,14 @@ ApplicationWindow {
                 spacing: 15
                 
                 Label {
-                    text: "✓ Phase 0: Preparation"
+                    text: "✓ Phase 0: Preparation • ⏳ Phase 1: In Progress"
                     font.pixelSize: 18
                     font.bold: true
                     color: "#4ade80"
                 }
                 
                 Label {
-                    text: "Status: Basic QML application structure is working"
+                    text: "Status: Backend modules integrated • Current theme: " + settingsManager.getTheme()
                     font.pixelSize: 14
                     color: "#ffffff"
                     wrapMode: Text.WordWrap
@@ -96,7 +96,10 @@ ApplicationWindow {
                             "✓ main.py entry point implemented",
                             "✓ PyQt6.QtQuick dependencies configured",
                             "✓ QML main window rendering",
-                            "✓ Python-QML communication established"
+                            "✓ Python-QML communication established",
+                            "✓ SettingsManager backend module created",
+                            "✓ ColorManager backend module created",
+                            "✓ Backend managers exposed to QML"
                         ]
                         
                         Label {
@@ -143,17 +146,95 @@ ApplicationWindow {
                     }
                 }
                 
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: "#555555"
+                }
+                
+                Label {
+                    text: "Backend Integration Test:"
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: "#ffffff"
+                }
+                
+                RowLayout {
+                    spacing: 15
+                    Layout.fillWidth: true
+                    
+                    ColumnLayout {
+                        spacing: 8
+                        Layout.fillWidth: true
+                        
+                        Label {
+                            text: "SettingsManager:"
+                            font.pixelSize: 12
+                            color: "#cccccc"
+                        }
+                        
+                        Label {
+                            text: "  • Theme: " + settingsManager.getTheme()
+                            font.pixelSize: 11
+                            color: "#999999"
+                        }
+                        
+                        Label {
+                            text: "  • Volume: " + settingsManager.getVolume() + "%"
+                            font.pixelSize: 11
+                            color: "#999999"
+                        }
+                    }
+                    
+                    ColumnLayout {
+                        spacing: 8
+                        Layout.fillWidth: true
+                        
+                        Label {
+                            text: "ColorManager:"
+                            font.pixelSize: 12
+                            color: "#cccccc"
+                        }
+                        
+                        Label {
+                            text: "  • Success: " + colorManager.getSuccessColor()
+                            font.pixelSize: 11
+                            color: colorManager.getSuccessColor()
+                        }
+                        
+                        Label {
+                            text: "  • Danger: " + colorManager.getDangerColor()
+                            font.pixelSize: 11
+                            color: colorManager.getDangerColor()
+                        }
+                    }
+                }
+                
                 Item {
                     Layout.fillHeight: true
                 }
                 
-                // Test button to verify QML-Python communication
-                Button {
-                    text: "Test Python-QML Communication"
+                // Test buttons for backend integration
+                RowLayout {
+                    spacing: 10
                     Layout.alignment: Qt.AlignHCenter
                     
-                    onClicked: {
-                        appViewModel.setMessage("Communication Test Successful! ✓")
+                    Button {
+                        text: "Test Python-QML Communication"
+                        
+                        onClicked: {
+                            appViewModel.setMessage("Communication Test Successful! ✓")
+                        }
+                    }
+                    
+                    Button {
+                        text: "Toggle Theme (Test)"
+                        
+                        onClicked: {
+                            var currentTheme = settingsManager.getTheme()
+                            var newTheme = currentTheme === "dark" ? "light" : "dark"
+                            settingsManager.setTheme(newTheme)
+                        }
                     }
                 }
             }

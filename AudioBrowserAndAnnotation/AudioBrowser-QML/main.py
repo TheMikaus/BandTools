@@ -36,6 +36,10 @@ from PyQt6.QtCore import QUrl, QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQml import QQmlApplicationEngine
 
+# Import backend modules
+from backend.settings_manager import SettingsManager
+from backend.color_manager import ColorManager
+
 
 class ApplicationViewModel(QObject):
     """
@@ -75,9 +79,20 @@ def main():
     # Create QML engine
     engine = QQmlApplicationEngine()
     
+    # Create backend managers
+    settings_manager = SettingsManager()
+    color_manager = ColorManager(theme=settings_manager.getTheme())
+    
     # Create and expose view model to QML
     view_model = ApplicationViewModel()
+    
+    # Expose backend objects to QML via context properties
     engine.rootContext().setContextProperty("appViewModel", view_model)
+    engine.rootContext().setContextProperty("settingsManager", settings_manager)
+    engine.rootContext().setContextProperty("colorManager", color_manager)
+    
+    # Connect settings to color manager
+    settings_manager.themeChanged.connect(color_manager.setTheme)
     
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
