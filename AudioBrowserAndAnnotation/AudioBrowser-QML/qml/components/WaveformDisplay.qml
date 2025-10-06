@@ -96,11 +96,55 @@ Rectangle {
                     }
                 }
             }
+            
+            // Clip markers layer
+            Repeater {
+                id: clipMarkersRepeater
+                model: clipManager ? clipManager.getClipCount() : 0
+                
+                ClipMarker {
+                    startMs: {
+                        if (!clipManager) return 0;
+                        const clip = clipManager.getClip(index);
+                        return clip.start_ms || 0;
+                    }
+                    endMs: {
+                        if (!clipManager) return 0;
+                        const clip = clipManager.getClip(index);
+                        return clip.end_ms || 0;
+                    }
+                    clipName: {
+                        if (!clipManager) return "";
+                        const clip = clipManager.getClip(index);
+                        return clip.name || "";
+                    }
+                    clipNotes: {
+                        if (!clipManager) return "";
+                        const clip = clipManager.getClip(index);
+                        return clip.notes || "";
+                    }
+                    clipIndex: index
+                    waveformWidth: waveform.width
+                    waveformDuration: waveform.durationMs
+                    
+                    onClicked: function(clipIndex) {
+                        // Signal to select this clip
+                        root.clipClicked(clipIndex);
+                    }
+                    
+                    onDoubleClicked: function(clipIndex) {
+                        // Signal to edit this clip
+                        root.clipDoubleClicked(clipIndex);
+                    }
+                }
+            }
         }
     }
     
-    // Signal for annotation interaction
+    // Signals for annotation and clip interaction
     signal annotationDoubleClicked(var annotationData)
+    signal clipClicked(int clipIndex)
+    signal clipDoubleClicked(int clipIndex)
     
     // Loading indicator
     Rectangle {
@@ -325,5 +369,15 @@ Rectangle {
     
     function resetZoom() {
         zoomLevel = 1.0
+    }
+    
+    // Listen for clip changes to update markers
+    Connections {
+        target: clipManager
+        
+        function onClipsChanged(filePath) {
+            // Refresh clip markers by updating the model
+            clipMarkersRepeater.model = clipManager.getClipCount();
+        }
     }
 }

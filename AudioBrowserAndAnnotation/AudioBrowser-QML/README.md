@@ -127,6 +127,47 @@ AudioBrowser-QML/
 - Automatic persistence
 - Multi-user attribution
 
+### ✅ Phase 5: Clips System (Complete)
+
+**Objectives**: Implement audio clip management and export
+
+**Completed Tasks**:
+- ✅ Created ClipManager backend module (~440 lines)
+  - Full CRUD operations for clips
+  - JSON file-based persistence
+  - Export functionality to extract audio segments
+  - Timestamp validation and error handling
+- ✅ Created ClipMarker QML component (~230 lines)
+  - Visual clip boundaries on waveform
+  - Start/end markers with labels
+  - Highlighted region between markers
+  - Interactive tooltips on hover
+  - Click-to-select, double-click to edit
+- ✅ Created ClipDialog QML component (~320 lines)
+  - Create and edit clips
+  - Start/end time input with validation
+  - "Use Current" buttons for playback position
+  - Name and notes fields
+- ✅ Updated ClipsTab with full UI (~420 lines)
+  - TableView for clip list
+  - Add/Edit/Delete/Export/Clear controls
+  - Empty state handling
+  - Confirmation dialogs
+- ✅ Integrated with WaveformDisplay for marker rendering
+- ✅ Connected to main.py and clip manager
+- ✅ Comprehensive documentation (PHASE_5_CLIPS_SUMMARY.md)
+
+**Features**:
+- Create clips with start/end timestamps
+- Edit existing clips (all properties)
+- Delete individual or all clips
+- Export clips as separate audio files
+- Visual clip markers on waveform
+- Click on clip to seek to start
+- Duration calculation and display
+- Automatic persistence
+- Support for WAV, MP3, OGG, FLAC formats
+
 ## Running the Application
 
 ### Prerequisites
@@ -180,6 +221,21 @@ The application will automatically install PyQt6 dependencies if they are not pr
 - Double-click marker to edit
 - Automatic persistence to JSON
 - Multi-user support
+
+**Phase 5 Features** (Clips):
+- Create clips with start/end timestamps
+- Edit existing clips
+- Delete clips (individual or all)
+- Export clips as separate audio files
+- Visual clip markers on waveform with region highlighting
+- Start "[" and end "]" boundary markers
+- Click to select, double-click to edit
+- Interactive tooltips showing duration
+- Time format validation (MM:SS.mmm)
+- "Use Current" buttons to capture playback position
+- Name and notes for each clip
+- Automatic persistence to JSON
+- Support for WAV, MP3, OGG, FLAC export formats
 
 ## Development Notes
 
