@@ -3,261 +3,207 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "components"
 import "styles"
+import "tabs"
 
 ApplicationWindow {
     id: mainWindow
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 1 Progress"
+    title: "AudioBrowser (QML) - Phase 1 Development"
     
     // Use theme for background color
     color: Theme.backgroundColor
     
-    // Main content area
+    // Main content area with tabs
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
+        spacing: 0
         
-        // Header
+        // Toolbar
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 80
+            Layout.preferredHeight: Theme.toolbarHeight
             color: Theme.backgroundLight
-            radius: Theme.radiusNormal
             
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 10
-                
-                Label {
-                    text: appViewModel.getMessage()
-                    font.pixelSize: Theme.fontSizeXLarge
-                    font.bold: true
-                    color: Theme.textColor
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                
-                Label {
-                    text: "QML Migration - Backend Integration"
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.textSecondary
-                    Layout.alignment: Qt.AlignHCenter
-                }
-            }
-        }
-        
-        // Info panel
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: Theme.backgroundMedium
-            radius: Theme.radiusNormal
-            
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 15
+                anchors.leftMargin: Theme.spacingNormal
+                anchors.rightMargin: Theme.spacingNormal
+                spacing: Theme.spacingLarge
                 
                 Label {
-                    text: "✓ Phase 0: Preparation • ⏳ Phase 1: In Progress"
+                    text: "AudioBrowser QML"
                     font.pixelSize: Theme.fontSizeLarge
                     font.bold: true
-                    color: Theme.accentSuccess
-                }
-                
-                Label {
-                    text: "Status: Backend modules integrated • Current theme: " + settingsManager.getTheme()
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.textColor
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-                
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.borderColor
-                }
-                
-                Label {
-                    text: "Completed:"
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.bold: true
                     color: Theme.textColor
                 }
                 
-                ColumnLayout {
-                    spacing: 8
-                    Layout.fillWidth: true
-                    
-                    Repeater {
-                        model: [
-                            "✓ Project directory structure created",
-                            "✓ main.py entry point implemented",
-                            "✓ PyQt6.QtQuick dependencies configured",
-                            "✓ QML main window rendering",
-                            "✓ Python-QML communication established",
-                            "✓ SettingsManager backend module created",
-                            "✓ ColorManager backend module created",
-                            "✓ Backend managers exposed to QML"
-                        ]
-                        
-                        Label {
-                            text: modelData
-                            font.pixelSize: Theme.fontSizeNormal
-                            color: Theme.textSecondary
-                            leftPadding: Theme.spacingLarge
-                        }
-                    }
-                }
+                Item { Layout.fillWidth: true }
                 
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.borderColor
-                }
-                
-                Label {
-                    text: "Next Steps:"
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.bold: true
-                    color: Theme.accentWarning
-                }
-                
-                ColumnLayout {
-                    spacing: 8
-                    Layout.fillWidth: true
-                    
-                    Repeater {
-                        model: [
-                            "• Extract audio_engine from audio_browser.py",
-                            "• Extract file_manager from audio_browser.py",
-                            "• Implement QML tab structure (Library, Annotations, Clips)",
-                            "• Create more reusable QML components",
-                            "• Implement file list model"
-                        ]
-                        
-                        Label {
-                            text: modelData
-                            font.pixelSize: Theme.fontSizeNormal
-                            color: Theme.textMuted
-                            leftPadding: Theme.spacingLarge
-                        }
-                    }
-                }
-                
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.borderColor
-                }
-                
-                Label {
-                    text: "Backend Integration Test:"
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.bold: true
-                    color: Theme.textColor
-                }
-                
+                // Playback controls (placeholder)
                 RowLayout {
-                    spacing: 15
-                    Layout.fillWidth: true
-                    
-                    ColumnLayout {
-                        spacing: 8
-                        Layout.fillWidth: true
-                        
-                        Label {
-                            text: "SettingsManager:"
-                            font.pixelSize: Theme.fontSizeNormal
-                            color: Theme.textSecondary
-                        }
-                        
-                        Label {
-                            text: "  • Theme: " + settingsManager.getTheme()
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textMuted
-                        }
-                        
-                        Label {
-                            text: "  • Volume: " + settingsManager.getVolume() + "%"
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textMuted
-                        }
-                    }
-                    
-                    ColumnLayout {
-                        spacing: 8
-                        Layout.fillWidth: true
-                        
-                        Label {
-                            text: "ColorManager:"
-                            font.pixelSize: Theme.fontSizeNormal
-                            color: Theme.textSecondary
-                        }
-                        
-                        Label {
-                            text: "  • Success: " + colorManager.getSuccessColor()
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: colorManager.getSuccessColor()
-                        }
-                        
-                        Label {
-                            text: "  • Danger: " + colorManager.getDangerColor()
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: colorManager.getDangerColor()
-                        }
-                    }
-                }
-                
-                Item {
-                    Layout.fillHeight: true
-                }
-                
-                // Test buttons for backend integration
-                RowLayout {
-                    spacing: Theme.spacingNormal
-                    Layout.alignment: Qt.AlignHCenter
+                    spacing: Theme.spacingSmall
                     
                     StyledButton {
-                        text: "Test Communication"
+                        text: "⏮"
+                        enabled: false
+                    }
+                    
+                    StyledButton {
+                        text: audioEngine.isPlaying() ? "⏸" : "▶"
                         primary: true
-                        
-                        onClicked: {
-                            appViewModel.setMessage("Communication Test Successful! ✓")
-                        }
+                        onClicked: audioEngine.togglePlayPause()
                     }
                     
                     StyledButton {
-                        text: "Toggle Theme"
-                        success: true
-                        
-                        onClicked: {
-                            var currentTheme = settingsManager.getTheme()
-                            var newTheme = currentTheme === "dark" ? "light" : "dark"
-                            settingsManager.setTheme(newTheme)
-                            Theme.setTheme(newTheme)
-                        }
+                        text: "⏹"
+                        onClicked: audioEngine.stop()
+                    }
+                    
+                    StyledButton {
+                        text: "⏭"
+                        enabled: false
+                    }
+                }
+                
+                Item { width: Theme.spacingNormal }
+                
+                // Theme toggle
+                StyledButton {
+                    text: "Theme"
+                    success: true
+                    onClicked: {
+                        var currentTheme = settingsManager.getTheme()
+                        var newTheme = currentTheme === "dark" ? "light" : "dark"
+                        settingsManager.setTheme(newTheme)
+                        Theme.setTheme(newTheme)
                     }
                 }
             }
         }
         
-        // Footer
+        // Tab bar
+        TabBar {
+            id: tabBar
+            Layout.fillWidth: true
+            background: Rectangle {
+                color: Theme.backgroundLight
+            }
+            
+            TabButton {
+                text: "Library"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 0 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 0 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            
+            TabButton {
+                text: "Annotations"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 1 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 1 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            
+            TabButton {
+                text: "Clips"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 2 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 2 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+        }
+        
+        // Tab content
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: tabBar.currentIndex
+            
+            LibraryTab {
+                id: libraryTab
+            }
+            
+            AnnotationsTab {
+                id: annotationsTab
+            }
+            
+            ClipsTab {
+                id: clipsTab
+            }
+        }
+        
+        // Status bar
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.statusBarHeight
             color: Theme.backgroundLight
-            radius: Theme.radiusNormal
             
-            Label {
-                anchors.centerIn: parent
-                text: "AudioBrowser QML Migration • Phase 0 Complete • Phase 1 In Progress"
-                font.pixelSize: Theme.fontSizeNormal
-                color: Theme.textMuted
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.spacingNormal
+                anchors.rightMargin: Theme.spacingNormal
+                spacing: Theme.spacingLarge
+                
+                Label {
+                    text: audioEngine.getPlaybackState() === "playing" ? "Playing" : "Ready"
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: audioEngine.getPlaybackState() === "playing" ? Theme.accentSuccess : Theme.textMuted
+                }
+                
+                Label {
+                    text: audioEngine.getCurrentFile() ? "File: " + fileManager.getFileName(audioEngine.getCurrentFile()) : ""
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textMuted
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+                
+                Label {
+                    text: "Phase 1 Development • Theme: " + settingsManager.getTheme()
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textMuted
+                }
             }
+        }
+    }
+    
+    // Update status bar when playback state changes
+    Connections {
+        target: audioEngine
+        
+        function onPlaybackStateChanged(state) {
+            // Force status bar to update
+            mainWindow.update()
         }
     }
 }

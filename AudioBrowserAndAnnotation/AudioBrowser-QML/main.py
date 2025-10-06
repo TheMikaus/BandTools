@@ -39,6 +39,9 @@ from PyQt6.QtQml import QQmlApplicationEngine
 # Import backend modules
 from backend.settings_manager import SettingsManager
 from backend.color_manager import ColorManager
+from backend.audio_engine import AudioEngine
+from backend.file_manager import FileManager
+from backend.models import FileListModel, AnnotationsModel
 
 
 class ApplicationViewModel(QObject):
@@ -82,6 +85,12 @@ def main():
     # Create backend managers
     settings_manager = SettingsManager()
     color_manager = ColorManager(theme=settings_manager.getTheme())
+    audio_engine = AudioEngine()
+    file_manager = FileManager()
+    
+    # Create data models
+    file_list_model = FileListModel()
+    annotations_model = AnnotationsModel()
     
     # Create and expose view model to QML
     view_model = ApplicationViewModel()
@@ -90,9 +99,19 @@ def main():
     engine.rootContext().setContextProperty("appViewModel", view_model)
     engine.rootContext().setContextProperty("settingsManager", settings_manager)
     engine.rootContext().setContextProperty("colorManager", color_manager)
+    engine.rootContext().setContextProperty("audioEngine", audio_engine)
+    engine.rootContext().setContextProperty("fileManager", file_manager)
+    engine.rootContext().setContextProperty("fileListModel", file_list_model)
+    engine.rootContext().setContextProperty("annotationsModel", annotations_model)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
+    
+    # Connect file manager to file list model
+    file_manager.filesDiscovered.connect(file_list_model.setFiles)
+    
+    # Set initial volume from settings
+    audio_engine.setVolume(settings_manager.getVolume())
     
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
