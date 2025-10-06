@@ -230,4 +230,4 @@ Potential future improvements (see `INTERFACE_IMPROVEMENT_IDEAS.md`):
 
 ---
 
-**Questions or suggestions?** Open an issue on GitHub or check the main [README.md](README.md) for general application usage.
+**Questions or suggestions?** Open an issue on GitHub or check the main [README.md](../../README.md) for general application usage.

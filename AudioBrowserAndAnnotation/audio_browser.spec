@@ -12,6 +12,11 @@ datas = collect_data_files('PyQt6', include_py_files=False)
 # Include our runtime window icon (PNG). The .ico is used only at build-time for the exe icon.
 datas += [('app_icon.png', '.')]
 
+# Include documentation folder
+import os
+if os.path.exists('docs'):
+    datas += [('docs', 'docs')]
+
 a = Analysis(
     [app_script],
     pathex=[],

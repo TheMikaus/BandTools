@@ -333,13 +333,13 @@ Many operations have keyboard shortcuts for even faster workflow. See **Help →
 ## Related Documentation
 
 - [HOWTO_NEW_FEATURES.md](HOWTO_NEW_FEATURES.md) - Step-by-step guide for new features (Dark Mode, Export Best Takes)
-- [TEST_PLAN_NOW_PLAYING_PANEL.md](TEST_PLAN_NOW_PLAYING_PANEL.md) - Comprehensive test plan for Now Playing Panel
-- [IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md) - Technical details of Now Playing Panel implementation
-- [TEST_PLAN_WORKSPACE_PROGRESS.md](TEST_PLAN_WORKSPACE_PROGRESS.md) - Comprehensive test plan for workspace layouts and progress indicators
-- [IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md) - Technical details of workspace layouts and progress indicators implementation
-- [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned and implemented interface improvements
-- [CHANGELOG.md](CHANGELOG.md) - Complete version history with all changes
-- [README.md](README.md) - Main application documentation
+- [TEST_PLAN_NOW_PLAYING_PANEL.md](../test_plans/TEST_PLAN_NOW_PLAYING_PANEL.md) - Comprehensive test plan for Now Playing Panel
+- [IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](../technical/IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md) - Technical details of Now Playing Panel implementation
+- [TEST_PLAN_WORKSPACE_PROGRESS.md](../test_plans/TEST_PLAN_WORKSPACE_PROGRESS.md) - Comprehensive test plan for workspace layouts and progress indicators
+- [IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](../technical/IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md) - Technical details of workspace layouts and progress indicators implementation
+- [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) - All planned and implemented interface improvements
+- [CHANGELOG.md](../../CHANGELOG.md) - Complete version history with all changes
+- [README.md](../../README.md) - Main application documentation
 - [PRACTICE_STATISTICS.md](PRACTICE_STATISTICS.md) - Practice analytics and tracking features
 
 ---

@@ -145,7 +145,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 **Access**: Panel appears automatically below player bar in main window. Click ▼/▶ to collapse/expand.
 
 **Documentation**:
-- [TEST_PLAN_NOW_PLAYING_PANEL.md](TEST_PLAN_NOW_PLAYING_PANEL.md) - Complete test plan
+- [TEST_PLAN_NOW_PLAYING_PANEL.md](../test_plans/TEST_PLAN_NOW_PLAYING_PANEL.md) - Complete test plan
 - [IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md) - Technical details
 
 ---
@@ -435,7 +435,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 **Access**: Tools menu → "Setlist Builder…" or Ctrl+Shift+T
 
 **Documentation**:
-- [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md) - Complete test plan with 43 test cases
+- [TEST_PLAN_SETLIST_BUILDER.md](../test_plans/TEST_PLAN_SETLIST_BUILDER.md) - Complete test plan with 43 test cases
 - [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md) - Technical details
 
 ---
@@ -479,7 +479,7 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 **Access**: Set BPM in Library tab → View tempo markers on waveform in Annotations tab
 
 **Documentation**:
-- [TEST_PLAN_TEMPO_METRONOME.md](TEST_PLAN_TEMPO_METRONOME.md) - Complete test plan with 31 test cases
+- [TEST_PLAN_TEMPO_METRONOME.md](../test_plans/TEST_PLAN_TEMPO_METRONOME.md) - Complete test plan with 31 test cases
 - [IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md) - Technical details
 
 ---

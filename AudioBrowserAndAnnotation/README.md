@@ -81,6 +81,31 @@ Analyze your practice folders to gain insights into your practice history! The a
 - Practical use cases and tips
 - Folder naming conventions for accurate dates
 
+# Documentation
+
+Comprehensive documentation is available both within the application and in the `docs/` folder:
+
+## Built-in Documentation Browser
+
+Access all documentation directly from the application:
+- **Help → Documentation Browser** or press `Ctrl+Shift+H`
+- Search and browse user guides, technical docs, and test plans
+- Organized by category for easy navigation
+
+## Documentation Structure
+
+- **`docs/user_guides/`** - User manuals, feature guides, and visual references
+- **`docs/technical/`** - Implementation details, architecture, and build instructions  
+- **`docs/test_plans/`** - Comprehensive test plans for quality assurance
+- **`docs/INDEX.md`** - Complete documentation index with descriptions
+
+## Key Documentation Files
+
+- **User Guides**: HOWTO_NEW_FEATURES.md, PRACTICE_GOALS_GUIDE.md, SETLIST_BUILDER_GUIDE.md, UI_IMPROVEMENTS.md
+- **Visual Guides**: UI_SCREENSHOTS.md, VISUAL_GUIDE_* files with ASCII diagrams
+- **Technical**: INTERFACE_IMPROVEMENT_IDEAS.md (feature roadmap), BUILD.md (build instructions)
+- **Test Plans**: TEST_PLAN_* files with comprehensive test cases
+
 # Note
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
 - Once I've finished feature creep on the application I plan on trying to refactor it into to more than one file.
@@ -100,7 +125,7 @@ Pre-built executables are automatically created for Windows, Linux, and macOS on
 
 **Installation**: Extract the downloaded archive and run the `AudioFolderPlayer` executable.
 
-**Note**: GitHub Actions builds do NOT create executables in the repository's `dist/` folder. Built executables are only available through GitHub Artifacts (temporary) or Releases (permanent). See [BUILD.md](BUILD.md) for details.
+**Note**: GitHub Actions builds do NOT create executables in the repository's `dist/` folder. Built executables are only available through GitHub Artifacts (temporary) or Releases (permanent). See [BUILD.md](docs/technical/BUILD.md) for details.
 
 ## Building from Source
 
@@ -119,7 +144,7 @@ chmod +x build_exe.sh
 ./build_exe.sh
 ```
 
-See [BUILD.md](BUILD.md) for detailed build instructions.
+See [BUILD.md](docs/technical/BUILD.md) for detailed build instructions.
 
 ## Automatic Updates
 

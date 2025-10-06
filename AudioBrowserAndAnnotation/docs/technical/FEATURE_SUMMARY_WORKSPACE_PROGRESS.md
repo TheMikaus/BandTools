@@ -160,11 +160,11 @@ This implementation adds two high-value quality-of-life features to AudioBrowser
 
 For more information, see:
 
-- **[TEST_PLAN_WORKSPACE_PROGRESS.md](TEST_PLAN_WORKSPACE_PROGRESS.md)** - Complete test plan with 24 test cases
+- **[TEST_PLAN_WORKSPACE_PROGRESS.md](../test_plans/TEST_PLAN_WORKSPACE_PROGRESS.md)** - Complete test plan with 24 test cases
 - **[IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md)** - Technical implementation details
-- **[UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md)** - User guide with tips and best practices
+- **[UI_IMPROVEMENTS.md](../user_guides/UI_IMPROVEMENTS.md)** - User guide with tips and best practices
 - **[INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md)** - All planned features
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history
+- **[CHANGELOG.md](../../CHANGELOG.md)** - Version history
 
 ---
 

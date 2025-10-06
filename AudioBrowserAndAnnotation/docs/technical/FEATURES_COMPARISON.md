@@ -376,7 +376,7 @@ The implementation follows best practices, maintains backward compatibility, and
 ## Related Documentation
 
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Technical details
-- [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) - User guide
-- [UI_SCREENSHOTS.md](UI_SCREENSHOTS.md) - Visual reference
-- [CHANGELOG.md](CHANGELOG.md) - Version history
+- [UI_IMPROVEMENTS.md](../user_guides/UI_IMPROVEMENTS.md) - User guide
+- [UI_SCREENSHOTS.md](../user_guides/UI_SCREENSHOTS.md) - Visual reference
+- [CHANGELOG.md](../../CHANGELOG.md) - Version history
 - [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned improvements

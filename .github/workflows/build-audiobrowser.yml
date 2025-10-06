@@ -141,17 +141,28 @@ jobs:
         cd AudioBrowserAndAnnotation
         $version = "${{ steps.version.outputs.version_string }}"
         $archiveName = "AudioAnnotationBrowser-$version-windows.zip"
+        $docsArchiveName = "AudioAnnotationBrowser-$version-docs.zip"
         
-        # Create the archive using PowerShell
+        # Create the executable archive using PowerShell
         Compress-Archive -Path "dist/AudioAnnotationBrowser.exe" -DestinationPath $archiveName -Force
         
         echo "Created archive: $archiveName"
         $archiveInfo = Get-Item $archiveName
         echo "Archive size: $($archiveInfo.Length) bytes"
         
+        # Create documentation archive
+        if (Test-Path "docs") {
+          Compress-Archive -Path "docs/*" -DestinationPath $docsArchiveName -Force
+          echo "Created docs archive: $docsArchiveName"
+          $docsArchiveInfo = Get-Item $docsArchiveName
+          echo "Docs archive size: $($docsArchiveInfo.Length) bytes"
+        }
+        
         # Set output for later steps
         echo "archive_name=$archiveName" >> $env:GITHUB_OUTPUT
         echo "archive_path=AudioBrowserAndAnnotation/$archiveName" >> $env:GITHUB_OUTPUT
+        echo "docs_archive_name=$docsArchiveName" >> $env:GITHUB_OUTPUT
+        echo "docs_archive_path=AudioBrowserAndAnnotation/$docsArchiveName" >> $env:GITHUB_OUTPUT
       id: archive
       shell: powershell
     
@@ -175,6 +186,7 @@ jobs:
           
           ## Downloads
           - **Windows**: ${{ steps.archive.outputs.archive_name }}
+          - **Documentation**: ${{ steps.archive.outputs.docs_archive_name }} (User guides, technical docs, test plans)
           
           ## Version Information
           - Version: ${{ steps.version.outputs.version_string }}
@@ -189,5 +201,6 @@ jobs:
           No additional installation required - this is a standalone executable.
         files: |
           ${{ steps.archive.outputs.archive_path }}
+          ${{ steps.archive.outputs.docs_archive_path }}
         draft: false
         prerelease: false

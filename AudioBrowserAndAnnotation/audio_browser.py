@@ -151,7 +151,7 @@ from PyQt6.QtWidgets import (
     QTreeView, QVBoxLayout, QWidget, QFileDialog, QAbstractItemView, QStatusBar,
     QToolBar, QStyle, QLabel, QTabWidget, QLineEdit, QPlainTextEdit, QCheckBox, QWidgetAction, QSpinBox,
     QProgressDialog, QColorDialog, QInputDialog, QComboBox, QMenu, QDialog, QTextEdit, QMenuBar, QGroupBox,
-    QProgressBar
+    QProgressBar, QListWidget, QListWidgetItem
 )
 from PyQt6.QtWidgets import QStyleFactory
 
@@ -5920,6 +5920,11 @@ class AudioBrowser(QMainWindow):
         help_shortcuts_action = QAction("&Keyboard Shortcuts", self)
         help_shortcuts_action.triggered.connect(self._show_keyboard_shortcuts_dialog)
         help_menu.addAction(help_shortcuts_action)
+        
+        help_docs_action = QAction("&Documentation Browser", self)
+        help_docs_action.setShortcut(QKeySequence("Ctrl+Shift+H"))
+        help_docs_action.triggered.connect(self._show_documentation_browser)
+        help_menu.addAction(help_docs_action)
         
         help_stats_action = QAction("Practice &Statistics", self)
         help_stats_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
@@ -12448,6 +12453,140 @@ class AudioBrowser(QMainWindow):
         
         # Show dialog non-modally
         self._shortcuts_dialog.show()
+    
+    def _show_documentation_browser(self):
+        """Show searchable documentation browser with all help documents."""
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{APP_NAME} - Documentation Browser")
+        dialog.resize(1000, 700)
+        
+        layout = QHBoxLayout(dialog)
+        
+        # Left side: Document list with search
+        left_layout = QVBoxLayout()
+        
+        # Search box
+        search_label = QLabel("Search:")
+        left_layout.addWidget(search_label)
+        
+        search_box = QLineEdit()
+        search_box.setPlaceholderText("Filter documents...")
+        left_layout.addWidget(search_box)
+        
+        # Document categories and list
+        doc_list = QListWidget()
+        left_layout.addWidget(doc_list)
+        
+        left_widget = QWidget()
+        left_widget.setLayout(left_layout)
+        left_widget.setMaximumWidth(300)
+        layout.addWidget(left_widget)
+        
+        # Right side: Document content viewer
+        right_layout = QVBoxLayout()
+        
+        # Title label
+        doc_title = QLabel()
+        doc_title.setStyleSheet("font-size: 16px; font-weight: bold; padding: 5px;")
+        right_layout.addWidget(doc_title)
+        
+        # Content viewer
+        content_viewer = QTextEdit()
+        content_viewer.setReadOnly(True)
+        content_viewer.setFont(self.font())
+        right_layout.addWidget(content_viewer)
+        
+        # Close button
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        right_layout.addLayout(button_layout)
+        
+        right_widget = QWidget()
+        right_widget.setLayout(right_layout)
+        layout.addWidget(right_widget)
+        
+        # Populate document list
+        docs_dir = Path(__file__).parent / "docs"
+        doc_items = []  # List of (category, filename, filepath) tuples
+        
+        if docs_dir.exists():
+            # User Guides
+            user_guides_dir = docs_dir / "user_guides"
+            if user_guides_dir.exists():
+                for doc_file in sorted(user_guides_dir.glob("*.md")):
+                    doc_items.append(("User Guides", doc_file.stem.replace("_", " ").title(), doc_file))
+            
+            # Technical Documentation
+            technical_dir = docs_dir / "technical"
+            if technical_dir.exists():
+                for doc_file in sorted(technical_dir.glob("*.md")):
+                    doc_items.append(("Technical", doc_file.stem.replace("_", " ").title(), doc_file))
+            
+            # Test Plans
+            test_plans_dir = docs_dir / "test_plans"
+            if test_plans_dir.exists():
+                for doc_file in sorted(test_plans_dir.glob("*.md")):
+                    doc_items.append(("Test Plans", doc_file.stem.replace("_", " ").title(), doc_file))
+        
+        # Also include README and CHANGELOG from root
+        readme_path = Path(__file__).parent / "README.md"
+        if readme_path.exists():
+            doc_items.insert(0, ("Getting Started", "README", readme_path))
+        
+        changelog_path = Path(__file__).parent / "CHANGELOG.md"
+        if changelog_path.exists():
+            doc_items.insert(1, ("Getting Started", "Changelog", changelog_path))
+        
+        # Add items to list widget
+        all_items = []
+        for category, title, filepath in doc_items:
+            item = QListWidgetItem(f"{category}: {title}")
+            item.setData(Qt.ItemDataRole.UserRole, filepath)
+            item.setData(Qt.ItemDataRole.UserRole + 1, f"{category}: {title}")
+            doc_list.addItem(item)
+            all_items.append(item)
+        
+        # Function to display document content
+        def display_document(item):
+            if item is None:
+                return
+            filepath = item.data(Qt.ItemDataRole.UserRole)
+            title = item.data(Qt.ItemDataRole.UserRole + 1)
+            
+            doc_title.setText(title)
+            
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                content_viewer.setPlainText(content)
+                content_viewer.verticalScrollBar().setValue(0)  # Scroll to top
+            except Exception as e:
+                content_viewer.setPlainText(f"Error loading document: {e}")
+        
+        # Function to filter documents based on search
+        def filter_documents():
+            search_text = search_box.text().lower()
+            for i in range(doc_list.count()):
+                item = doc_list.item(i)
+                item_text = item.data(Qt.ItemDataRole.UserRole + 1).lower()
+                item.setHidden(search_text and search_text not in item_text)
+        
+        # Connect signals
+        doc_list.currentItemChanged.connect(lambda current, previous: display_document(current))
+        search_box.textChanged.connect(filter_documents)
+        
+        # Select first item by default
+        if doc_list.count() > 0:
+            doc_list.setCurrentRow(0)
+        else:
+            doc_title.setText("No Documentation Found")
+            content_viewer.setPlainText("Documentation folder not found or empty.\n\nPlease ensure the 'docs' folder exists in the application directory.")
+        
+        dialog.exec()
     
     def _generate_practice_folder_statistics(self) -> Dict[str, Any]:
         """Generate statistics by analyzing practice folders and their audio files.

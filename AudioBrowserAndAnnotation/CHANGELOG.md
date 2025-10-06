@@ -4,6 +4,25 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Documentation Browser**: Searchable in-app documentation viewer with organized help documents
+  - New "Documentation Browser" in Help menu (Ctrl+Shift+H)
+  - Browse all user guides, technical docs, and test plans from within the application
+  - Search/filter functionality to quickly find relevant documentation
+  - Documents organized by category (Getting Started, User Guides, Technical, Test Plans)
+  - Full-text markdown viewing with automatic scrolling
+  - Documentation included in releases (both in executable and as separate archive)
+
+### Changed
+- **Documentation Organization**: Restructured documentation into organized folders
+  - Created `docs/user_guides/` for end-user documentation and feature guides
+  - Created `docs/technical/` for implementation details and developer documentation
+  - Created `docs/test_plans/` for comprehensive test plans
+  - Added `docs/INDEX.md` with complete documentation index and navigation guide
+  - All markdown files moved to appropriate categories for better organization
+  - Updated README with documentation overview and browser instructions
+  - Updated build process to include documentation folder in releases
+
 ### Changed
 - **Practice Statistics Dialog**: Enhanced user experience with non-modal design and refresh capability
   - Dialog is now non-modal, allowing users to continue working while viewing statistics

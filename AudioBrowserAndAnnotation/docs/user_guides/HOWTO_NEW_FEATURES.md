@@ -239,9 +239,9 @@ If you need to import the annotations back:
 ## Additional Resources
 
 - **UI Improvements Guide**: See [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) for all recent UI enhancements
-- **Interface Ideas**: See [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) for planned features
-- **Changelog**: See [CHANGELOG.md](CHANGELOG.md) for complete version history
-- **Main Documentation**: See [README.md](README.md) for overall application documentation
+- **Interface Ideas**: See [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) for planned features
+- **Changelog**: See [CHANGELOG.md](../../CHANGELOG.md) for complete version history
+- **Main Documentation**: See [README.md](../../README.md) for overall application documentation
 
 ---
 

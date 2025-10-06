@@ -511,10 +511,10 @@ The feature transforms AudioBrowser from a practice review tool into a complete 
 
 ## Quick Links
 
-- **User Guide**: [SETLIST_BUILDER_GUIDE.md](SETLIST_BUILDER_GUIDE.md)
-- **Visual Guide**: [VISUAL_GUIDE_SETLIST_BUILDER.md](VISUAL_GUIDE_SETLIST_BUILDER.md)
+- **User Guide**: [SETLIST_BUILDER_GUIDE.md](../user_guides/SETLIST_BUILDER_GUIDE.md)
+- **Visual Guide**: [VISUAL_GUIDE_SETLIST_BUILDER.md](../user_guides/VISUAL_GUIDE_SETLIST_BUILDER.md)
 - **Technical Details**: [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md)
-- **Test Plan**: [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md)
+- **Test Plan**: [TEST_PLAN_SETLIST_BUILDER.md](../test_plans/TEST_PLAN_SETLIST_BUILDER.md)
 - **Original Spec**: [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) (Section 3.2)
 
 ---

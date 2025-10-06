@@ -562,5 +562,5 @@ All data is stored in `.setlists.json` and persists across sessions. Songs are r
 ---
 
 *For detailed usage instructions, see [SETLIST_BUILDER_GUIDE.md](SETLIST_BUILDER_GUIDE.md)*  
-*For technical details, see [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md)*  
-*For testing, see [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md)*
+*For technical details, see [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](../technical/IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md)*  
+*For testing, see [TEST_PLAN_SETLIST_BUILDER.md](../test_plans/TEST_PLAN_SETLIST_BUILDER.md)*
