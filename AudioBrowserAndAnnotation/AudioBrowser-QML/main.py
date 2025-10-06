@@ -115,6 +115,7 @@ def main():
     
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
+    print(f"Loading QML file: {qml_file}")
     engine.load(QUrl.fromLocalFile(str(qml_file)))
     
     # Check if QML loaded successfully
@@ -123,6 +124,7 @@ def main():
         return 1
     
     print("AudioBrowser QML Phase 0 - Application started successfully")
+    sys.stdout.flush()  # Ensure message is printed immediately
     return app.exec()
 
 
