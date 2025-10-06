@@ -5,6 +5,43 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **QML Migration Phase 1: Core Infrastructure** (IN PROGRESS)
+  - Created `backend/settings_manager.py` (238 lines) - Centralized QSettings wrapper
+    - pyqtSlot decorators for QML method access
+    - Signals for settings changes (themeChanged, volumeChanged, rootDirChanged)
+    - Type-safe getters/setters for all application settings
+    - Recent folders management, theme, volume, playback speed, etc.
+  - Created `backend/color_manager.py` (261 lines) - Theme-aware color management
+    - HSV-based color standardization for consistent appearance across displays
+    - Light and dark theme support with theme-specific color palettes
+    - pyqtSlot methods for QML color access
+    - Waveform colors, UI colors, selection colors
+  - Created `qml/styles/Theme.qml` (145 lines) - QML singleton for theming
+    - Light and dark color palettes
+    - Typography constants (font sizes, families)
+    - Spacing, sizing, border radius, animation duration constants
+    - Theme switching functionality
+  - Created `qml/components/StyledButton.qml` (127 lines) - Reusable themed button
+    - Primary, danger, and success variants
+    - Hover and pressed states with smooth animations
+    - Theme-aware colors and consistent sizing
+  - Integrated backend managers into main.py with context properties
+  - Updated main.qml to use Theme singleton throughout
+  - Total Phase 1 code: ~771 lines across 4 new files
+  - Backend modules extracted from audio_browser.py patterns
+  - Next: Extract audio_engine, file_manager, create tab structure
+- **QML Migration Phase 0: Preparation and Infrastructure** (COMPLETE)
+  - Created `AudioBrowser-QML/` project structure for Qt Quick/QML migration
+  - Implemented `main.py` entry point (96 lines) with auto-dependency installation
+  - Created `qml/main.qml` with dark theme UI and status display
+  - Established Python-QML communication using ApplicationViewModel and context properties
+  - Set up directory structure: backend/, qml/{components,tabs,dialogs,styles}/, resources/{icons,images}/
+  - Created `AudioBrowser-QML/README.md` with project documentation
+  - Created `docs/technical/PHASE_0_QML_COMPLETION.md` documenting Phase 0 completion
+  - Added launch script `run.sh` for easy application startup
+  - Total Phase 0: ~710 lines of new code in separate QML project
+  - QML application runs independently from existing audio_browser.py
+  - See [QML_MIGRATION_STRATEGY.md](docs/technical/QML_MIGRATION_STRATEGY.md) for full migration plan
 - **Phase 3.1: Data Models**: Type-safe data classes for annotations, clips, and metadata
   - Added `Annotation` dataclass at line 1413 (~62 lines) for type-safe annotation handling
   - Time, text, important flag, category, user, and created timestamp attributes

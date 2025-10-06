@@ -1,0 +1,9 @@
+"""
+AudioBrowser QML Backend Package
+
+This package contains the Python backend modules for the AudioBrowser QML application.
+Backend modules handle business logic, data management, and system integration while
+QML handles the UI presentation.
+"""
+
+__version__ = "0.1.0"
