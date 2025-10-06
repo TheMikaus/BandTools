@@ -36,7 +36,7 @@ Dialog {
                             string category, bool important, string color)
     
     // Reset to defaults
-    function reset() {
+    function resetDialog() {
         editMode = false
         annotationIndex = -1
         timestampMs = 0
