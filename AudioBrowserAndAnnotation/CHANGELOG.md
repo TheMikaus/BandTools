@@ -5,6 +5,42 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Spectral Analysis (Spectrogram View)**: Advanced audio visualization for frequency analysis
+  - Spectrogram toggle checkbox in Annotations tab waveform controls
+  - Frequency-over-time visualization using STFT (Short-Time Fourier Transform)
+  - Color-coded magnitude display: blue (low) → green (medium) → yellow-red (high)
+  - Musical frequency range: 60-8000 Hz with log-spaced axis
+  - Computed on first use, cached for instant subsequent displays
+  - Full integration with annotations, loop markers, tempo markers, and playhead
+  - Clickable for seeking playback position
+  - Works with both WAV and MP3 files
+  - Implements Section 6.1 "Advanced Audio Analysis" from INTERFACE_IMPROVEMENT_IDEAS.md
+  - See [TEST_PLAN_SPECTRAL_ANALYSIS.md](docs/test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md) for comprehensive test plan (35 test cases)
+- **Sync History Tracking**: Timeline view of all Google Drive sync operations
+  - New "View Sync History…" menu item in File menu
+  - Shows operation type (upload/download), file count, user, timestamp, and details
+  - Displays last 50 entries in chronological order (newest first)
+  - Automatically prunes to last 100 entries to prevent bloat
+  - Stored in `.sync_history.json` per practice folder
+  - Non-modal dialog allows continued work while viewing history
+- **Selective Sync Rules**: Configurable sync behavior for Google Drive
+  - New "Sync Rules Configuration…" menu item in File menu
+  - Max file size limit (MB) with enable/disable toggle
+  - "Sync audio files" option to exclude/include audio files
+  - "Sync annotations only" mode (exclude audio, sync only metadata)
+  - "Enable auto-sync mode" checkbox (for future automatic sync)
+  - "Auto-download Best Takes only" option
+  - Rules stored in `.sync_rules.json` per practice folder
+  - All settings persist across application sessions
+- **Conflict Resolution UI**: Enhanced interface for resolving sync conflicts
+  - New conflict resolution dialog with side-by-side comparison
+  - Shows local vs. remote modification times for conflicting files
+  - Three resolution options: "Keep Local", "Keep Remote", "Merge (if possible)"
+  - Batch conflict resolution (handle multiple files at once)
+  - Preview resolutions before applying
+  - Integrated with existing Google Drive sync workflow
+  - Implements Section 2.5 "Cloud Sync Improvements" from INTERFACE_IMPROVEMENT_IDEAS.md
+  - See [TEST_PLAN_SYNC_IMPROVEMENTS.md](docs/test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md) for comprehensive test plan (38 test cases)
 - **Pagination for Large Libraries**: Efficient handling of libraries with hundreds or thousands of files
   - Automatically activates for libraries with 500+ files
   - Displays files in configurable chunks (default: 200 files per page)

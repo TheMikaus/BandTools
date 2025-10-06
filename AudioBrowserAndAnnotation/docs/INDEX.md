@@ -50,6 +50,8 @@ Implementation details, architecture decisions, and developer-focused documentat
 - **[IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md](technical/IMPLEMENTATION_SUMMARY_NOW_PLAYING_PANEL.md)** - Now playing panel
 - **[IMPLEMENTATION_SUMMARY_PRACTICE_GOALS.md](technical/IMPLEMENTATION_SUMMARY_PRACTICE_GOALS.md)** - Practice goals system
 - **[IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](technical/IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md)** - Setlist builder
+- **[IMPLEMENTATION_SUMMARY_SPECTRAL_ANALYSIS.md](technical/IMPLEMENTATION_SUMMARY_SPECTRAL_ANALYSIS.md)** - Spectral analysis (spectrogram view)
+- **[IMPLEMENTATION_SUMMARY_SYNC_IMPROVEMENTS.md](technical/IMPLEMENTATION_SUMMARY_SYNC_IMPROVEMENTS.md)** - Cloud sync improvements
 - **[IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](technical/IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md)** - Tempo and metronome
 - **[IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](technical/IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md)** - Workspace layouts
 
@@ -69,6 +71,8 @@ Comprehensive test documentation for quality assurance and validation.
 - **[TEST_PLAN_NOW_PLAYING_PANEL.md](test_plans/TEST_PLAN_NOW_PLAYING_PANEL.md)** - Test plan for now playing panel
 - **[TEST_PLAN_PRACTICE_GOALS.md](test_plans/TEST_PLAN_PRACTICE_GOALS.md)** - Test plan for practice goals (40 test cases)
 - **[TEST_PLAN_SETLIST_BUILDER.md](test_plans/TEST_PLAN_SETLIST_BUILDER.md)** - Test plan for setlist builder (43 test cases)
+- **[TEST_PLAN_SPECTRAL_ANALYSIS.md](test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md)** - Test plan for spectral analysis (35 test cases)
+- **[TEST_PLAN_SYNC_IMPROVEMENTS.md](test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md)** - Test plan for sync improvements (38 test cases)
 - **[TEST_PLAN_TEMPO_METRONOME.md](test_plans/TEST_PLAN_TEMPO_METRONOME.md)** - Test plan for tempo and metronome
 - **[TEST_PLAN_WORKSPACE_PROGRESS.md](test_plans/TEST_PLAN_WORKSPACE_PROGRESS.md)** - Test plan for workspace layouts
 

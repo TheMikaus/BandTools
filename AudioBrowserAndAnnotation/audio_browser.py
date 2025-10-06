@@ -2978,6 +2978,10 @@ class WaveformView(QWidget):
         
         # Tempo markers (BPM-based measure lines)
         self._tempo_bpm: Optional[float] = None
+        
+        # Spectral analysis support
+        self._show_spectrogram: bool = False
+        self._spectrogram_data: Optional[List] = None  # Stores spectrogram matrix
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -3016,6 +3020,111 @@ class WaveformView(QWidget):
         """Set the tempo (BPM) for displaying measure markers on the waveform."""
         self._tempo_bpm = bpm
         self.update()
+    
+    def set_spectrogram_mode(self, enabled: bool):
+        """Toggle spectrogram view mode."""
+        if self._show_spectrogram == enabled:
+            return
+        
+        self._show_spectrogram = enabled
+        
+        # If enabled and we have audio data, compute spectrogram
+        if enabled and self._path and self._path.exists() and self._peaks:
+            self._compute_spectrogram()
+        
+        # Force redraw
+        self._pixmap = None
+        self.update()
+    
+    def _compute_spectrogram(self):
+        """Compute spectrogram data from audio file."""
+        if not HAVE_NUMPY or not self._path:
+            return
+        
+        try:
+            import numpy as np
+            
+            # Load audio samples
+            samples = []
+            sample_rate = 44100
+            
+            if self._path.suffix.lower() == '.wav':
+                with wave.open(str(self._path), 'rb') as wf:
+                    sample_rate = wf.getframerate()
+                    n_frames = wf.getnframes()
+                    frames = wf.readframes(n_frames)
+                    
+                    # Convert to numpy array
+                    if wf.getsampwidth() == 2:
+                        arr = np.frombuffer(frames, dtype=np.int16)
+                    else:
+                        arr = np.frombuffer(frames, dtype=np.uint8)
+                    
+                    # Convert to float and normalize
+                    arr = arr.astype(np.float32) / 32768.0
+                    
+                    # If stereo, take left channel only
+                    if wf.getnchannels() == 2:
+                        arr = arr[::2]
+                    
+                    samples = arr.tolist()
+            
+            if not samples:
+                return
+            
+            # STFT parameters
+            n_fft = 2048
+            hop_length = n_fft // 4
+            
+            # Frequency range: 60-8000 Hz (focus on musical range)
+            min_freq = 60
+            max_freq = min(8000, sample_rate // 2)
+            
+            # Number of frequency bins to display
+            n_bins = 128
+            
+            # Create log-spaced frequency bins
+            freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bins + 1)
+            bin_indices = (freq_bins * n_fft / sample_rate).astype(int)
+            bin_indices = np.clip(bin_indices, 0, n_fft // 2)
+            
+            arr = np.array(samples, dtype=np.float32)
+            window = np.hanning(n_fft)
+            
+            spectrogram = []
+            
+            # Process windows
+            for i in range(0, len(arr) - n_fft + 1, hop_length):
+                frame = arr[i:i + n_fft] * window
+                fft = np.fft.rfft(frame)
+                magnitude = np.abs(fft)
+                
+                # Group into frequency bins
+                bin_energies = []
+                for b in range(n_bins):
+                    start_bin = bin_indices[b]
+                    end_bin = bin_indices[b + 1]
+                    if end_bin > start_bin:
+                        energy = float(np.mean(magnitude[start_bin:end_bin]))
+                    else:
+                        energy = 0.0
+                    bin_energies.append(energy)
+                
+                spectrogram.append(bin_energies)
+            
+            # Apply log compression
+            spectrogram = np.array(spectrogram)
+            spectrogram = np.log1p(spectrogram * 100)  # Log scale for better visualization
+            
+            # Normalize to 0-1 range
+            if spectrogram.max() > 0:
+                spectrogram = spectrogram / spectrogram.max()
+            
+            self._spectrogram_data = spectrogram.tolist()
+            
+        except Exception as e:
+            logger.error(f"Error computing spectrogram: {e}")
+            self._spectrogram_data = None
 
     def clear(self):
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
@@ -3251,7 +3360,11 @@ class WaveformView(QWidget):
         p = QPainter(pm); p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         
         if self._state == "ready" and self._peaks:
-            self._draw_waveform(p, W, H, self._peaks)
+            # Draw spectrogram if enabled, otherwise draw waveform
+            if self._show_spectrogram and self._spectrogram_data:
+                self._draw_spectrogram(p, W, H)
+            else:
+                self._draw_waveform(p, W, H, self._peaks)
         elif self._state == "loading":
             if self._peaks_loading:
                 self._draw_waveform(p, W, H, self._peaks_loading, loading=True)
@@ -3268,6 +3381,58 @@ class WaveformView(QWidget):
         p.end()
         self._pixmap = pm; self._pixmap_w = W
 
+    def _draw_spectrogram(self, painter: QPainter, W: int, H: int):
+        """Draw spectrogram view."""
+        if not self._spectrogram_data:
+            return
+        
+        import numpy as np
+        spec_array = np.array(self._spectrogram_data)
+        
+        # Resample spectrogram to match widget width
+        if spec_array.shape[0] != W:
+            # Simple resampling - take equally spaced samples
+            indices = np.linspace(0, spec_array.shape[0] - 1, W).astype(int)
+            spec_array = spec_array[indices]
+        
+        n_freq_bins = spec_array.shape[1]
+        
+        # Draw spectrogram column by column
+        for x in range(W):
+            if x >= len(spec_array):
+                break
+            
+            column = spec_array[x]
+            
+            # Draw frequency bins from bottom to top (low freq at bottom)
+            for freq_idx in range(n_freq_bins):
+                # Map frequency bin to y position (inverted - 0 at bottom)
+                y = int(H - (freq_idx + 1) * H / n_freq_bins)
+                y_height = max(1, int(H / n_freq_bins))
+                
+                # Get magnitude value (0-1 range)
+                magnitude = column[freq_idx]
+                
+                # Create color based on magnitude (blue-green-yellow-red colormap)
+                if magnitude < 0.25:
+                    # Blue to cyan
+                    r, g, b = 0, int(magnitude * 4 * 255), int(255 - magnitude * 4 * 255)
+                elif magnitude < 0.5:
+                    # Cyan to green
+                    val = (magnitude - 0.25) * 4
+                    r, g, b = 0, 255, int((1 - val) * 255)
+                elif magnitude < 0.75:
+                    # Green to yellow
+                    val = (magnitude - 0.5) * 4
+                    r, g, b = int(val * 255), 255, 0
+                else:
+                    # Yellow to red
+                    val = (magnitude - 0.75) * 4
+                    r, g, b = 255, int((1 - val) * 255), 0
+                
+                color = QColor(r, g, b)
+                painter.fillRect(x, y, 1, y_height, color)
+    
     def _draw_waveform(self, painter: QPainter, W: int, H: int, peaks_data: List, loading: bool = False):
         """Draw waveform based on current mode (mono/stereo)."""
         if not peaks_data:
@@ -6105,6 +6270,14 @@ class AudioBrowser(QMainWindow):
         self.gdrive_sync_action.triggered.connect(self._show_gdrive_sync)
         file_menu.addAction(self.gdrive_sync_action)
         
+        self.sync_rules_action = QAction("Sync &Rules Configuration…", self)
+        self.sync_rules_action.triggered.connect(self._show_sync_rules)
+        file_menu.addAction(self.sync_rules_action)
+        
+        self.sync_history_action = QAction("View Sync &History…", self)
+        self.sync_history_action.triggered.connect(self._show_sync_history)
+        file_menu.addAction(self.sync_history_action)
+        
         self.gdrive_delete_folder_action = QAction("Delete Remote Folder from Google Drive…", self)
         self.gdrive_delete_folder_action.triggered.connect(self._delete_remote_folder)
         file_menu.addAction(self.gdrive_delete_folder_action)
@@ -6677,6 +6850,12 @@ class AudioBrowser(QMainWindow):
         self.stereo_mono_toggle.clicked.connect(self._on_stereo_toggle_clicked)
         self.stereo_mono_toggle.setMaximumWidth(80)
         waveform_controls.addWidget(self.stereo_mono_toggle)
+        
+        # Spectrogram toggle
+        self.spectrogram_toggle = QCheckBox("Spectrogram")
+        self.spectrogram_toggle.setToolTip("Show spectrogram view (frequency analysis)")
+        self.spectrogram_toggle.stateChanged.connect(self._on_spectrogram_toggle_changed)
+        waveform_controls.addWidget(self.spectrogram_toggle)
         
         # --- Channel muting controls ---
         waveform_controls.addWidget(QLabel("Channels:"))
@@ -8435,6 +8614,11 @@ class AudioBrowser(QMainWindow):
             # File doesn't have stereo data but we're in stereo mode, switch to mono
             self.stereo_mono_toggle.setChecked(False)
             self._on_stereo_toggle_clicked(False)
+    
+    def _on_spectrogram_toggle_changed(self, state):
+        """Handle spectrogram toggle checkbox."""
+        enabled = state == Qt.CheckState.Checked.value
+        self.waveform.set_spectrogram_mode(enabled)
 
     def _on_channel_muting_changed(self, _state):
         """Handle channel muting checkbox changes."""
@@ -14086,6 +14270,78 @@ class AudioBrowser(QMainWindow):
             QMessageBox.critical(
                 self, "Sync Error",
                 f"An error occurred during sync:\n\n{str(e)}"
+            )
+    
+    def _show_sync_rules(self):
+        """Show sync rules configuration dialog."""
+        try:
+            # Ensure sync is available
+            if not self._ensure_gdrive_sync_available():
+                return
+            
+            # Check if we have a root path
+            if not self.root_path:
+                QMessageBox.warning(
+                    self, "No Folder Open",
+                    "Please open a practice folder before configuring sync rules."
+                )
+                return
+            
+            # Import sync modules
+            from gdrive_sync import load_sync_rules, save_sync_rules
+            from sync_dialog import SyncRulesDialog
+            
+            # Load current sync rules
+            sync_rules = load_sync_rules(self.root_path)
+            
+            # Show dialog
+            dialog = SyncRulesDialog(sync_rules, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Save new rules
+                new_rules = dialog.get_rules()
+                save_sync_rules(self.root_path, new_rules)
+                
+                self.statusBar().showMessage("Sync rules saved successfully", 5000)
+                log_print("Sync rules updated")
+        
+        except Exception as e:
+            log_print(f"Error showing sync rules: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred:\n\n{str(e)}"
+            )
+    
+    def _show_sync_history(self):
+        """Show sync history dialog."""
+        try:
+            # Ensure sync is available
+            if not self._ensure_gdrive_sync_available():
+                return
+            
+            # Check if we have a root path
+            if not self.root_path:
+                QMessageBox.warning(
+                    self, "No Folder Open",
+                    "Please open a practice folder to view sync history."
+                )
+                return
+            
+            # Import sync modules
+            from gdrive_sync import load_sync_history
+            from sync_dialog import SyncHistoryDialog
+            
+            # Load sync history
+            sync_history = load_sync_history(self.root_path)
+            
+            # Show dialog
+            dialog = SyncHistoryDialog(sync_history, self)
+            dialog.exec()
+        
+        except Exception as e:
+            log_print(f"Error showing sync history: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred:\n\n{str(e)}"
             )
 
     # ----- Auto-generation methods -----
