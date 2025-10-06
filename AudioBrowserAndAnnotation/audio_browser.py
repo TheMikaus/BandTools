@@ -135,7 +135,7 @@ if HAVE_PYDUB:
 from PyQt6.QtCore import (
     QItemSelection, QModelIndex, QSettings, QTimer, Qt, QUrl, QPoint, QSize,
     pyqtSignal, QRect, QObject, QThread, QDir, QIdentityProxyModel, QSortFilterProxyModel,
-    QFileSystemWatcher
+    QFileSystemWatcher, QRunnable
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QPen, QCursor, QPalette
@@ -793,19 +793,20 @@ class ConfigManager:
     
     # Geometry and layout
     def get_geometry(self) -> Optional[bytes]:
-        return self.config.get_geometry()
+        return self.settings.value(SETTINGS_KEY_WINDOW_GEOMETRY)
     
     def set_geometry(self, geometry: bytes):
         self.settings.setValue(SETTINGS_KEY_WINDOW_GEOMETRY, geometry)
     
     def get_splitter_state(self) -> Optional[bytes]:
-        return self.config.get_splitter_state()
+        return self.settings.value(SETTINGS_KEY_SPLITTER_STATE)
     
     def set_splitter_state(self, state: bytes):
         self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, state)
     
     def get_now_playing_collapsed(self) -> bool:
-        return self.config.get_now_playing_collapsed()
+        collapsed_raw = self.settings.value(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, 0)
+        return bool(int(collapsed_raw))
     
     def set_now_playing_collapsed(self, collapsed: bool):
         self.settings.setValue(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, collapsed)
@@ -835,13 +836,14 @@ class ConfigManager:
     
     # Preferences
     def get_undo_limit(self) -> int:
-        return int(self.config.get_undo_limit())
+        limit_raw = self.settings.value(SETTINGS_KEY_UNDO_CAP, 100)
+        return int(limit_raw) if limit_raw is not None else 100
     
     def set_undo_limit(self, limit: int):
         self.settings.setValue(SETTINGS_KEY_UNDO_CAP, int(limit))
     
     def get_theme(self) -> str:
-        return self.config.get_theme()
+        return self.settings.value(SETTINGS_KEY_THEME, "light")
     
     def set_theme(self, theme: str):
         self.settings.setValue(SETTINGS_KEY_THEME, theme)
@@ -869,7 +871,7 @@ class ConfigManager:
     
     # Current set
     def get_current_set(self) -> str:
-        return self.config.get_current_set()
+        return self.settings.value(SETTINGS_KEY_CUR_SET, "")
     
     def set_current_set(self, set_id: str):
         self.settings.setValue(SETTINGS_KEY_CUR_SET, set_id)
@@ -932,7 +934,7 @@ class ConfigManager:
         return self.settings.value(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, "")
     
     def set_audio_output_device(self, device_id: str):
-        self.config.set_audio_output_device(device_id)
+        self.settings.setValue(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, device_id)
     
     # Fingerprint settings
     def get_fingerprint_dir(self) -> str:
@@ -954,28 +956,29 @@ class ConfigManager:
         self.settings.setValue(SETTINGS_KEY_FINGERPRINT_ALGORITHM, algorithm)
     
     def get_fingerprint_section_expanded(self) -> bool:
-        return self.config.get_fingerprint_section_expanded()
+        expanded_raw = self.settings.value("fingerprint_section_expanded", 1)
+        return bool(int(expanded_raw))
     
     def set_fingerprint_section_expanded(self, expanded: bool):
         self.settings.setValue("fingerprint_section_expanded", expanded)
     
     # Tabs order
     def get_tabs_order(self) -> str:
-        return self.config.get_tabs_order()
+        return self.settings.value(SETTINGS_KEY_TABS_ORDER, "")
     
     def set_tabs_order(self, order: str):
         self.settings.setValue(SETTINGS_KEY_TABS_ORDER, order)
     
     # Auto-progress and auto-switch
     def get_auto_progress(self) -> Optional[bool]:
-        ap = self.config.get_auto_progress()
+        ap = self.settings.value(SETTINGS_KEY_AUTOPROGRESS)
         return bool(int(ap)) if ap is not None else None
     
     def set_auto_progress(self, enabled: bool):
         self.settings.setValue(SETTINGS_KEY_AUTOPROGRESS, int(enabled))
     
     def get_auto_switch(self) -> Optional[bool]:
-        asw = self.config.get_auto_switch()
+        asw = self.settings.value(SETTINGS_KEY_AUTOSWITCH)
         return bool(int(asw)) if asw is not None else None
     
     def set_auto_switch(self, enabled: bool):
@@ -991,10 +994,10 @@ class ConfigManager:
     
     # Remove settings
     def remove_geometry(self):
-        self.config.remove_geometry()
+        self.settings.remove(SETTINGS_KEY_WINDOW_GEOMETRY)
     
     def remove_splitter_state(self):
-        self.config.remove_splitter_state()
+        self.settings.remove(SETTINGS_KEY_SPLITTER_STATE)
 
 
 class JSONPersistence:
