@@ -116,7 +116,7 @@ Item {
                 anchors.margins: Theme.spacingSmall
                 spacing: 0
                 
-                // Header
+                // Header with column labels
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Theme.buttonHeight
@@ -148,6 +148,46 @@ Item {
                                 radius: Theme.radiusSmall
                             }
                             color: Theme.textColor
+                        }
+                    }
+                }
+                
+                // Column Headers
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
+                    color: Theme.backgroundMedium
+                    
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.spacingNormal
+                        anchors.rightMargin: Theme.spacingNormal
+                        spacing: Theme.spacingNormal
+                        
+                        Label {
+                            text: "Name"
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.bold: true
+                            color: Theme.textColor
+                            Layout.fillWidth: true
+                        }
+                        
+                        Label {
+                            text: "Duration"
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.bold: true
+                            color: Theme.textColor
+                            Layout.preferredWidth: 80
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        
+                        Label {
+                            text: "Size"
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.bold: true
+                            color: Theme.textColor
+                            Layout.preferredWidth: 80
+                            horizontalAlignment: Text.AlignRight
                         }
                     }
                 }
@@ -196,6 +236,14 @@ Item {
                                 color: Theme.textColor
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
+                            }
+                            
+                            Label {
+                                text: formatDuration(model.duration)
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                Layout.preferredWidth: 80
+                                horizontalAlignment: Text.AlignRight
                             }
                             
                             Label {
@@ -281,6 +329,27 @@ Item {
             return (bytes / (1024 * 1024)).toFixed(1) + " MB"
         } else {
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB"
+        }
+    }
+    
+    // Helper function to format duration
+    function formatDuration(durationMs) {
+        if (durationMs <= 0) {
+            return "--:--"
+        }
+        
+        var totalSeconds = Math.floor(durationMs / 1000)
+        var hours = Math.floor(totalSeconds / 3600)
+        var minutes = Math.floor((totalSeconds % 3600) / 60)
+        var seconds = totalSeconds % 60
+        
+        if (hours > 0) {
+            return hours.toString().padStart(2, '0') + ":" + 
+                   minutes.toString().padStart(2, '0') + ":" + 
+                   seconds.toString().padStart(2, '0')
+        } else {
+            return minutes.toString().padStart(2, '0') + ":" + 
+                   seconds.toString().padStart(2, '0')
         }
     }
     
