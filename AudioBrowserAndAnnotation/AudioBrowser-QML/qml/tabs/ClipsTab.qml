@@ -27,6 +27,10 @@ Item {
     property int selectedClipIndex: -1
     property bool loopClip: false
     
+    // Clip marker properties for keyboard shortcuts
+    property int clipStartMarker: -1  // -1 means not set
+    property int clipEndMarker: -1    // -1 means not set
+    
     // ========== Clip Dialog ==========
     
     ClipDialog {
@@ -63,6 +67,25 @@ Item {
             StyledLabel {
                 text: "Clips"
                 heading: true
+            }
+            
+            // Clip marker status indicator
+            Label {
+                id: markerStatusLabel
+                text: {
+                    if (clipStartMarker >= 0 && clipEndMarker >= 0) {
+                        return "⏺ Markers: [" + formatTime(clipStartMarker) + " - " + formatTime(clipEndMarker) + "]"
+                    } else if (clipStartMarker >= 0) {
+                        return "⏺ Start: " + formatTime(clipStartMarker) + " (press ] to set end)"
+                    } else if (clipEndMarker >= 0) {
+                        return "⏺ End: " + formatTime(clipEndMarker) + " (press [ to set start)"
+                    } else {
+                        return ""
+                    }
+                }
+                font.pixelSize: Theme.fontSizeSmall
+                color: (clipStartMarker >= 0 || clipEndMarker >= 0) ? Theme.accentWarning : Theme.textMuted
+                visible: clipStartMarker >= 0 || clipEndMarker >= 0
             }
             
             Item { Layout.fillWidth: true }
@@ -457,6 +480,55 @@ Item {
                milliseconds.toString().padStart(3, '0');
     }
     
+    // ========== Clip Marker Functions (for keyboard shortcuts) ==========
+    
+    function setClipStartMarker() {
+        if (!audioEngine) return;
+        clipStartMarker = audioEngine.getPosition();
+        console.log("Clip start marker set at:", formatTime(clipStartMarker));
+        
+        // If both markers are set and end is after start, auto-create clip
+        if (clipStartMarker >= 0 && clipEndMarker >= 0 && clipEndMarker > clipStartMarker) {
+            createClipFromMarkers();
+        }
+    }
+    
+    function setClipEndMarker() {
+        if (!audioEngine) return;
+        clipEndMarker = audioEngine.getPosition();
+        console.log("Clip end marker set at:", formatTime(clipEndMarker));
+        
+        // If both markers are set and end is after start, auto-create clip
+        if (clipStartMarker >= 0 && clipEndMarker >= 0 && clipEndMarker > clipStartMarker) {
+            createClipFromMarkers();
+        }
+    }
+    
+    function createClipFromMarkers() {
+        if (clipStartMarker < 0 || clipEndMarker < 0) {
+            console.warn("Both markers must be set to create a clip");
+            return;
+        }
+        
+        if (clipEndMarker <= clipStartMarker) {
+            console.warn("End marker must be after start marker");
+            return;
+        }
+        
+        // Open the clip dialog with the marker positions
+        clipDialog.openDialog(false, -1, clipStartMarker, clipEndMarker, "", "");
+        
+        // Reset markers after creating clip
+        clipStartMarker = -1;
+        clipEndMarker = -1;
+    }
+    
+    function clearClipMarkers() {
+        clipStartMarker = -1;
+        clipEndMarker = -1;
+        console.log("Clip markers cleared");
+    }
+    
     // ========== Connections ==========
     
     Connections {
@@ -474,28 +546,6 @@ Item {
         function onExportComplete(outputPath) {
             console.log("Clip exported to:", outputPath);
             // Could show a success notification here
-        }
-    }
-                    "• Clip metadata and organization"
-                ]
-                
-                Label {
-                    text: modelData
-                    font.pixelSize: Theme.fontSizeNormal
-                    color: Theme.textMuted
-                    leftPadding: Theme.spacingXLarge
-                }
-            }
-        }
-        
-        Item { Layout.fillHeight: true }
-        
-        Label {
-            text: "Coming in Phase 3"
-            font.pixelSize: Theme.fontSizeMedium
-            font.italic: true
-            color: Theme.accentWarning
-            Layout.alignment: Qt.AlignHCenter
         }
     }
 }
