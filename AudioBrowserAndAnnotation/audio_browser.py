@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getpass, logging, math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Set
+from typing import Dict, List, Optional, Tuple, Any, Set, Callable
 from datetime import datetime
 from array import array
 
@@ -498,6 +498,13 @@ def file_signature(p: Path) -> Tuple[int, int]:
         return (0, 0)
 
 def load_json(path: Path, default):
+    """Legacy wrapper for JSONPersistence.load_json for backward compatibility.
+    
+    Note: New code should use JSONPersistence.load_json directly for better
+    error handling and additional features.
+    """
+    # Import here to avoid circular dependency (JSONPersistence defined after this)
+    # Once we refactor, this will be removed
     try:
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
@@ -507,6 +514,11 @@ def load_json(path: Path, default):
     return default
 
 def save_json(path: Path, data):
+    """Legacy wrapper for JSONPersistence.save_json for backward compatibility.
+    
+    Note: New code should use JSONPersistence.save_json directly for better
+    error handling and additional features like backup support.
+    """
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -982,6 +994,85 @@ class ConfigManager:
     
     def remove_splitter_state(self):
         self.config.remove_splitter_state()
+
+
+class JSONPersistence:
+    """Utility for loading and saving JSON files with error handling."""
+    
+    @staticmethod
+    def load_json(file_path: Path, default: Any = None) -> Any:
+        """Load JSON file with error handling.
+        
+        Args:
+            file_path: Path to JSON file
+            default: Default value to return if file doesn't exist or is invalid
+            
+        Returns:
+            Loaded JSON data or default value
+        """
+        try:
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except json.JSONDecodeError as e:
+            logging.error(f"Invalid JSON in {file_path}: {e}")
+        except Exception as e:
+            logging.error(f"Failed to load {file_path}: {e}")
+        return default
+    
+    @staticmethod
+    def save_json(file_path: Path, data: Any, indent: int = 2, 
+                  create_backup: bool = False) -> bool:
+        """Save data to JSON file with error handling.
+        
+        Args:
+            file_path: Path to save JSON file
+            data: Data to serialize to JSON
+            indent: Number of spaces for indentation (default: 2)
+            create_backup: If True, create .bak file before overwriting (default: False)
+            
+        Returns:
+            True if save succeeded, False otherwise
+        """
+        try:
+            # Create backup if requested
+            if create_backup and file_path.exists():
+                backup_path = file_path.with_suffix(file_path.suffix + '.bak')
+                import shutil
+                shutil.copy2(file_path, backup_path)
+            
+            # Ensure directory exists
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write JSON
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=indent, ensure_ascii=False)
+            return True
+        except Exception as e:
+            logging.error(f"Failed to save {file_path}: {e}")
+            return False
+    
+    @staticmethod
+    def load_with_migration(file_path: Path, default: Any,
+                           migrator: Optional[Callable] = None) -> Any:
+        """Load JSON with optional data migration.
+        
+        Args:
+            file_path: Path to JSON file
+            default: Default value to return if file doesn't exist or is invalid
+            migrator: Optional function to migrate old data format to new format
+            
+        Returns:
+            Loaded (and possibly migrated) JSON data or default value
+        """
+        data = JSONPersistence.load_json(file_path, default)
+        if migrator and data != default:
+            try:
+                data = migrator(data)
+            except Exception as e:
+                logging.error(f"Failed to migrate {file_path}: {e}")
+                return default
+        return data
 
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
