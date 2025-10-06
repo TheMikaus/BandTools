@@ -25,14 +25,19 @@ This document lists all keyboard shortcuts available in the AudioBrowser QML app
 |----------|--------|-------------|
 | **Ctrl+T** | Toggle Theme | Switch between light and dark themes |
 
+## Navigation (Extended)
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| **Left Arrow** | Seek Backward | Skip backward 5 seconds |
+| **Right Arrow** | Seek Forward | Skip forward 5 seconds |
+
 ## Future Shortcuts (Planned)
 
 These shortcuts will be implemented in future phases:
 
 | Shortcut | Action | Description |
 |----------|--------|-------------|
-| **Left Arrow** | Seek Backward | Skip backward 5 seconds |
-| **Right Arrow** | Seek Forward | Skip forward 5 seconds |
 | **Ctrl+Left** | Previous File | Play previous file in list |
 | **Ctrl+Right** | Next File | Play next file in list |
 | **Ctrl+O** | Open Directory | Open directory picker dialog |
@@ -40,6 +45,8 @@ These shortcuts will be implemented in future phases:
 | **Ctrl+A** | Add Annotation | Create new annotation at current position |
 | **Ctrl+S** | Save | Save current workspace/annotations |
 | **F11** | Fullscreen | Toggle fullscreen mode |
+| **[** | Set Clip Start | Set clip start marker at current position |
+| **]** | Set Clip End | Set clip end marker at current position |
 
 ## Notes
 

@@ -115,6 +115,31 @@ class AudioEngine(QObject):
         self._player.setPosition(position_ms)
     
     @pyqtSlot(int)
+    def seekForward(self, delta_ms: int) -> None:
+        """
+        Seek forward by delta_ms milliseconds.
+        
+        Args:
+            delta_ms: Number of milliseconds to skip forward
+        """
+        current_pos = self._player.position()
+        duration = self._player.duration()
+        new_pos = min(current_pos + delta_ms, duration)
+        self._player.setPosition(new_pos)
+    
+    @pyqtSlot(int)
+    def seekBackward(self, delta_ms: int) -> None:
+        """
+        Seek backward by delta_ms milliseconds.
+        
+        Args:
+            delta_ms: Number of milliseconds to skip backward
+        """
+        current_pos = self._player.position()
+        new_pos = max(current_pos - delta_ms, 0)
+        self._player.setPosition(new_pos)
+    
+    @pyqtSlot(int)
     def setVolume(self, volume: int) -> None:
         """
         Set the playback volume.
