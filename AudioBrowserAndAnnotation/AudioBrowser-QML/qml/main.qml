@@ -41,33 +41,13 @@ ApplicationWindow {
                 
                 Item { Layout.fillWidth: true }
                 
-                // Playback controls (placeholder)
-                RowLayout {
-                    spacing: Theme.spacingSmall
-                    
-                    StyledButton {
-                        text: "⏮"
-                        enabled: false
-                    }
-                    
-                    StyledButton {
-                        text: audioEngine.isPlaying() ? "⏸" : "▶"
-                        primary: true
-                        onClicked: audioEngine.togglePlayPause()
-                    }
-                    
-                    StyledButton {
-                        text: "⏹"
-                        onClicked: audioEngine.stop()
-                    }
-                    
-                    StyledButton {
-                        text: "⏭"
-                        enabled: false
-                    }
+                // Playback controls
+                PlaybackControls {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Theme.toolbarHeight
                 }
                 
-                Item { width: Theme.spacingNormal }
+                Item { width: Theme.spacingSmall }
                 
                 // Theme toggle
                 StyledButton {
@@ -204,6 +184,58 @@ ApplicationWindow {
         function onPlaybackStateChanged(state) {
             // Force status bar to update
             mainWindow.update()
+        }
+    }
+    
+    // Keyboard shortcuts
+    Shortcut {
+        sequence: "Space"
+        onActivated: audioEngine.togglePlayPause()
+    }
+    
+    Shortcut {
+        sequence: "Escape"
+        onActivated: audioEngine.stop()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+T"
+        onActivated: {
+            var currentTheme = settingsManager.getTheme()
+            var newTheme = currentTheme === "dark" ? "light" : "dark"
+            settingsManager.setTheme(newTheme)
+            Theme.setTheme(newTheme)
+        }
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+1"
+        onActivated: tabBar.currentIndex = 0
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+2"
+        onActivated: tabBar.currentIndex = 1
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+3"
+        onActivated: tabBar.currentIndex = 2
+    }
+    
+    Shortcut {
+        sequence: "+"
+        onActivated: {
+            var vol = audioEngine.getVolume()
+            audioEngine.setVolume(Math.min(100, vol + 5))
+        }
+    }
+    
+    Shortcut {
+        sequence: "-"
+        onActivated: {
+            var vol = audioEngine.getVolume()
+            audioEngine.setVolume(Math.max(0, vol - 5))
         }
     }
 }
