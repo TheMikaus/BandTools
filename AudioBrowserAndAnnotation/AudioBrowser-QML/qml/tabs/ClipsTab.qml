@@ -25,6 +25,7 @@ Item {
     property var clipManager: null
     property var audioEngine: null
     property int selectedClipIndex: -1
+    property bool loopClip: false
     
     // ========== Clip Dialog ==========
     
@@ -72,6 +73,9 @@ Item {
                 primary: true
                 enabled: audioEngine && audioEngine.getCurrentFile() !== ""
                 
+                ToolTip.visible: hovered
+                ToolTip.text: "Create a new clip from the current audio file"
+                
                 onClicked: {
                     // Get current playback position for defaults
                     const currentPos = audioEngine ? audioEngine.getPosition() : 0;
@@ -89,6 +93,9 @@ Item {
                 id: editButton
                 text: "✏ Edit"
                 enabled: selectedClipIndex >= 0
+                
+                ToolTip.visible: hovered
+                ToolTip.text: "Edit the selected clip"
                 
                 onClicked: {
                     if (clipManager && selectedClipIndex >= 0) {
@@ -111,16 +118,60 @@ Item {
                 danger: true
                 enabled: selectedClipIndex >= 0
                 
+                ToolTip.visible: hovered
+                ToolTip.text: "Delete the selected clip"
+                
                 onClicked: {
                     deleteConfirmDialog.open();
                 }
             }
             
             StyledButton {
+                id: playButton
+                text: "▶ Play Clip"
+                success: true
+                enabled: selectedClipIndex >= 0 && audioEngine
+                
+                ToolTip.visible: hovered
+                ToolTip.text: "Play the selected clip region"
+                
+                onClicked: {
+                    if (clipManager && audioEngine && selectedClipIndex >= 0) {
+                        const clip = clipManager.getClip(selectedClipIndex);
+                        audioEngine.playClip(clip.start_ms, clip.end_ms, loopClip);
+                    }
+                }
+            }
+            
+            CheckBox {
+                id: loopCheckbox
+                text: "Loop"
+                checked: clipsTab.loopClip
+                enabled: selectedClipIndex >= 0
+                
+                ToolTip.visible: hovered
+                ToolTip.text: "Loop clip playback for practice"
+                
+                contentItem: Text {
+                    text: loopCheckbox.text
+                    font.pixelSize: Theme.fontSizeNormal
+                    color: loopCheckbox.enabled ? Theme.textColor : Theme.textMuted
+                    leftPadding: loopCheckbox.indicator.width + loopCheckbox.spacing
+                    verticalAlignment: Text.AlignVCenter
+                }
+                
+                onCheckedChanged: {
+                    clipsTab.loopClip = checked;
+                }
+            }
+            
+            StyledButton {
                 id: exportButton
                 text: "💾 Export"
-                success: true
                 enabled: selectedClipIndex >= 0
+                
+                ToolTip.visible: hovered
+                ToolTip.text: "Export the selected clip as a separate audio file"
                 
                 onClicked: {
                     if (clipManager && selectedClipIndex >= 0) {
@@ -133,6 +184,9 @@ Item {
                 id: clearButton
                 text: "Clear All"
                 enabled: clipManager && clipManager.getClipCount() > 0
+                
+                ToolTip.visible: hovered
+                ToolTip.text: "Delete all clips for the current file"
                 
                 onClicked: {
                     clearConfirmDialog.open();

@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 3 (Annotations)"
+    title: "AudioBrowser (QML) - Phase 5 (Clips & Annotations)"
     
     // Use theme for background color
     color: Theme.backgroundColor
@@ -192,6 +192,11 @@ ApplicationWindow {
     // Keyboard shortcuts
     Shortcut {
         sequence: "Space"
+        // Only activate if no text input has focus
+        enabled: !mainWindow.activeFocusItem || 
+                 mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
         onActivated: audioEngine.togglePlayPause()
     }
     
@@ -239,5 +244,16 @@ ApplicationWindow {
             var vol = audioEngine.getVolume()
             audioEngine.setVolume(Math.max(0, vol - 5))
         }
+    }
+    
+    // Navigation shortcuts
+    Shortcut {
+        sequence: "Left"
+        onActivated: audioEngine.seekBackward(5000)  // 5 seconds back
+    }
+    
+    Shortcut {
+        sequence: "Right"
+        onActivated: audioEngine.seekForward(5000)  // 5 seconds forward
     }
 }

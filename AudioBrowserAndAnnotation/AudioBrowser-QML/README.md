@@ -227,6 +227,7 @@ The application will automatically install PyQt6 dependencies if they are not pr
 - Edit existing clips
 - Delete clips (individual or all)
 - Export clips as separate audio files
+- Play clip region for focused practice
 - Visual clip markers on waveform with region highlighting
 - Start "[" and end "]" boundary markers
 - Click to select, double-click to edit
@@ -236,6 +237,12 @@ The application will automatically install PyQt6 dependencies if they are not pr
 - Name and notes for each clip
 - Automatic persistence to JSON
 - Support for WAV, MP3, OGG, FLAC export formats
+
+**Phase 6 Features** (Polish & Enhancements):
+- Extended keyboard shortcuts (Left/Right arrows for navigation)
+- Clip playback with automatic boundary handling
+- Improved version tracking and display
+- Enhanced user experience refinements
 
 ## Development Notes
 
