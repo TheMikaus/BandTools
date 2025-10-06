@@ -1,16 +1,18 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components"
+import "styles"
 
 ApplicationWindow {
     id: mainWindow
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 0"
+    title: "AudioBrowser (QML) - Phase 1 Progress"
     
-    // Color scheme (will be moved to Theme.qml in Phase 1)
-    color: "#2b2b2b"
+    // Use theme for background color
+    color: Theme.backgroundColor
     
     // Main content area
     ColumnLayout {
@@ -22,8 +24,8 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 80
-            color: "#3b3b3b"
-            radius: 8
+            color: Theme.backgroundLight
+            radius: Theme.radiusNormal
             
             ColumnLayout {
                 anchors.centerIn: parent
@@ -31,16 +33,16 @@ ApplicationWindow {
                 
                 Label {
                     text: appViewModel.getMessage()
-                    font.pixelSize: 24
+                    font.pixelSize: Theme.fontSizeXLarge
                     font.bold: true
-                    color: "#ffffff"
+                    color: Theme.textColor
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 Label {
-                    text: "QML Migration Infrastructure Test"
-                    font.pixelSize: 14
-                    color: "#cccccc"
+                    text: "QML Migration - Backend Integration"
+                    font.pixelSize: Theme.fontSizeMedium
+                    color: Theme.textSecondary
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -50,8 +52,8 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#353535"
-            radius: 8
+            color: Theme.backgroundMedium
+            radius: Theme.radiusNormal
             
             ColumnLayout {
                 anchors.fill: parent
@@ -60,15 +62,15 @@ ApplicationWindow {
                 
                 Label {
                     text: "✓ Phase 0: Preparation • ⏳ Phase 1: In Progress"
-                    font.pixelSize: 18
+                    font.pixelSize: Theme.fontSizeLarge
                     font.bold: true
-                    color: "#4ade80"
+                    color: Theme.accentSuccess
                 }
                 
                 Label {
                     text: "Status: Backend modules integrated • Current theme: " + settingsManager.getTheme()
-                    font.pixelSize: 14
-                    color: "#ffffff"
+                    font.pixelSize: Theme.fontSizeMedium
+                    color: Theme.textColor
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -76,14 +78,14 @@ ApplicationWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: "#555555"
+                    color: Theme.borderColor
                 }
                 
                 Label {
                     text: "Completed:"
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
-                    color: "#ffffff"
+                    color: Theme.textColor
                 }
                 
                 ColumnLayout {
@@ -104,9 +106,9 @@ ApplicationWindow {
                         
                         Label {
                             text: modelData
-                            font.pixelSize: 12
-                            color: "#cccccc"
-                            leftPadding: 20
+                            font.pixelSize: Theme.fontSizeNormal
+                            color: Theme.textSecondary
+                            leftPadding: Theme.spacingLarge
                         }
                     }
                 }
@@ -114,14 +116,14 @@ ApplicationWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: "#555555"
+                    color: Theme.borderColor
                 }
                 
                 Label {
-                    text: "Next: Phase 1 - Core Infrastructure"
-                    font.pixelSize: 14
+                    text: "Next Steps:"
+                    font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
-                    color: "#fbbf24"
+                    color: Theme.accentWarning
                 }
                 
                 ColumnLayout {
@@ -130,18 +132,18 @@ ApplicationWindow {
                     
                     Repeater {
                         model: [
-                            "• Split audio_browser.py into backend modules",
-                            "• Create backend classes (audio, waveform, file managers)",
-                            "• Implement tab structure in QML",
-                            "• Set up theming system",
-                            "• Create reusable QML components"
+                            "• Extract audio_engine from audio_browser.py",
+                            "• Extract file_manager from audio_browser.py",
+                            "• Implement QML tab structure (Library, Annotations, Clips)",
+                            "• Create more reusable QML components",
+                            "• Implement file list model"
                         ]
                         
                         Label {
                             text: modelData
-                            font.pixelSize: 12
-                            color: "#999999"
-                            leftPadding: 20
+                            font.pixelSize: Theme.fontSizeNormal
+                            color: Theme.textMuted
+                            leftPadding: Theme.spacingLarge
                         }
                     }
                 }
@@ -149,14 +151,14 @@ ApplicationWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: "#555555"
+                    color: Theme.borderColor
                 }
                 
                 Label {
                     text: "Backend Integration Test:"
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
-                    color: "#ffffff"
+                    color: Theme.textColor
                 }
                 
                 RowLayout {
@@ -169,20 +171,20 @@ ApplicationWindow {
                         
                         Label {
                             text: "SettingsManager:"
-                            font.pixelSize: 12
-                            color: "#cccccc"
+                            font.pixelSize: Theme.fontSizeNormal
+                            color: Theme.textSecondary
                         }
                         
                         Label {
                             text: "  • Theme: " + settingsManager.getTheme()
-                            font.pixelSize: 11
-                            color: "#999999"
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textMuted
                         }
                         
                         Label {
                             text: "  • Volume: " + settingsManager.getVolume() + "%"
-                            font.pixelSize: 11
-                            color: "#999999"
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textMuted
                         }
                     }
                     
@@ -192,19 +194,19 @@ ApplicationWindow {
                         
                         Label {
                             text: "ColorManager:"
-                            font.pixelSize: 12
-                            color: "#cccccc"
+                            font.pixelSize: Theme.fontSizeNormal
+                            color: Theme.textSecondary
                         }
                         
                         Label {
                             text: "  • Success: " + colorManager.getSuccessColor()
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeSmall
                             color: colorManager.getSuccessColor()
                         }
                         
                         Label {
                             text: "  • Danger: " + colorManager.getDangerColor()
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeSmall
                             color: colorManager.getDangerColor()
                         }
                     }
@@ -216,24 +218,27 @@ ApplicationWindow {
                 
                 // Test buttons for backend integration
                 RowLayout {
-                    spacing: 10
+                    spacing: Theme.spacingNormal
                     Layout.alignment: Qt.AlignHCenter
                     
-                    Button {
-                        text: "Test Python-QML Communication"
+                    StyledButton {
+                        text: "Test Communication"
+                        primary: true
                         
                         onClicked: {
                             appViewModel.setMessage("Communication Test Successful! ✓")
                         }
                     }
                     
-                    Button {
-                        text: "Toggle Theme (Test)"
+                    StyledButton {
+                        text: "Toggle Theme"
+                        success: true
                         
                         onClicked: {
                             var currentTheme = settingsManager.getTheme()
                             var newTheme = currentTheme === "dark" ? "light" : "dark"
                             settingsManager.setTheme(newTheme)
+                            Theme.setTheme(newTheme)
                         }
                     }
                 }
@@ -243,15 +248,15 @@ ApplicationWindow {
         // Footer
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            color: "#3b3b3b"
-            radius: 8
+            Layout.preferredHeight: Theme.statusBarHeight
+            color: Theme.backgroundLight
+            radius: Theme.radiusNormal
             
             Label {
                 anchors.centerIn: parent
-                text: "AudioBrowser QML Migration • Phase 0 Complete"
-                font.pixelSize: 12
-                color: "#888888"
+                text: "AudioBrowser QML Migration • Phase 0 Complete • Phase 1 In Progress"
+                font.pixelSize: Theme.fontSizeNormal
+                color: Theme.textMuted
             }
         }
     }
