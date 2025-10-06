@@ -34,8 +34,8 @@ def test_app_starts():
         # Get output (stdout and stderr combined)
         output = e.stdout.decode('utf-8', errors='ignore') if e.stdout else ""
         
-        # Check for success message
-        if "AudioBrowser QML Phase 0 - Application started successfully" in output:
+        # Check for success message (any phase is acceptable)
+        if "Application started successfully" in output:
             print("  ✓ Application started successfully")
             return True
         elif "Loading QML file" in output and "Error: Failed to load QML file" not in output:
