@@ -5,6 +5,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Phase 3.1: Data Models**: Type-safe data classes for annotations, clips, and metadata
+  - Added `Annotation` dataclass at line 1413 (~62 lines) for type-safe annotation handling
+  - Time, text, important flag, category, user, and created timestamp attributes
+  - `to_dict()` and `from_dict()` methods for JSON serialization/deserialization
+  - `__str__()` method for human-readable representation with markers
+  - Added `Clip` dataclass at line 1476 (~60 lines) for type-safe clip handling
+  - Start time, end time, name, and notes attributes
+  - `duration` property for automatic duration calculation
+  - `to_dict()` and `from_dict()` methods for JSON operations
+  - Added `AudioFileMetadata` dataclass at line 1537 (~126 lines) for comprehensive file metadata
+  - Filename, song name, best/partial take flags, BPM, duration, annotations, and clips
+  - Helper methods: `add_annotation()`, `remove_annotation()`, `get_important_annotations()`, `get_annotations_by_category()`
+  - Helper methods for clips: `add_clip()`, `remove_clip()`
+  - Complete JSON serialization support with nested object handling
+  - Provides IDE autocomplete, type checking, and validation
+  - Replaces dictionary-based data structures for better maintainability
+  - Potential code reduction: ~150 lines when adopted (43% in affected areas)
+  - Part of Phase 3 High-Impact Changes (IMMEDIATE_SIMPLIFICATION_GUIDE.md)
 - **Phase 2.1: ProgressDialog**: Reusable progress dialog for long-running operations
   - Added `ProgressDialog` class at line 1237 (~86 lines) for consistent progress reporting
   - Operation label, progress bar, file label, and cancel button

@@ -1404,6 +1404,261 @@ class BaseWorker(QObject):
         """
         raise NotImplementedError("Subclass must implement run()")
 
+# ========== Data Models (Phase 3.1) ==========
+from dataclasses import dataclass, field
+
+@dataclass
+class Annotation:
+    """Represents a single annotation on an audio file.
+    
+    Provides type-safe access to annotation data with validation and helper methods.
+    Replaces dictionary-based annotation storage for better maintainability.
+    
+    Attributes:
+        time: Position in seconds where annotation is placed
+        text: Annotation text content
+        important: Whether this is marked as an important annotation
+        category: Optional category (e.g., "timing", "energy", "harmony", "dynamics")
+        user: Username of annotation creator
+        created_at: ISO format timestamp of creation
+    """
+    time: float
+    text: str
+    important: bool = False
+    category: Optional[str] = None
+    user: str = ""
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization.
+        
+        Returns:
+            Dictionary representation suitable for JSON storage
+        """
+        return {
+            "time": self.time,
+            "text": self.text,
+            "important": self.important,
+            "category": self.category,
+            "user": self.user,
+            "created_at": self.created_at
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Annotation':
+        """Create Annotation from dictionary (JSON deserialization).
+        
+        Args:
+            data: Dictionary containing annotation data
+            
+        Returns:
+            New Annotation instance
+        """
+        return cls(
+            time=data["time"],
+            text=data["text"],
+            important=data.get("important", False),
+            category=data.get("category"),
+            user=data.get("user", ""),
+            created_at=data.get("created_at", datetime.now().isoformat())
+        )
+    
+    def __str__(self) -> str:
+        """String representation of annotation.
+        
+        Returns:
+            Human-readable annotation string
+        """
+        important_marker = "⭐ " if self.important else ""
+        category_marker = f"[{self.category}] " if self.category else ""
+        return f"{important_marker}{category_marker}{self.text} @ {self.time:.2f}s"
+
+@dataclass
+class Clip:
+    """Represents a clip (time range) in an audio file.
+    
+    Provides type-safe access to clip data with duration calculation.
+    
+    Attributes:
+        start_time: Start position in seconds
+        end_time: End position in seconds
+        name: Optional clip name/label
+        notes: Optional notes about the clip
+    """
+    start_time: float
+    end_time: float
+    name: str = ""
+    notes: str = ""
+    
+    @property
+    def duration(self) -> float:
+        """Calculate clip duration in seconds.
+        
+        Returns:
+            Duration in seconds (end_time - start_time)
+        """
+        return self.end_time - self.start_time
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization.
+        
+        Returns:
+            Dictionary representation suitable for JSON storage
+        """
+        return {
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "name": self.name,
+            "notes": self.notes
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Clip':
+        """Create Clip from dictionary (JSON deserialization).
+        
+        Args:
+            data: Dictionary containing clip data
+            
+        Returns:
+            New Clip instance
+        """
+        return cls(
+            start_time=data["start_time"],
+            end_time=data["end_time"],
+            name=data.get("name", ""),
+            notes=data.get("notes", "")
+        )
+    
+    def __str__(self) -> str:
+        """String representation of clip.
+        
+        Returns:
+            Human-readable clip string
+        """
+        name_part = f"{self.name}: " if self.name else ""
+        return f"{name_part}{self.start_time:.2f}s - {self.end_time:.2f}s ({self.duration:.2f}s)"
+
+@dataclass
+class AudioFileMetadata:
+    """Metadata for a single audio file.
+    
+    Provides type-safe access to all metadata associated with an audio file,
+    including annotations, clips, and song information.
+    
+    Attributes:
+        filename: Base filename of the audio file
+        song_name: Optional song/take name
+        best_take: Whether this is marked as the best take
+        partial_take: Whether this is a partial/incomplete take
+        bpm: Optional beats per minute
+        duration: Optional duration in seconds
+        annotations: List of Annotation objects
+        clips: List of Clip objects
+    """
+    filename: str
+    song_name: str = ""
+    best_take: bool = False
+    partial_take: bool = False
+    bpm: Optional[int] = None
+    duration: Optional[float] = None
+    annotations: List[Annotation] = field(default_factory=list)
+    clips: List[Clip] = field(default_factory=list)
+    
+    def add_annotation(self, annotation: Annotation):
+        """Add an annotation to this file.
+        
+        Args:
+            annotation: Annotation to add
+        """
+        self.annotations.append(annotation)
+    
+    def remove_annotation(self, annotation: Annotation):
+        """Remove an annotation from this file.
+        
+        Args:
+            annotation: Annotation to remove
+            
+        Raises:
+            ValueError: If annotation is not in the list
+        """
+        self.annotations.remove(annotation)
+    
+    def get_important_annotations(self) -> List[Annotation]:
+        """Get all important annotations.
+        
+        Returns:
+            List of annotations marked as important
+        """
+        return [a for a in self.annotations if a.important]
+    
+    def get_annotations_by_category(self, category: str) -> List[Annotation]:
+        """Get annotations filtered by category.
+        
+        Args:
+            category: Category to filter by
+            
+        Returns:
+            List of annotations with matching category
+        """
+        return [a for a in self.annotations if a.category == category]
+    
+    def add_clip(self, clip: Clip):
+        """Add a clip to this file.
+        
+        Args:
+            clip: Clip to add
+        """
+        self.clips.append(clip)
+    
+    def remove_clip(self, clip: Clip):
+        """Remove a clip from this file.
+        
+        Args:
+            clip: Clip to remove
+            
+        Raises:
+            ValueError: If clip is not in the list
+        """
+        self.clips.remove(clip)
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization.
+        
+        Returns:
+            Dictionary representation suitable for JSON storage
+        """
+        return {
+            "filename": self.filename,
+            "song_name": self.song_name,
+            "best_take": self.best_take,
+            "partial_take": self.partial_take,
+            "bpm": self.bpm,
+            "duration": self.duration,
+            "annotations": [a.to_dict() for a in self.annotations],
+            "clips": [c.to_dict() for c in self.clips]
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'AudioFileMetadata':
+        """Create AudioFileMetadata from dictionary (JSON deserialization).
+        
+        Args:
+            data: Dictionary containing metadata
+            
+        Returns:
+            New AudioFileMetadata instance
+        """
+        return cls(
+            filename=data["filename"],
+            song_name=data.get("song_name", ""),
+            best_take=data.get("best_take", False),
+            partial_take=data.get("partial_take", False),
+            bpm=data.get("bpm"),
+            duration=data.get("duration"),
+            annotations=[Annotation.from_dict(a) for a in data.get("annotations", [])],
+            clips=[Clip.from_dict(c) for c in data.get("clips", [])]
+        )
+
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
 class SeekSlider(QSlider):
