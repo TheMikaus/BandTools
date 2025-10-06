@@ -39,6 +39,49 @@ Item {
                 
                 Item { Layout.fillWidth: true }
                 
+                // Zoom controls
+                Label {
+                    text: "Zoom:"
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textMuted
+                }
+                
+                StyledButton {
+                    text: "−"
+                    Layout.preferredWidth: 32
+                    enabled: waveformDisplay.zoomLevel > 1.0
+                    onClicked: waveformDisplay.zoomOut()
+                }
+                
+                Label {
+                    text: Math.round(waveformDisplay.zoomLevel * 100) + "%"
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textColor
+                    Layout.preferredWidth: 50
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                
+                StyledButton {
+                    text: "+"
+                    Layout.preferredWidth: 32
+                    enabled: waveformDisplay.zoomLevel < 10.0
+                    onClicked: waveformDisplay.zoomIn()
+                }
+                
+                StyledButton {
+                    text: "Reset"
+                    Layout.preferredWidth: 60
+                    enabled: waveformDisplay.zoomLevel !== 1.0
+                    onClicked: waveformDisplay.resetZoom()
+                }
+                
+                Rectangle {
+                    width: 1
+                    height: parent.height * 0.6
+                    color: Theme.borderColor
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                
                 StyledButton {
                     text: "Generate"
                     primary: true

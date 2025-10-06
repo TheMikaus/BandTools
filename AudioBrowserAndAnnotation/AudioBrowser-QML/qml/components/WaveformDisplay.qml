@@ -27,24 +27,40 @@ Rectangle {
     property bool hasWaveform: false
     property string errorMessage: ""
     
+    // Zoom control
+    property real zoomLevel: 1.0  // 1.0 = normal, 2.0 = 2x zoom, etc.
+    
     // Waveform view
-    WaveformView {
-        id: waveform
+    Flickable {
+        id: flickable
         anchors.fill: parent
         anchors.margins: 1
+        contentWidth: waveform.width
+        contentHeight: waveform.height
+        clip: true
         
-        // Colors from theme
-        backgroundColor: Theme.backgroundColor
-        waveformColor: Theme.accentPrimary
-        playheadColor: Theme.accentDanger
-        axisColor: Theme.backgroundLight
+        ScrollBar.horizontal: ScrollBar {
+            policy: zoomLevel > 1.0 ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
+        }
         
-        // Bind playback position
-        positionMs: audioEngine.getPosition()
-        
-        // Handle seek requests
-        onSeekRequested: function(positionMs) {
-            audioEngine.seek(positionMs)
+        WaveformView {
+            id: waveform
+            width: Math.max(parent.width, parent.width * zoomLevel)
+            height: flickable.height
+            
+            // Colors from theme
+            backgroundColor: Theme.backgroundColor
+            waveformColor: Theme.accentPrimary
+            playheadColor: Theme.accentDanger
+            axisColor: Theme.backgroundLight
+            
+            // Bind playback position
+            positionMs: audioEngine.getPosition()
+            
+            // Handle seek requests
+            onSeekRequested: function(positionMs) {
+                audioEngine.seek(positionMs)
+            }
         }
     }
     
@@ -259,5 +275,17 @@ Rectangle {
             waveformEngine.cancelWaveform(filePath)
             isLoading = false
         }
+    }
+    
+    function zoomIn() {
+        zoomLevel = Math.min(zoomLevel * 1.5, 10.0)
+    }
+    
+    function zoomOut() {
+        zoomLevel = Math.max(zoomLevel / 1.5, 1.0)
+    }
+    
+    function resetZoom() {
+        zoomLevel = 1.0
     }
 }
