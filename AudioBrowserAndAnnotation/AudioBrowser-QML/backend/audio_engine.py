@@ -44,6 +44,11 @@ class AudioEngine(QObject):
         self._volume = 100
         self._playback_speed = 1.0
         
+        # Clip playback state
+        self._clip_start: Optional[int] = None
+        self._clip_end: Optional[int] = None
+        self._clip_loop = False
+        
         # Connect player signals
         self._player.playbackStateChanged.connect(self._on_playback_state_changed)
         self._player.positionChanged.connect(self._on_position_changed)
@@ -138,6 +143,32 @@ class AudioEngine(QObject):
         current_pos = self._player.position()
         new_pos = max(current_pos - delta_ms, 0)
         self._player.setPosition(new_pos)
+    
+    @pyqtSlot(int, int, bool)
+    def playClip(self, start_ms: int, end_ms: int, loop: bool = False) -> None:
+        """
+        Play a specific clip/region of the audio file.
+        
+        Args:
+            start_ms: Start position in milliseconds
+            end_ms: End position in milliseconds
+            loop: Whether to loop the clip playback
+        """
+        # Store clip boundaries
+        self._clip_start = start_ms
+        self._clip_end = end_ms
+        self._clip_loop = loop
+        
+        # Seek to start and play
+        self._player.setPosition(start_ms)
+        self.play()
+    
+    @pyqtSlot()
+    def stopClip(self) -> None:
+        """Stop clip playback and clear clip boundaries."""
+        self._clip_start = None
+        self._clip_end = None
+        self._clip_loop = False
     
     @pyqtSlot(int)
     def setVolume(self, volume: int) -> None:
@@ -257,6 +288,16 @@ class AudioEngine(QObject):
     def _on_position_changed(self, position: int) -> None:
         """Handle position changes from the media player."""
         self.positionChanged.emit(position)
+        
+        # Handle clip boundaries
+        if self._clip_end is not None and position >= self._clip_end:
+            if self._clip_loop and self._clip_start is not None:
+                # Loop back to start
+                self._player.setPosition(self._clip_start)
+            else:
+                # Stop at clip end
+                self.stop()
+                self.stopClip()
     
     def _on_duration_changed(self, duration: int) -> None:
         """Handle duration changes from the media player."""

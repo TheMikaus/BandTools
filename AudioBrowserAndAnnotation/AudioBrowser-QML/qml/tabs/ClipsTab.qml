@@ -117,9 +117,22 @@ Item {
             }
             
             StyledButton {
+                id: playButton
+                text: "▶ Play Clip"
+                success: true
+                enabled: selectedClipIndex >= 0 && audioEngine
+                
+                onClicked: {
+                    if (clipManager && audioEngine && selectedClipIndex >= 0) {
+                        const clip = clipManager.getClip(selectedClipIndex);
+                        audioEngine.playClip(clip.start_ms, clip.end_ms, false);
+                    }
+                }
+            }
+            
+            StyledButton {
                 id: exportButton
                 text: "💾 Export"
-                success: true
                 enabled: selectedClipIndex >= 0
                 
                 onClicked: {
