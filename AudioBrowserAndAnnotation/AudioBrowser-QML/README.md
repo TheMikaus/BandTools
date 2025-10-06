@@ -193,7 +193,39 @@ AudioBrowser-QML/
 ### Prerequisites
 
 - Python 3.8+
-- PyQt6 (automatically installed on first run)
+- PyQt6 and Qt6 QML modules
+
+### Installation
+
+#### Option 1: System Packages (Recommended for Linux)
+
+On Ubuntu/Debian systems, install the required Qt6 packages:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+    python3-pyqt6 \
+    python3-pyqt6.qtquick \
+    python3-pyqt6.qtmultimedia \
+    qml6-module-qtquick \
+    qml6-module-qtquick-controls \
+    qml6-module-qtquick-layouts \
+    qml6-module-qtquick-dialogs \
+    qml6-module-qtquick-templates \
+    qml6-module-qtquick-window \
+    qml6-module-qtqml-models \
+    qml6-module-qtqml-workerscript
+```
+
+#### Option 2: pip (Alternative)
+
+If system packages are not available, PyQt6 can be installed via pip (this will be attempted automatically on first run):
+
+```bash
+pip install PyQt6
+```
+
+Note: The QML modules may not be available via pip on all platforms. System packages are recommended.
 
 ### Launch
 
@@ -202,7 +234,14 @@ cd AudioBrowser-QML
 python3 main.py
 ```
 
-The application will automatically install PyQt6 dependencies if they are not present.
+Or use the provided launch script:
+
+```bash
+cd AudioBrowser-QML
+./run.sh
+```
+
+The application will attempt to install PyQt6 dependencies automatically if they are not present.
 
 ### Features Available
 
