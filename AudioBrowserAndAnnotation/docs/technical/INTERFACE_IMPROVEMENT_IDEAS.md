@@ -322,41 +322,59 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ---
 
-### 2.5 Cloud Sync Improvements
+### 2.5 Cloud Sync Improvements ✅ **IMPLEMENTED** (Sync History, Sync Rules, Conflict Resolution UI)
 
 **Current State:**
 - Manual sync with Google Drive
 - Version-based conflict detection
 - Preview changes before applying
+- Sync history tracking
+- Selective sync rules configuration
+- Conflict resolution dialog
 
-**Improvement Ideas:**
+**Implemented Features:**
 
-1. **Auto-Sync Mode:**
-   - Checkbox: "Auto-sync when files change"
-   - Show sync status icon (synced, syncing, conflicts)
-
-2. **Conflict Resolution UI:**
-   - Side-by-side diff view for conflicting annotations
-   - "Keep mine / Keep theirs / Merge" options
-   - Preview merged result
-
-3. **Sync History:**
+1. **Sync History:** ✅ **IMPLEMENTED**
    - Timeline view of all sync operations
-   - Rollback to previous sync state
-   - Show who uploaded what when
+   - Shows operation type, file count, user, and timestamp
+   - Accessible via File menu → "View Sync History…"
+   - Stores last 100 sync operations
+   - Tracks uploads, downloads, and conflict resolutions
 
-4. **Selective Sync Rules:**
-   - "Never sync files larger than 100MB"
-   - "Only sync my annotation files"
-   - "Auto-download Best Takes only"
+2. **Selective Sync Rules:** ✅ **IMPLEMENTED**
+   - Configure max file size limit (MB)
+   - "Sync annotations only" mode (exclude audio files)
+   - "Sync audio files" toggle
+   - "Auto-sync mode" checkbox (for future implementation)
+   - "Auto-download Best Takes only" option
+   - Accessible via File menu → "Sync Rules Configuration…"
+   - Rules persist per practice folder (`.sync_rules.json`)
+
+3. **Conflict Resolution UI:** ✅ **IMPLEMENTED**
+   - Dialog shows conflicting files with modification times
+   - Three resolution options: "Keep Local", "Keep Remote", "Merge (if possible)"
+   - Side-by-side comparison of local vs. remote modified times
+   - Batch conflict resolution (multiple files at once)
+   - Preview before applying resolutions
+
+**Future Enhancement Ideas:**
+
+4. **Auto-Sync Mode:**
+   - 💡 Checkbox: "Auto-sync when files change" (UI exists, needs background monitoring)
+   - 💡 Show sync status icon in toolbar (synced, syncing, conflicts)
+   - 💡 Automatic background sync on file changes
 
 5. **Alternative Cloud Providers:**
-   - Dropbox support
-   - OneDrive support
-   - Generic WebDAV support
-   - Self-hosted options (Nextcloud)
+   - 💡 Dropbox support
+   - 💡 OneDrive support
+   - 💡 Generic WebDAV support
+   - 💡 Self-hosted options (Nextcloud)
 
-**Why:** Reduces friction in band collaboration; makes sync more automatic and reliable.
+**Documentation:**
+- [TEST_PLAN_SYNC_IMPROVEMENTS.md](../test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md) - Complete test plan with 38 test cases
+- See IMPLEMENTATION_SUMMARY_SYNC_IMPROVEMENTS.md for technical details (to be created)
+
+**Why:** Reduces friction in band collaboration; makes sync more configurable and reliable.
 
 ---
 
@@ -731,16 +749,45 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 ## 6. Advanced Features
 
-### 6.1 Advanced Audio Analysis
+### 6.1 Advanced Audio Analysis ✅ **IMPLEMENTED** (Spectral Analysis - Spectrogram View)
 
-**Improvement Ideas:**
+**Current State:**
+- Waveform visualization with annotations
+- Basic audio analysis for fingerprinting
+- Spectrogram view available as toggle
 
-1. **Spectral Analysis:**
-   - Spectrogram view alongside waveform
-   - Identify frequency issues
-   - EQ suggestions
+**Implemented Features:**
 
-**Why:** Visual feedback helps musicians understand technical aspects of recordings.
+1. **Spectral Analysis:** ✅ **IMPLEMENTED**
+   - Spectrogram view toggle in Annotations tab
+   - Frequency-over-time visualization (60-8000 Hz musical range)
+   - Color-coded magnitude mapping (blue=low, green=medium, yellow-red=high)
+   - Log-spaced frequency axis for better detail
+   - Computed using STFT (Short-Time Fourier Transform)
+   - Cached after first computation for instant display
+   - Works with all annotation markers, loop markers, and tempo markers
+   - Playhead tracking during playback
+   - Clickable for seeking
+
+**Future Enhancement Ideas:**
+
+2. **EQ Suggestions:**
+   - 💡 Automatic frequency issue identification
+   - 💡 Suggested EQ adjustments based on analysis
+   - 💡 Comparison of frequency content across takes
+
+3. **Advanced Visualizations:**
+   - 💡 Chromagram display (pitch class visualization)
+   - 💡 Mel-spectrogram for perceptual analysis
+   - 💡 Harmonic/percussive separation visualization
+
+**Documentation:**
+- [TEST_PLAN_SPECTRAL_ANALYSIS.md](../test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md) - Complete test plan with 35 test cases
+- See IMPLEMENTATION_SUMMARY_SPECTRAL_ANALYSIS.md for technical details (to be created)
+
+**Access:** Annotations tab → Waveform controls → "Spectrogram" checkbox
+
+**Why:** Visual frequency feedback helps musicians understand technical aspects of recordings, identify tonal issues, and analyze harmonic content.
 
 ---
 

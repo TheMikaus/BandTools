@@ -6270,6 +6270,14 @@ class AudioBrowser(QMainWindow):
         self.gdrive_sync_action.triggered.connect(self._show_gdrive_sync)
         file_menu.addAction(self.gdrive_sync_action)
         
+        self.sync_rules_action = QAction("Sync &Rules Configuration…", self)
+        self.sync_rules_action.triggered.connect(self._show_sync_rules)
+        file_menu.addAction(self.sync_rules_action)
+        
+        self.sync_history_action = QAction("View Sync &History…", self)
+        self.sync_history_action.triggered.connect(self._show_sync_history)
+        file_menu.addAction(self.sync_history_action)
+        
         self.gdrive_delete_folder_action = QAction("Delete Remote Folder from Google Drive…", self)
         self.gdrive_delete_folder_action.triggered.connect(self._delete_remote_folder)
         file_menu.addAction(self.gdrive_delete_folder_action)
@@ -14262,6 +14270,78 @@ class AudioBrowser(QMainWindow):
             QMessageBox.critical(
                 self, "Sync Error",
                 f"An error occurred during sync:\n\n{str(e)}"
+            )
+    
+    def _show_sync_rules(self):
+        """Show sync rules configuration dialog."""
+        try:
+            # Ensure sync is available
+            if not self._ensure_gdrive_sync_available():
+                return
+            
+            # Check if we have a root path
+            if not self.root_path:
+                QMessageBox.warning(
+                    self, "No Folder Open",
+                    "Please open a practice folder before configuring sync rules."
+                )
+                return
+            
+            # Import sync modules
+            from gdrive_sync import load_sync_rules, save_sync_rules
+            from sync_dialog import SyncRulesDialog
+            
+            # Load current sync rules
+            sync_rules = load_sync_rules(self.root_path)
+            
+            # Show dialog
+            dialog = SyncRulesDialog(sync_rules, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Save new rules
+                new_rules = dialog.get_rules()
+                save_sync_rules(self.root_path, new_rules)
+                
+                self.statusBar().showMessage("Sync rules saved successfully", 5000)
+                log_print("Sync rules updated")
+        
+        except Exception as e:
+            log_print(f"Error showing sync rules: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred:\n\n{str(e)}"
+            )
+    
+    def _show_sync_history(self):
+        """Show sync history dialog."""
+        try:
+            # Ensure sync is available
+            if not self._ensure_gdrive_sync_available():
+                return
+            
+            # Check if we have a root path
+            if not self.root_path:
+                QMessageBox.warning(
+                    self, "No Folder Open",
+                    "Please open a practice folder to view sync history."
+                )
+                return
+            
+            # Import sync modules
+            from gdrive_sync import load_sync_history
+            from sync_dialog import SyncHistoryDialog
+            
+            # Load sync history
+            sync_history = load_sync_history(self.root_path)
+            
+            # Show dialog
+            dialog = SyncHistoryDialog(sync_history, self)
+            dialog.exec()
+        
+        except Exception as e:
+            log_print(f"Error showing sync history: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"An error occurred:\n\n{str(e)}"
             )
 
     # ----- Auto-generation methods -----
