@@ -16,6 +16,7 @@ import sys, subprocess, importlib, os, json, re, uuid, hashlib, wave, time, getp
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, Set, Callable
 from datetime import datetime
+from dataclasses import dataclass, field
 from array import array
 
 # Windows subprocess flag to hide console windows
@@ -1405,7 +1406,6 @@ class BaseWorker(QObject):
         raise NotImplementedError("Subclass must implement run()")
 
 # ========== Data Models (Phase 3.1) ==========
-from dataclasses import dataclass, field
 
 @dataclass
 class Annotation:
