@@ -256,4 +256,48 @@ ApplicationWindow {
         sequence: "Right"
         onActivated: audioEngine.seekForward(5000)  // 5 seconds forward
     }
+    
+    // Annotation shortcuts
+    Shortcut {
+        sequence: "Ctrl+A"
+        // Only activate if not in text input
+        enabled: !mainWindow.activeFocusItem || 
+                 mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
+        onActivated: {
+            if (audioEngine.getCurrentFile() !== "") {
+                annotationsTab.openAddDialog()
+            }
+        }
+    }
+    
+    // Clip marker shortcuts
+    Shortcut {
+        sequence: "["
+        // Only activate if not in text input
+        enabled: !mainWindow.activeFocusItem || 
+                 mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
+        onActivated: {
+            if (audioEngine.getCurrentFile() !== "") {
+                clipsTab.setClipStartMarker()
+            }
+        }
+    }
+    
+    Shortcut {
+        sequence: "]"
+        // Only activate if not in text input
+        enabled: !mainWindow.activeFocusItem || 
+                 mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
+        onActivated: {
+            if (audioEngine.getCurrentFile() !== "") {
+                clipsTab.setClipEndMarker()
+            }
+        }
+    }
 }

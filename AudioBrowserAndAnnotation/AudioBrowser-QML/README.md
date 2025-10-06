@@ -240,7 +240,11 @@ The application will automatically install PyQt6 dependencies if they are not pr
 
 **Phase 6 Features** (Polish & Enhancements):
 - Extended keyboard shortcuts (Left/Right arrows for navigation)
-- Clip playback with automatic boundary handling
+- Clip playback with automatic boundary handling and loop support
+- Annotation keyboard shortcuts (Ctrl+A for quick annotation creation)
+- Clip marker keyboard shortcuts ([ and ] to set clip boundaries)
+- Context-aware keyboard handling (shortcuts disabled during text input)
+- Comprehensive tooltips throughout the interface
 - Improved version tracking and display
 - Enhanced user experience refinements
 

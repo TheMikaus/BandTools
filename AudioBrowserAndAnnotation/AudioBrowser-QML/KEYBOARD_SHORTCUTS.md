@@ -32,6 +32,25 @@ This document lists all keyboard shortcuts available in the AudioBrowser QML app
 | **Left Arrow** | Seek Backward | Skip backward 5 seconds |
 | **Right Arrow** | Seek Forward | Skip forward 5 seconds |
 
+## Annotations
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| **Ctrl+A** | Add Annotation | Create new annotation at current playback position |
+
+## Clips
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| **[** | Set Clip Start | Set clip start marker at current playback position |
+| **]** | Set Clip End | Set clip end marker at current playback position |
+
+**Clip Marker Workflow:**
+1. Play audio and press `[` at desired clip start position
+2. Continue playing and press `]` at desired clip end position
+3. Clip dialog automatically opens with both timestamps pre-filled
+4. Fill in name and notes, then click OK to create the clip
+
 ## Future Shortcuts (Planned)
 
 These shortcuts will be implemented in future phases:
@@ -42,11 +61,8 @@ These shortcuts will be implemented in future phases:
 | **Ctrl+Right** | Next File | Play next file in list |
 | **Ctrl+O** | Open Directory | Open directory picker dialog |
 | **Ctrl+F** | Find Files | Focus file filter field |
-| **Ctrl+A** | Add Annotation | Create new annotation at current position |
 | **Ctrl+S** | Save | Save current workspace/annotations |
 | **F11** | Fullscreen | Toggle fullscreen mode |
-| **[** | Set Clip Start | Set clip start marker at current position |
-| **]** | Set Clip End | Set clip end marker at current position |
 
 ## Notes
 
@@ -54,6 +70,7 @@ These shortcuts will be implemented in future phases:
 - Ctrl on Windows/Linux, Cmd on macOS (handled automatically by Qt)
 - Shortcuts work globally within the application window
 - Some shortcuts may be disabled when certain dialogs are open
+- **Context-aware shortcuts**: Space, Ctrl+A, [, and ] are disabled when text fields have focus to prevent accidental triggering while typing
 
 ## Customization
 
@@ -61,4 +78,4 @@ Keyboard shortcuts can be customized in future versions through the preferences 
 
 ---
 
-*Last updated: Phase 1 Implementation*
+*Last updated: Phase 6 Implementation*
