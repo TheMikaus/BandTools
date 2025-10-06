@@ -2565,22 +2565,175 @@ class FingerprintWorker(QObject):
         self.finished.emit(generated, False)
 
 # ========== Auto-generation workers ==========
+
+class WaveformGenerationTask(QRunnable):
+    """Runnable task for generating a single file's waveform in a thread pool."""
+    
+    def __init__(self, audio_file: Path, callback_obj: QObject):
+        super().__init__()
+        self.audio_file = audio_file
+        self.callback = callback_obj
+        self.setAutoDelete(True)
+    
+    def run(self):
+        """Execute waveform generation for this file."""
+        filename = self.audio_file.name
+        
+        try:
+            # Check if waveform cache files already exist
+            waveforms_dir = self.audio_file.parent / ".waveforms"
+            try:
+                waveforms_dir.mkdir(exist_ok=True)
+            except Exception:
+                pass  # If we can't create the directory, continue and let file operations handle it
+            mono_cache_file = waveforms_dir / f".waveform_cache_{self.audio_file.stem}.json"
+            stereo_cache_file = waveforms_dir / f".waveform_cache_{self.audio_file.stem}_stereo.json"
+            
+            # Skip if both caches exist (don't regenerate existing waveforms)
+            if mono_cache_file.exists() and stereo_cache_file.exists():
+                self.callback.file_done.emit(filename, True, "Already cached")
+                return
+            
+            # Generate actual waveform data using existing logic
+            channel_count = get_audio_channel_count(self.audio_file)
+            has_stereo_data = channel_count >= 2
+            
+            # Generate mono waveform if not exists
+            if not mono_cache_file.exists():
+                samples, _sr, dur_ms, _ = decode_audio_samples(self.audio_file, stereo=False)
+                
+                # Generate mono peaks
+                all_peaks = []
+                for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100):
+                    all_peaks.extend(chunk_peaks)
+                
+                mono_data = {
+                    "peaks": all_peaks,
+                    "duration_ms": dur_ms,
+                    "columns": WAVEFORM_COLUMNS,
+                    "stereo": False
+                }
+                
+                with open(mono_cache_file, 'w') as f:
+                    json.dump(mono_data, f)
+                    
+            # Generate stereo waveform if not exists and file has stereo data
+            if not stereo_cache_file.exists() and has_stereo_data:
+                samples, _sr, dur_ms, stereo_samples = decode_audio_samples(self.audio_file, stereo=True)
+                
+                # Generate stereo peaks
+                all_peaks = []
+                for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100, stereo_samples):
+                    all_peaks.extend(chunk_peaks)
+                
+                stereo_data = {
+                    "peaks": all_peaks,
+                    "duration_ms": dur_ms,
+                    "columns": WAVEFORM_COLUMNS,
+                    "stereo": True
+                }
+                
+                with open(stereo_cache_file, 'w') as f:
+                    json.dump(stereo_data, f)
+                    
+            elif not has_stereo_data:
+                # Create placeholder stereo file indicating no stereo data
+                stereo_data = {"peaks": [], "duration_ms": 0, "stereo": False, "no_stereo_data": True}
+                try:
+                    with open(stereo_cache_file, 'w') as f:
+                        json.dump(stereo_data, f)
+                except Exception as e:
+                    pass  # Not critical if placeholder creation fails
+            
+            self.callback.file_done.emit(filename, True, "Generated")
+            
+        except Exception as e:
+            self.callback.file_done.emit(filename, False, str(e))
+
+
 class AutoWaveformWorker(QObject):
-    """Worker to automatically generate waveforms for all audio files in a folder"""
+    """Worker to automatically generate waveforms for all audio files in a folder.
+    
+    Supports both sequential and parallel processing modes.
+    """
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
     file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
     finished = pyqtSignal(int, bool)  # generated_count, canceled
 
-    def __init__(self, audio_files: List[str], folder_path: str):
+    def __init__(self, audio_files: List[str], folder_path: str, parallel_workers: int = 0):
         super().__init__()
         self._audio_files = audio_files[:]
         self._folder_path = folder_path
         self._canceled = False
+        self._parallel_workers = parallel_workers
+        self._completed_count = 0
+        self._generated_count = 0
+        self._total_files = len(audio_files)
+        self._lock = None  # Will use threading.Lock for parallel mode
 
     def cancel(self):
         self._canceled = True
 
     def run(self):
+        # Determine worker count
+        if self._parallel_workers <= 0:
+            # Auto-detect: use CPU count - 1, minimum 1
+            import os
+            cpu_count = os.cpu_count() or 1
+            worker_count = max(1, cpu_count - 1)
+        else:
+            worker_count = self._parallel_workers
+        
+        # Use parallel processing if worker_count > 1, otherwise sequential
+        if worker_count > 1 and self._total_files > 1:
+            self._run_parallel(worker_count)
+        else:
+            self._run_sequential()
+    
+    def _run_parallel(self, worker_count: int):
+        """Run waveform generation using a thread pool with multiple workers."""
+        import threading
+        from PyQt6.QtCore import QThreadPool
+        
+        log_print(f"Using parallel waveform generation with {worker_count} workers")
+        
+        self._lock = threading.Lock()
+        self._completed_count = 0
+        self._generated_count = 0
+        
+        # Create thread pool
+        pool = QThreadPool()
+        pool.setMaxThreadCount(worker_count)
+        
+        # Connect file_done signal to track progress
+        self.file_done.connect(self._on_file_done_parallel)
+        
+        # Submit all tasks to the pool
+        for i, audio_file in enumerate(self._audio_files):
+            if self._canceled:
+                break
+            
+            task = WaveformGenerationTask(Path(audio_file), self)
+            pool.start(task)
+        
+        # Wait for all tasks to complete
+        pool.waitForDone()
+        
+        # Emit final completion
+        self.finished.emit(self._generated_count, self._canceled)
+    
+    def _on_file_done_parallel(self, filename: str, success: bool, msg: str):
+        """Handle completion of a single file in parallel mode."""
+        with self._lock:
+            self._completed_count += 1
+            if success and msg == "Generated":
+                self._generated_count += 1
+            
+            # Emit progress
+            self.progress.emit(self._completed_count - 1, self._total_files, filename)
+    
+    def _run_sequential(self):
+        """Run waveform generation sequentially (original behavior)."""
         generated_count = 0
         
         for i, audio_file in enumerate(self._audio_files):
@@ -14146,7 +14299,11 @@ class AudioBrowser(QMainWindow):
         try:
             # Create worker and thread
             self._auto_gen_waveform_thread = QThread(self)
-            self._auto_gen_waveform_worker = AutoWaveformWorker([str(f) for f in audio_files], str(folder_path))
+            self._auto_gen_waveform_worker = AutoWaveformWorker(
+                [str(f) for f in audio_files], 
+                str(folder_path),
+                parallel_workers=self.parallel_workers
+            )
             self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
         except Exception as e:
             log_print(f"  ERROR: Failed to create waveform worker: {e}")
