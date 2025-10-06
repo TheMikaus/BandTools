@@ -311,9 +311,9 @@ The following features are planned but not yet implemented:
 
 ## Related Documentation
 
-- [TEST_PLAN_TEMPO_METRONOME.md](TEST_PLAN_TEMPO_METRONOME.md) - Comprehensive test plan (31 test cases)
-- [IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md) - Technical implementation details
-- [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All feature ideas and status
+- [TEST_PLAN_TEMPO_METRONOME.md](../test_plans/TEST_PLAN_TEMPO_METRONOME.md) - Comprehensive test plan (31 test cases)
+- [IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](../technical/IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md) - Technical implementation details
+- [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) - All feature ideas and status
 
 ## Feedback & Support
 

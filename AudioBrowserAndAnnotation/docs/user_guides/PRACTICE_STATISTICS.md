@@ -213,4 +213,4 @@ Planned improvements to practice statistics (see `INTERFACE_IMPROVEMENT_IDEAS.md
 
 ---
 
-**Need help?** Open an issue on GitHub or check the main [README.md](README.md) for general application usage.
+**Need help?** Open an issue on GitHub or check the main [README.md](../../README.md) for general application usage.

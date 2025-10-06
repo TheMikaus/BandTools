@@ -509,9 +509,9 @@ A: The song isn't marked as Best Take in any annotation set. Mark it as Best Tak
 ## Getting Help
 
 **Documentation**:
-- [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md) - Technical details
-- [TEST_PLAN_SETLIST_BUILDER.md](TEST_PLAN_SETLIST_BUILDER.md) - Complete test cases
-- [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - Future features
+- [IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md](../technical/IMPLEMENTATION_SUMMARY_SETLIST_BUILDER.md) - Technical details
+- [TEST_PLAN_SETLIST_BUILDER.md](../test_plans/TEST_PLAN_SETLIST_BUILDER.md) - Complete test cases
+- [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) - Future features
 
 **Issues or Suggestions**:
 - Report bugs via GitHub Issues

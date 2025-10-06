@@ -363,6 +363,6 @@ The blue, underlined styling makes it clear which items are interactive, and the
 ---
 
 **For more information, see:**
-- [IMPLEMENTATION_SUMMARY_CLICKABLE_STATUS.md](IMPLEMENTATION_SUMMARY_CLICKABLE_STATUS.md) - Technical details
-- [TEST_PLAN_CLICKABLE_STATUS.md](TEST_PLAN_CLICKABLE_STATUS.md) - Complete test plan
-- [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - Section 1.5.3
+- [IMPLEMENTATION_SUMMARY_CLICKABLE_STATUS.md](../technical/IMPLEMENTATION_SUMMARY_CLICKABLE_STATUS.md) - Technical details
+- [TEST_PLAN_CLICKABLE_STATUS.md](../test_plans/TEST_PLAN_CLICKABLE_STATUS.md) - Complete test plan
+- [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) - Section 1.5.3

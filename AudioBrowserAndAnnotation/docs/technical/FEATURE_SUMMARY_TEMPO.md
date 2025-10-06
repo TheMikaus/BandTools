@@ -407,12 +407,12 @@ This feature transforms AudioBrowser from a passive review tool into an active p
 
 All documentation is located in `AudioBrowserAndAnnotation/`:
 
-1. **[TEST_PLAN_TEMPO_METRONOME.md](TEST_PLAN_TEMPO_METRONOME.md)** - 31 comprehensive test cases
+1. **[TEST_PLAN_TEMPO_METRONOME.md](../test_plans/TEST_PLAN_TEMPO_METRONOME.md)** - 31 comprehensive test cases
 2. **[IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md)** - Technical details
-3. **[TEMPO_FEATURE_GUIDE.md](TEMPO_FEATURE_GUIDE.md)** - User guide with use cases
+3. **[TEMPO_FEATURE_GUIDE.md](../user_guides/TEMPO_FEATURE_GUIDE.md)** - User guide with use cases
 4. **[INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md)** - Updated status (Section 3.3)
-5. **[CHANGELOG.md](CHANGELOG.md)** - Feature announcement
-6. **[README.md](README.md)** - User-facing description
+5. **[CHANGELOG.md](../../CHANGELOG.md)** - Feature announcement
+6. **[README.md](../../README.md)** - User-facing description
 
 ---
 

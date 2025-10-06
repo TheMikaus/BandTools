@@ -212,9 +212,9 @@ File
 ## Related Documentation
 
 - [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) - Detailed usage guide
-- [INTERFACE_IMPROVEMENT_IDEAS.md](INTERFACE_IMPROVEMENT_IDEAS.md) - All planned improvements
-- [CHANGELOG.md](CHANGELOG.md) - Version history with changes
-- [README.md](README.md) - Main application documentation
+- [INTERFACE_IMPROVEMENT_IDEAS.md](../technical/INTERFACE_IMPROVEMENT_IDEAS.md) - All planned improvements
+- [CHANGELOG.md](../../CHANGELOG.md) - Version history with changes
+- [README.md](../../README.md) - Main application documentation
 
 ---
 
