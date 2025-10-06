@@ -548,26 +548,4 @@ Item {
             // Could show a success notification here
         }
     }
-                    "• Clip metadata and organization"
-                ]
-                
-                Label {
-                    text: modelData
-                    font.pixelSize: Theme.fontSizeNormal
-                    color: Theme.textMuted
-                    leftPadding: Theme.spacingXLarge
-                }
-            }
-        }
-        
-        Item { Layout.fillHeight: true }
-        
-        Label {
-            text: "Coming in Phase 3"
-            font.pixelSize: Theme.fontSizeMedium
-            font.italic: true
-            color: Theme.accentWarning
-            Layout.alignment: Qt.AlignHCenter
-        }
-    }
 }
