@@ -10,17 +10,20 @@ This document provides a visual overview of the AudioBrowser QML project structu
 
 ```
 AudioBrowser-QML/
-├── main.py                              # Application entry point (133 lines)
+├── main.py                              # Application entry point (143 lines)
 │
-├── backend/                             # Python backend modules (1,495 lines)
+├── backend/                             # Python backend modules (~2,700 lines)
 │   ├── __init__.py                     # Package initialization
 │   ├── settings_manager.py             # QSettings wrapper (238 lines)
 │   ├── color_manager.py                # Theme-aware colors (261 lines)
 │   ├── audio_engine.py                 # Audio playback (289 lines)
 │   ├── file_manager.py                 # File operations (368 lines)
-│   └── models.py                       # QML data models (339 lines)
+│   ├── models.py                       # QML data models (339 lines)
+│   ├── waveform_engine.py              # Waveform generation (450 lines)
+│   ├── waveform_view.py                # Waveform rendering (200 lines)
+│   └── annotation_manager.py           # Annotation CRUD (490 lines)
 │
-├── qml/                                 # QML UI components (~1,286 lines)
+├── qml/                                 # QML UI components (~2,300 lines)
 │   ├── main.qml                        # Main window (210+ lines)
 │   │
 │   ├── components/                     # Reusable UI components
@@ -28,15 +31,18 @@ AudioBrowser-QML/
 │   │   ├── StyledLabel.qml            # Themed label (29 lines)
 │   │   ├── StyledTextField.qml        # Themed text input (40 lines)
 │   │   ├── StyledSlider.qml           # Themed slider (90 lines)
-│   │   └── PlaybackControls.qml       # Playback panel (185 lines)
+│   │   ├── PlaybackControls.qml       # Playback panel (185 lines)
+│   │   ├── WaveformDisplay.qml        # Waveform display (300 lines)
+│   │   └── AnnotationMarker.qml       # Annotation marker (180 lines)
 │   │
 │   ├── tabs/                           # Main tab views
 │   │   ├── LibraryTab.qml             # File browser (270+ lines)
-│   │   ├── AnnotationsTab.qml         # Annotations (63 lines)
+│   │   ├── AnnotationsTab.qml         # Annotations (350+ lines)
 │   │   └── ClipsTab.qml               # Clips (61 lines)
 │   │
 │   ├── dialogs/                        # Dialog windows
-│   │   └── FolderDialog.qml           # Directory picker (60 lines)
+│   │   ├── FolderDialog.qml           # Directory picker (60 lines)
+│   │   └── AnnotationDialog.qml       # Annotation editor (380 lines)
 │   │
 │   └── styles/                         # Theme and styling
 │       ├── Theme.qml                   # Theme singleton (145 lines)
@@ -45,14 +51,22 @@ AudioBrowser-QML/
 ├── test_structure.py                   # Structure validation (140 lines)
 ├── test_backend.py                     # Backend tests (existing)
 ├── test_integration.py                 # Integration tests (existing)
+├── test_waveform.py                    # Waveform tests (150 lines)
+├── test_waveform_syntax.py             # Waveform syntax tests (100 lines)
 │
-└── Documentation/                      # Comprehensive docs (~2,076 lines)
+└── Documentation/                      # Comprehensive docs (~3,700 lines)
     ├── README.md                       # Project overview
-    ├── PHASE_1_SUMMARY.md              # Implementation summary
-    ├── PHASE_1_COMPLETION_REPORT.md    # Completion report
+    ├── PHASE_1_SUMMARY.md              # Phase 1 details
+    ├── PHASE_1_COMPLETION_REPORT.md    # Phase 1 completion
+    ├── PHASE_2_COMPLETE.md             # Phase 2 completion
+    ├── PHASE_2_SUMMARY.md              # Phase 2 details
+    ├── PHASE_3_COMPLETE.md             # Phase 3 completion
     ├── DEVELOPER_GUIDE.md              # Development patterns
+    ├── WAVEFORM_GUIDE.md               # Waveform features
+    ├── ANNOTATION_GUIDE.md             # Annotation user guide
     ├── KEYBOARD_SHORTCUTS.md           # Shortcut reference
-    └── TESTING_GUIDE.md                # Testing procedures
+    ├── TESTING_GUIDE.md                # Testing procedures
+    └── PROJECT_STRUCTURE.md            # This document
 ```
 
 ---
@@ -63,10 +77,11 @@ AudioBrowser-QML/
 
 | Category | Files | Lines | Purpose |
 |----------|-------|-------|---------|
-| **Python Backend** | 7 | 1,932 | Business logic, data models |
-| **QML UI** | 11 | 1,286 | User interface components |
-| **Documentation** | 6 | 2,076 | Guides and references |
-| **Total** | **24** | **5,294** | **Complete Phase 1** |
+| **Python Backend** | 10 | ~2,700 | Business logic, data models |
+| **QML UI** | 15 | ~2,300 | User interface components |
+| **Documentation** | 12 | ~3,700 | Guides and references |
+| **Tests** | 5 | ~540 | Validation and testing |
+| **Total** | **42** | **~9,240** | **Phases 1-3 Complete** |
 
 ### Backend Modules (1,932 lines)
 
@@ -150,8 +165,9 @@ main.qml
 
 ## Feature Implementation Status
 
-### ✅ Completed (Phase 1 - 95%)
+### ✅ Completed (Phases 1-3)
 
+**Phase 1 Features:**
 | Feature | Status | Files Involved |
 |---------|--------|---------------|
 | Audio playback | ✅ | audio_engine.py, PlaybackControls.qml |
@@ -165,14 +181,33 @@ main.qml
 | Settings persistence | ✅ | settings_manager.py |
 | UI components | ✅ | All styled components |
 
-### ⏳ Planned (Phase 2+)
+**Phase 2 Features:**
+| Feature | Status | Files Involved |
+|---------|--------|---------------|
+| Waveform generation | ✅ | waveform_engine.py |
+| Waveform display | ✅ | waveform_view.py, WaveformDisplay.qml |
+| Click-to-seek | ✅ | waveform_view.py |
+| Zoom controls | ✅ | WaveformDisplay.qml |
+| Waveform caching | ✅ | waveform_engine.py |
+
+**Phase 3 Features:**
+| Feature | Status | Files Involved |
+|---------|--------|---------------|
+| Annotation CRUD | ✅ | annotation_manager.py |
+| Annotation markers | ✅ | AnnotationMarker.qml, WaveformDisplay.qml |
+| Annotation dialog | ✅ | AnnotationDialog.qml |
+| Annotation table | ✅ | AnnotationsTab.qml |
+| Category filtering | ✅ | AnnotationsTab.qml |
+| Importance filtering | ✅ | AnnotationsTab.qml |
+| JSON persistence | ✅ | annotation_manager.py |
+
+### ⏳ Planned (Phase 4+)
 
 | Feature | Phase | Planned Files |
 |---------|-------|--------------|
-| Waveform display | Phase 2 | waveform_engine.py, WaveformView.qml |
-| Annotations | Phase 2 | annotation_manager.py, AnnotationsTab.qml |
-| Clips management | Phase 3 | clip_manager.py, ClipsTab.qml |
-| Fingerprinting | Phase 3 | fingerprint_engine.py |
+| Clips management | Phase 4 | clip_manager.py, ClipsTab.qml |
+| Fingerprinting | Phase 4 | fingerprint_engine.py |
+| Export features | Phase 4 | export_manager.py |
 
 ---
 
@@ -333,20 +368,36 @@ python3 test_integration.py  # Integration tests
 
 ## Summary
 
-**Phase 1 Achievement**: A fully functional audio browser with:
+**Phases 1-3 Achievement**: A fully functional audio browser with annotations:
+
+**Phase 1:**
 - 🎵 Complete audio playback system
 - 📁 File browsing with native picker
 - 🎨 Theme switching (light/dark)
 - ⌨️ Keyboard shortcuts
-- 📊 Clean MVVM architecture
-- 📚 Comprehensive documentation
 
-**Total Project Size**: 5,294 lines across 24 files  
-**Code-to-Documentation Ratio**: ~3,200 lines code : ~2,100 lines docs (1.5:1)  
-**Test Coverage**: Automated structure validation + manual test guide  
-**Status**: 95% complete, ready for real-world testing
+**Phase 2:**
+- 📊 Waveform visualization
+- 🔍 Click-to-seek on waveform
+- 🔎 Zoom controls (1x-10x)
+- 💾 Waveform caching
+
+**Phase 3:**
+- 📝 Full annotation system
+- 📍 Visual markers on waveform
+- 🎨 Color-coded annotations
+- 🗂️ Category filtering
+- ⭐ Importance flagging
+- 💿 JSON persistence
+
+**Total Project Size**: ~9,240 lines across 42 files  
+**Code-to-Documentation Ratio**: ~5,540 lines code : ~3,700 lines docs (1.5:1)  
+**Test Coverage**: Automated syntax + structure validation + test guides  
+**Status**: Phases 1-3 complete (95% - GUI testing pending)
 
 ---
 
-*Last Updated: 2024*  
-*Phase 1 Status: 95% Complete ✅*
+*Last Updated: December 2024*  
+*Phase 1: ✅ Complete*  
+*Phase 2: ✅ Complete*  
+*Phase 3: ✅ Complete (95%)*

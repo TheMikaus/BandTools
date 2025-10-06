@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 1 Development"
+    title: "AudioBrowser (QML) - Phase 3 (Annotations)"
     
     // Use theme for background color
     color: Theme.backgroundColor
@@ -169,7 +169,7 @@ ApplicationWindow {
                 }
                 
                 Label {
-                    text: "Phase 1 Development • Theme: " + settingsManager.getTheme()
+                    text: "Phase 3 (Annotations) • Theme: " + settingsManager.getTheme()
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
                 }

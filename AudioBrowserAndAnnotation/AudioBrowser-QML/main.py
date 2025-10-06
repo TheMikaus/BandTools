@@ -44,6 +44,7 @@ from backend.file_manager import FileManager
 from backend.models import FileListModel, AnnotationsModel
 from backend.waveform_engine import WaveformEngine
 from backend.waveform_view import WaveformView
+from backend.annotation_manager import AnnotationManager
 
 
 class ApplicationViewModel(QObject):
@@ -79,7 +80,7 @@ def main():
     app.setOrganizationName("BandTools")
     app.setOrganizationDomain("github.com/TheMikaus/BandTools")
     app.setApplicationName("AudioBrowser-QML")
-    app.setApplicationVersion("0.2.0")  # Phase 2
+    app.setApplicationVersion("0.3.0")  # Phase 3
     
     # Register custom QML types
     qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")
@@ -93,6 +94,7 @@ def main():
     audio_engine = AudioEngine()
     file_manager = FileManager()
     waveform_engine = WaveformEngine()
+    annotation_manager = AnnotationManager()
     
     # Create data models
     file_list_model = FileListModel()
@@ -110,6 +112,7 @@ def main():
     engine.rootContext().setContextProperty("fileListModel", file_list_model)
     engine.rootContext().setContextProperty("annotationsModel", annotations_model)
     engine.rootContext().setContextProperty("waveformEngine", waveform_engine)
+    engine.rootContext().setContextProperty("annotationManager", annotation_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
@@ -119,6 +122,12 @@ def main():
     
     # Connect file manager to waveform engine for cache directory
     file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
+    
+    # Connect annotation manager to annotations model
+    def update_annotations_model(file_path):
+        annotations = annotation_manager.getAnnotations()
+        annotations_model.setAnnotations(annotations)
+    annotation_manager.annotationsChanged.connect(update_annotations_model)
     
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())

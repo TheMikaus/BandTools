@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AudioBrowser 1.0
 import "../styles"
+import "../components"
 
 /**
  * WaveformDisplay Component
@@ -43,26 +44,63 @@ Rectangle {
             policy: zoomLevel > 1.0 ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
         }
         
-        WaveformView {
-            id: waveform
-            width: Math.max(parent.width, parent.width * zoomLevel)
+        // Container for waveform and markers
+        Item {
+            width: Math.max(flickable.width, flickable.width * zoomLevel)
             height: flickable.height
             
-            // Colors from theme
-            backgroundColor: Theme.backgroundColor
-            waveformColor: Theme.accentPrimary
-            playheadColor: Theme.accentDanger
-            axisColor: Theme.backgroundLight
+            WaveformView {
+                id: waveform
+                anchors.fill: parent
+                
+                // Colors from theme
+                backgroundColor: Theme.backgroundColor
+                waveformColor: Theme.accentPrimary
+                playheadColor: Theme.accentDanger
+                axisColor: Theme.backgroundLight
+                
+                // Bind playback position
+                positionMs: audioEngine.getPosition()
+                
+                // Handle seek requests
+                onSeekRequested: function(positionMs) {
+                    audioEngine.seek(positionMs)
+                }
+            }
             
-            // Bind playback position
-            positionMs: audioEngine.getPosition()
-            
-            // Handle seek requests
-            onSeekRequested: function(positionMs) {
-                audioEngine.seek(positionMs)
+            // Annotation markers layer
+            Repeater {
+                id: markersRepeater
+                model: annotationManager.getAnnotations()
+                
+                AnnotationMarker {
+                    timestampMs: modelData.timestamp_ms || 0
+                    text: modelData.text || ""
+                    category: modelData.category || ""
+                    important: modelData.important || false
+                    markerColor: modelData.color || Theme.accentPrimary
+                    waveformDurationMs: waveform.durationMs
+                    waveformWidth: waveform.width
+                    
+                    onClicked: function(timestamp) {
+                        audioEngine.seek(timestamp)
+                    }
+                    
+                    onDoubleClicked: function(timestamp) {
+                        // Signal to edit this annotation
+                        root.annotationDoubleClicked(modelData)
+                    }
+                    
+                    onRightClicked: function(timestamp) {
+                        // Could show context menu
+                    }
+                }
             }
         }
     }
+    
+    // Signal for annotation interaction
+    signal annotationDoubleClicked(var annotationData)
     
     // Loading indicator
     Rectangle {
