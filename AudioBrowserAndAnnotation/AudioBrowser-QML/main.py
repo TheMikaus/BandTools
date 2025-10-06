@@ -34,7 +34,7 @@ _ensure_import("PyQt6.QtQml", "PyQt6")
 
 from PyQt6.QtCore import QUrl, QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QGuiApplication
-from PyQt6.QtQml import QQmlApplicationEngine
+from PyQt6.QtQml import QQmlApplicationEngine, qmlRegisterType
 
 # Import backend modules
 from backend.settings_manager import SettingsManager
@@ -42,6 +42,8 @@ from backend.color_manager import ColorManager
 from backend.audio_engine import AudioEngine
 from backend.file_manager import FileManager
 from backend.models import FileListModel, AnnotationsModel
+from backend.waveform_engine import WaveformEngine
+from backend.waveform_view import WaveformView
 
 
 class ApplicationViewModel(QObject):
@@ -77,7 +79,10 @@ def main():
     app.setOrganizationName("BandTools")
     app.setOrganizationDomain("github.com/TheMikaus/BandTools")
     app.setApplicationName("AudioBrowser-QML")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion("0.2.0")  # Phase 2
+    
+    # Register custom QML types
+    qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")
     
     # Create QML engine
     engine = QQmlApplicationEngine()
@@ -87,6 +92,7 @@ def main():
     color_manager = ColorManager(theme=settings_manager.getTheme())
     audio_engine = AudioEngine()
     file_manager = FileManager()
+    waveform_engine = WaveformEngine()
     
     # Create data models
     file_list_model = FileListModel()
@@ -103,12 +109,16 @@ def main():
     engine.rootContext().setContextProperty("fileManager", file_manager)
     engine.rootContext().setContextProperty("fileListModel", file_list_model)
     engine.rootContext().setContextProperty("annotationsModel", annotations_model)
+    engine.rootContext().setContextProperty("waveformEngine", waveform_engine)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
     
     # Connect file manager to file list model
     file_manager.filesDiscovered.connect(file_list_model.setFiles)
+    
+    # Connect file manager to waveform engine for cache directory
+    file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
     
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())
@@ -123,7 +133,7 @@ def main():
         print("Error: Failed to load QML file")
         return 1
     
-    print("AudioBrowser QML Phase 0 - Application started successfully")
+    print("AudioBrowser QML Phase 2 - Application started successfully")
     sys.stdout.flush()  # Ensure message is printed immediately
     return app.exec()
 
