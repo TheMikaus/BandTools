@@ -5,6 +5,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Qt Quick/QML Migration Documentation**: Comprehensive documentation for future UI modernization
+  - [QML_MIGRATION_STRATEGY.md](docs/technical/QML_MIGRATION_STRATEGY.md) - Complete migration strategy with phases, timeline, component mapping, and risk analysis
+  - [CURRENT_ARCHITECTURE_INVENTORY.md](docs/technical/CURRENT_ARCHITECTURE_INVENTORY.md) - Detailed inventory of current architecture with 22 classes cataloged, simplification opportunities identified
+  - Updated [INTERFACE_IMPROVEMENT_IDEAS.md](docs/technical/INTERFACE_IMPROVEMENT_IDEAS.md) with detailed QML modernization information
+  - Migration plan includes 7 phases over 3-4 months with clear deliverables and validation criteria
+  - Alternative approaches documented (full rewrite, incremental hybrid, Widgets modernization)
+  - ~650 lines of duplicate code identified for consolidation
+  - Addresses Section 4.1 "User Interface Modernization" from INTERFACE_IMPROVEMENT_IDEAS.md
+
+### Added
 - **Spectral Analysis (Spectrogram View)**: Advanced audio visualization for frequency analysis
   - Spectrogram toggle checkbox in Annotations tab waveform controls
   - Frequency-over-time visualization using STFT (Short-Time Fourier Transform)

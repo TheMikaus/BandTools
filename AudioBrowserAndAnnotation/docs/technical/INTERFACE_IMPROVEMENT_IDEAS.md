@@ -607,10 +607,22 @@ This document contains brainstormed ideas for improving the AudioBrowser interfa
 
 **Improvement Ideas:**
 
-1. **Modern UI Framework:**
-   - Consider Qt Quick/QML for more modern look
-   - Smoother animations and transitions
-   - Custom-styled controls
+1. **Modern UI Framework - Qt Quick/QML:** 💡 **DOCUMENTED**
+   - **Status**: Comprehensive migration strategy documented (see [QML_MIGRATION_STRATEGY.md](QML_MIGRATION_STRATEGY.md))
+   - **Benefits**:
+     - GPU-accelerated rendering for smoother animations
+     - Declarative QML syntax (faster development)
+     - Better touch and gesture support
+     - Live reload during development
+     - Modern, polished appearance
+     - Easier responsive design
+   - **Effort**: 3-4 months full-time (complete rewrite)
+   - **Architecture**: Separation of UI (QML) from logic (Python backend)
+   - **Documentation**:
+     - [QML_MIGRATION_STRATEGY.md](QML_MIGRATION_STRATEGY.md) - Complete migration plan with phases, timeline, and component mapping
+     - [CURRENT_ARCHITECTURE_INVENTORY.md](CURRENT_ARCHITECTURE_INVENTORY.md) - Current architecture analysis and simplification opportunities
+   - **Alternative**: Incremental refactoring (improve current Widgets architecture first, then consider QML)
+   - **Recommendation**: Document and plan now, execute when resources allow (see migration docs)
 
 2. **Dark Mode:** ✅ **IMPLEMENTED**
    - Full dark theme option (light/dark selection in Preferences)
