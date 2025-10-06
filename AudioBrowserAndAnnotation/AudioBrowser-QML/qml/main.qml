@@ -139,6 +139,8 @@ ApplicationWindow {
             
             ClipsTab {
                 id: clipsTab
+                clipManager: clipManager
+                audioEngine: audioEngine
             }
         }
         
