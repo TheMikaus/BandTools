@@ -4,6 +4,16 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Changed
+- **Practice Statistics Dialog**: Enhanced user experience with non-modal design and refresh capability
+  - Dialog is now non-modal, allowing users to continue working while viewing statistics
+  - Added "Refresh Statistics" button to regenerate statistics based on current practice folders
+  - Added informational note explaining when statistics are calculated (on open or refresh)
+  - Added "Last updated" timestamp showing when statistics were last calculated
+  - Users can now keep statistics visible while adding recordings or marking best takes
+  - Clicking "Practice Statistics" menu item while dialog is open brings it to front instead of creating duplicate
+  - Documentation updated in PRACTICE_STATISTICS.md to reflect new behavior
+
 ### Fixed
 - **Now Playing Panel Mini Waveform**: Replaced black box placeholder with actual waveform visualization
   - Mini waveform now displays real waveform shape from audio file

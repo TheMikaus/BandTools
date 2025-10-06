@@ -56,6 +56,18 @@ There are two ways to access your practice statistics:
 1. **Menu**: Help → "Practice Statistics"
 2. **Keyboard Shortcut**: `Ctrl+Shift+S`
 
+The Practice Statistics dialog is **non-modal**, which means you can keep it open while working in the main application. You can continue browsing files, playing audio, and making annotations while the statistics remain visible for reference.
+
+### Refreshing Statistics
+
+Statistics are calculated when the dialog is opened or when you click the **"Refresh Statistics"** button. The dialog includes:
+
+- **Information note**: Explains when statistics are calculated (on open or refresh)
+- **Refresh button**: Click to regenerate statistics based on current practice folders
+- **Last updated timestamp**: Shows when statistics were last calculated
+
+To update statistics after making changes to practice folders (adding new recordings, marking best takes, etc.), simply click the "Refresh Statistics" button - no need to close and reopen the dialog.
+
 ### What You'll See
 
 The Practice Statistics dashboard displays:
@@ -156,7 +168,7 @@ Bottom 5 songs that might need more attention:
 - A: First, it looks for YYYY-MM-DD patterns in folder names (e.g., "2024-01-15-Practice"). If not found, it uses the folder's modification timestamp.
 
 **Q: Can I regenerate statistics?**
-- A: Yes! Statistics are generated fresh each time you open the dashboard - they're not stored anywhere. Just click "Practice Statistics" again to update.
+- A: Yes! Statistics are generated on-demand and not cached. Click the "Refresh Statistics" button in the dialog to regenerate statistics based on current practice folders. You can also close and reopen the dialog to get fresh statistics.
 
 **Q: What if song names aren't showing correctly?**
 - A: Statistics use the "Provided Name" from each file. If you haven't set provided names, it will use filenames instead. Fill in the "Provided Name" column to improve accuracy.
@@ -174,7 +186,7 @@ Bottom 5 songs that might need more attention:
 
 ### How Statistics Are Generated
 
-When you open the Practice Statistics dialog:
+When you open the Practice Statistics dialog or click "Refresh Statistics":
 
 1. **Folder Discovery**: Scans the Band Practice Directory for all subdirectories containing `.wav` or `.mp3` files
 2. **Date Extraction**: Attempts to parse dates from folder names using YYYY-MM-DD pattern, falls back to folder timestamps
@@ -183,7 +195,9 @@ When you open the Practice Statistics dialog:
    - Loads `.provided_names.json` to identify song names
    - Scans `.audio_notes_*.json` files for Best Take and Partial Take markers
 4. **Aggregation**: Combines data across all folders to generate overall statistics
-5. **Display**: Formats and displays in HTML dialog
+5. **Display**: Formats and displays in HTML dialog with timestamp of last update
+
+The dialog is non-modal, allowing you to keep it open while working in the application. Statistics are recalculated each time you click refresh, ensuring you always see current data.
 
 ### Performance
 
