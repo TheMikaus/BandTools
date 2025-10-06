@@ -113,7 +113,11 @@ Button {
         }
     }
     
-    // Cursor
+    // Hover handling
     hoverEnabled: true
-    cursor: enabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+    
+    // Cursor shape (using HoverHandler for proper cursor support)
+    HoverHandler {
+        cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+    }
 }
