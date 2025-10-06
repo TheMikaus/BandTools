@@ -40,6 +40,7 @@ Implementation details, architecture decisions, and developer-focused documentat
 - **[INTERFACE_IMPROVEMENT_IDEAS.md](technical/INTERFACE_IMPROVEMENT_IDEAS.md)** - Planned and implemented UI improvements
 - **[QML_MIGRATION_STRATEGY.md](technical/QML_MIGRATION_STRATEGY.md)** - **NEW**: Complete Qt Quick/QML migration strategy and roadmap
 - **[CURRENT_ARCHITECTURE_INVENTORY.md](technical/CURRENT_ARCHITECTURE_INVENTORY.md)** - **NEW**: Current architecture analysis and simplification opportunities
+- **[SIMPLIFICATION_EXAMPLES.md](technical/SIMPLIFICATION_EXAMPLES.md)** - **NEW**: Concrete code simplification patterns with before/after examples
 - **[BUILD.md](technical/BUILD.md)** - Build instructions for developers
 - **[COLOR_CONSISTENCY.md](technical/COLOR_CONSISTENCY.md)** - Color system implementation details
 - **[ENHANCED_AUTO_LABELING.md](technical/ENHANCED_AUTO_LABELING.md)** - Auto-labeling feature details
