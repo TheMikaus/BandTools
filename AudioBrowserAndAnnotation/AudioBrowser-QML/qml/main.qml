@@ -192,6 +192,11 @@ ApplicationWindow {
     // Keyboard shortcuts
     Shortcut {
         sequence: "Space"
+        // Only activate if no text input has focus
+        enabled: !mainWindow.activeFocusItem || 
+                 mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
+                 mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
         onActivated: audioEngine.togglePlayPause()
     }
     
