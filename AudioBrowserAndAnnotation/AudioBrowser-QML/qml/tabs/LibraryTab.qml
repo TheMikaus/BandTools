@@ -211,10 +211,18 @@ Item {
                             id: mouseArea
                             anchors.fill: parent
                             hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             
-                            onClicked: {
+                            onClicked: function(mouse) {
                                 fileListView.currentIndex = index
                                 console.log("Selected file:", model.filepath)
+                                
+                                // Handle right-click for context menu
+                                if (mouse.button === Qt.RightButton) {
+                                    contextMenu.filePath = model.filepath
+                                    contextMenu.fileName = model.filename
+                                    contextMenu.popup()
+                                }
                             }
                             
                             onDoubleClicked: {
@@ -286,6 +294,67 @@ Item {
         
         function onErrorOccurred(errorMessage) {
             console.error("File Manager Error:", errorMessage)
+        }
+    }
+    
+    // ========== File Context Menu ==========
+    
+    FileContextMenu {
+        id: contextMenu
+        audioEngine: audioEngine
+        annotationManager: annotationManager
+        clipManager: clipManager
+        fileManager: fileManager
+        
+        onAnnotationRequested: {
+            // Switch to Annotations tab
+            // This will be triggered from the parent (main.qml)
+            console.log("Annotation requested for:", contextMenu.filePath)
+        }
+        
+        onClipRequested: {
+            // Switch to Clips tab
+            console.log("Clip requested for:", contextMenu.filePath)
+        }
+        
+        onPropertiesRequested: {
+            // Show file properties dialog
+            propertiesDialog.filePath = contextMenu.filePath
+            propertiesDialog.open()
+        }
+    }
+    
+    // ========== File Properties Dialog ==========
+    
+    Dialog {
+        id: propertiesDialog
+        title: "File Properties"
+        modal: true
+        anchors.centerIn: parent
+        width: 400
+        
+        property string filePath: ""
+        
+        standardButtons: Dialog.Ok
+        
+        ColumnLayout {
+            width: parent.width
+            spacing: Theme.spacingSmall
+            
+            Label {
+                text: fileManager.getFileProperties(propertiesDialog.filePath)
+                color: Theme.foregroundColor
+                font.pixelSize: Theme.fontSizeNormal
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusSmall
         }
     }
 }
