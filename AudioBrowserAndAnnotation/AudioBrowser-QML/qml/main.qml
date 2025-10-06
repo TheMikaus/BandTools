@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 7 (Additional Features)"
+    title: "AudioBrowser (QML) - Phase 7 (Additional Features - 55% Complete)"
     
     // Use theme for background color
     color: Theme.backgroundColor
