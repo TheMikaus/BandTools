@@ -176,6 +176,81 @@ Item {
                     }
                 }
                 
+                // Filter and display options
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingNormal
+                    
+                    Label {
+                        text: "Filter:"
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                    }
+                    
+                    ComboBox {
+                        id: categoryFilter
+                        Layout.preferredWidth: 120
+                        model: ["All", "timing", "energy", "harmony", "dynamics", "notes"]
+                        
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            radius: Theme.radiusSmall
+                        }
+                        
+                        contentItem: Text {
+                            text: categoryFilter.displayText
+                            color: Theme.textColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8
+                        }
+                        
+                        onCurrentTextChanged: {
+                            refreshAnnotations()
+                        }
+                    }
+                    
+                    CheckBox {
+                        id: showImportantOnly
+                        text: "Important only"
+                        
+                        indicator: Rectangle {
+                            implicitWidth: 16
+                            implicitHeight: 16
+                            x: showImportantOnly.leftPadding
+                            y: parent.height / 2 - height / 2
+                            radius: 2
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            color: showImportantOnly.checked ? Theme.accentPrimary : Theme.backgroundColor
+                            
+                            Label {
+                                visible: showImportantOnly.checked
+                                anchors.centerIn: parent
+                                text: "✓"
+                                color: "white"
+                                font.pixelSize: 12
+                            }
+                        }
+                        
+                        contentItem: Text {
+                            text: showImportantOnly.text
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textColor
+                            leftPadding: showImportantOnly.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        
+                        onCheckedChanged: {
+                            refreshAnnotations()
+                        }
+                    }
+                    
+                    Item { Layout.fillWidth: true }
+                }
+                
                 // Annotation table
                 Rectangle {
                     Layout.fillWidth: true
@@ -349,6 +424,16 @@ Item {
     
     function refreshAnnotations() {
         var annotations = annotationManager.getAnnotations()
+        
+        // Apply filters
+        if (showImportantOnly.checked) {
+            annotations = annotationManager.getImportantAnnotations()
+        }
+        
+        if (categoryFilter.currentText !== "All") {
+            annotations = annotationManager.filterByCategory(categoryFilter.currentText)
+        }
+        
         annotationsModel.setAnnotations(annotations)
         waveformDisplay.update()  // Force waveform to redraw markers
     }
