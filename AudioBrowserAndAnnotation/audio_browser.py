@@ -181,6 +181,9 @@ SETTINGS_KEY_THEME = "color_theme"  # Color theme: "light" or "dark"
 SETTINGS_KEY_WINDOW_GEOMETRY = "window_geometry"  # Window geometry for workspace layouts
 SETTINGS_KEY_SPLITTER_STATE = "splitter_state"  # Main splitter state for workspace layouts
 SETTINGS_KEY_NOW_PLAYING_COLLAPSED = "now_playing_panel_collapsed"  # Now Playing Panel collapsed state
+SETTINGS_KEY_PAGINATION_ENABLED = "pagination_enabled"  # Enable pagination for large libraries
+SETTINGS_KEY_PAGINATION_CHUNK_SIZE = "pagination_chunk_size"  # Number of files per page/chunk
+SETTINGS_KEY_PARALLEL_WORKERS = "parallel_workers"  # Number of parallel workers for generation (0 = auto)
 NAMES_JSON = ".provided_names.json"
 NOTES_JSON = ".audio_notes.json"
 SESSION_STATE_JSON = ".session_state.json"
@@ -197,6 +200,11 @@ RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPR
 AUDIO_EXTS = {".wav", ".wave", ".mp3"}
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
+
+# Performance settings
+DEFAULT_PAGINATION_CHUNK_SIZE = 200  # Default number of files to display at once
+PAGINATION_THRESHOLD = 500  # Auto-enable pagination for libraries larger than this
+DEFAULT_PARALLEL_WORKERS = 0  # 0 = auto-detect (use CPU count - 1)
 
 # Visual widths
 MARKER_WIDTH = 2                # thin marker width
@@ -2557,22 +2565,175 @@ class FingerprintWorker(QObject):
         self.finished.emit(generated, False)
 
 # ========== Auto-generation workers ==========
+
+class WaveformGenerationTask(QRunnable):
+    """Runnable task for generating a single file's waveform in a thread pool."""
+    
+    def __init__(self, audio_file: Path, callback_obj: QObject):
+        super().__init__()
+        self.audio_file = audio_file
+        self.callback = callback_obj
+        self.setAutoDelete(True)
+    
+    def run(self):
+        """Execute waveform generation for this file."""
+        filename = self.audio_file.name
+        
+        try:
+            # Check if waveform cache files already exist
+            waveforms_dir = self.audio_file.parent / ".waveforms"
+            try:
+                waveforms_dir.mkdir(exist_ok=True)
+            except Exception:
+                pass  # If we can't create the directory, continue and let file operations handle it
+            mono_cache_file = waveforms_dir / f".waveform_cache_{self.audio_file.stem}.json"
+            stereo_cache_file = waveforms_dir / f".waveform_cache_{self.audio_file.stem}_stereo.json"
+            
+            # Skip if both caches exist (don't regenerate existing waveforms)
+            if mono_cache_file.exists() and stereo_cache_file.exists():
+                self.callback.file_done.emit(filename, True, "Already cached")
+                return
+            
+            # Generate actual waveform data using existing logic
+            channel_count = get_audio_channel_count(self.audio_file)
+            has_stereo_data = channel_count >= 2
+            
+            # Generate mono waveform if not exists
+            if not mono_cache_file.exists():
+                samples, _sr, dur_ms, _ = decode_audio_samples(self.audio_file, stereo=False)
+                
+                # Generate mono peaks
+                all_peaks = []
+                for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100):
+                    all_peaks.extend(chunk_peaks)
+                
+                mono_data = {
+                    "peaks": all_peaks,
+                    "duration_ms": dur_ms,
+                    "columns": WAVEFORM_COLUMNS,
+                    "stereo": False
+                }
+                
+                with open(mono_cache_file, 'w') as f:
+                    json.dump(mono_data, f)
+                    
+            # Generate stereo waveform if not exists and file has stereo data
+            if not stereo_cache_file.exists() and has_stereo_data:
+                samples, _sr, dur_ms, stereo_samples = decode_audio_samples(self.audio_file, stereo=True)
+                
+                # Generate stereo peaks
+                all_peaks = []
+                for start, chunk_peaks in compute_peaks_progressive(samples, WAVEFORM_COLUMNS, 100, stereo_samples):
+                    all_peaks.extend(chunk_peaks)
+                
+                stereo_data = {
+                    "peaks": all_peaks,
+                    "duration_ms": dur_ms,
+                    "columns": WAVEFORM_COLUMNS,
+                    "stereo": True
+                }
+                
+                with open(stereo_cache_file, 'w') as f:
+                    json.dump(stereo_data, f)
+                    
+            elif not has_stereo_data:
+                # Create placeholder stereo file indicating no stereo data
+                stereo_data = {"peaks": [], "duration_ms": 0, "stereo": False, "no_stereo_data": True}
+                try:
+                    with open(stereo_cache_file, 'w') as f:
+                        json.dump(stereo_data, f)
+                except Exception as e:
+                    pass  # Not critical if placeholder creation fails
+            
+            self.callback.file_done.emit(filename, True, "Generated")
+            
+        except Exception as e:
+            self.callback.file_done.emit(filename, False, str(e))
+
+
 class AutoWaveformWorker(QObject):
-    """Worker to automatically generate waveforms for all audio files in a folder"""
+    """Worker to automatically generate waveforms for all audio files in a folder.
+    
+    Supports both sequential and parallel processing modes.
+    """
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
     file_done = pyqtSignal(str, bool, str)  # filename, success, error_msg
     finished = pyqtSignal(int, bool)  # generated_count, canceled
 
-    def __init__(self, audio_files: List[str], folder_path: str):
+    def __init__(self, audio_files: List[str], folder_path: str, parallel_workers: int = 0):
         super().__init__()
         self._audio_files = audio_files[:]
         self._folder_path = folder_path
         self._canceled = False
+        self._parallel_workers = parallel_workers
+        self._completed_count = 0
+        self._generated_count = 0
+        self._total_files = len(audio_files)
+        self._lock = None  # Will use threading.Lock for parallel mode
 
     def cancel(self):
         self._canceled = True
 
     def run(self):
+        # Determine worker count
+        if self._parallel_workers <= 0:
+            # Auto-detect: use CPU count - 1, minimum 1
+            import os
+            cpu_count = os.cpu_count() or 1
+            worker_count = max(1, cpu_count - 1)
+        else:
+            worker_count = self._parallel_workers
+        
+        # Use parallel processing if worker_count > 1, otherwise sequential
+        if worker_count > 1 and self._total_files > 1:
+            self._run_parallel(worker_count)
+        else:
+            self._run_sequential()
+    
+    def _run_parallel(self, worker_count: int):
+        """Run waveform generation using a thread pool with multiple workers."""
+        import threading
+        from PyQt6.QtCore import QThreadPool
+        
+        log_print(f"Using parallel waveform generation with {worker_count} workers")
+        
+        self._lock = threading.Lock()
+        self._completed_count = 0
+        self._generated_count = 0
+        
+        # Create thread pool
+        pool = QThreadPool()
+        pool.setMaxThreadCount(worker_count)
+        
+        # Connect file_done signal to track progress
+        self.file_done.connect(self._on_file_done_parallel)
+        
+        # Submit all tasks to the pool
+        for i, audio_file in enumerate(self._audio_files):
+            if self._canceled:
+                break
+            
+            task = WaveformGenerationTask(Path(audio_file), self)
+            pool.start(task)
+        
+        # Wait for all tasks to complete
+        pool.waitForDone()
+        
+        # Emit final completion
+        self.finished.emit(self._generated_count, self._canceled)
+    
+    def _on_file_done_parallel(self, filename: str, success: bool, msg: str):
+        """Handle completion of a single file in parallel mode."""
+        with self._lock:
+            self._completed_count += 1
+            if success and msg == "Generated":
+                self._generated_count += 1
+            
+            # Emit progress
+            self.progress.emit(self._completed_count - 1, self._total_files, filename)
+    
+    def _run_sequential(self):
+        """Run waveform generation sequentially (original behavior)."""
         generated_count = 0
         
         for i, audio_file in enumerate(self._audio_files):
@@ -4093,6 +4254,48 @@ class AutoGenerationSettingsDialog(QDialog):
         settings_layout.addLayout(timing_row)
         
         main_layout.addWidget(settings_group)
+        
+        # Performance settings group
+        perf_group = QWidget()
+        perf_group.setStyleSheet(f"QWidget {{ background-color: {colors['bg_light']}; border: 1px solid {colors['border']}; border-radius: 5px; }}")
+        perf_layout = QVBoxLayout(perf_group)
+        perf_layout.setContentsMargins(15, 15, 15, 15)
+        
+        perf_label = QLabel("<b>Performance Settings</b>")
+        perf_layout.addWidget(perf_label)
+        
+        # Pagination settings
+        pag_row = QHBoxLayout()
+        self.pagination_enabled_cb = QCheckBox("Enable pagination for large libraries")
+        self.pagination_enabled_cb.setChecked(current_settings.get('pagination_enabled', True))
+        self.pagination_enabled_cb.setToolTip("Automatically load files in chunks for libraries with 500+ files")
+        pag_row.addWidget(self.pagination_enabled_cb)
+        perf_layout.addLayout(pag_row)
+        
+        chunk_row = QHBoxLayout()
+        chunk_row.addWidget(QLabel("Files per page:"))
+        self.chunk_size_spin = QSpinBox()
+        self.chunk_size_spin.setRange(50, 1000)
+        self.chunk_size_spin.setSingleStep(50)
+        self.chunk_size_spin.setValue(current_settings.get('pagination_chunk_size', DEFAULT_PAGINATION_CHUNK_SIZE))
+        self.chunk_size_spin.setToolTip("Number of files to display at once (applies to large libraries)")
+        chunk_row.addWidget(self.chunk_size_spin)
+        chunk_row.addStretch(1)
+        perf_layout.addLayout(chunk_row)
+        
+        # Parallel processing settings
+        workers_row = QHBoxLayout()
+        workers_row.addWidget(QLabel("Parallel workers:"))
+        self.parallel_workers_spin = QSpinBox()
+        self.parallel_workers_spin.setRange(0, 16)
+        self.parallel_workers_spin.setValue(current_settings.get('parallel_workers', DEFAULT_PARALLEL_WORKERS))
+        self.parallel_workers_spin.setToolTip("Number of parallel workers for generation (0 = auto-detect)")
+        self.parallel_workers_spin.setSpecialValueText("Auto")
+        workers_row.addWidget(self.parallel_workers_spin)
+        workers_row.addStretch(1)
+        perf_layout.addLayout(workers_row)
+        
+        main_layout.addWidget(perf_group)
         main_layout.addStretch(1)
         
         # Dialog buttons
@@ -4115,6 +4318,9 @@ class AutoGenerationSettingsDialog(QDialog):
         self.result_settings['auto_gen_waveforms'] = self.auto_gen_waveforms_cb.isChecked()
         self.result_settings['auto_gen_fingerprints'] = self.auto_gen_fingerprints_cb.isChecked()
         self.result_settings['auto_gen_timing'] = self.auto_gen_timing_combo.currentData()
+        self.result_settings['pagination_enabled'] = self.pagination_enabled_cb.isChecked()
+        self.result_settings['pagination_chunk_size'] = self.chunk_size_spin.value()
+        self.result_settings['parallel_workers'] = self.parallel_workers_spin.value()
         super().accept()
     
     def get_settings(self):
@@ -4682,11 +4888,25 @@ class AudioBrowser(QMainWindow):
         self.auto_gen_fingerprints: bool = bool(int(self.settings.value(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, 0)))
         self.auto_gen_timing: str = self.settings.value(SETTINGS_KEY_AUTO_GEN_TIMING, "folder_selection")
         
+        # Performance preferences
+        self.pagination_enabled: bool = bool(int(self.settings.value(SETTINGS_KEY_PAGINATION_ENABLED, 1)))
+        self.pagination_chunk_size: int = int(self.settings.value(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, DEFAULT_PAGINATION_CHUNK_SIZE))
+        self.parallel_workers: int = int(self.settings.value(SETTINGS_KEY_PARALLEL_WORKERS, DEFAULT_PARALLEL_WORKERS))
+        
+        # Pagination state
+        self._current_chunk_start: int = 0  # Start index of current chunk
+        self._total_files_count: int = 0  # Total number of files in folder
+        self._all_files: List[Path] = []  # All files in folder (for pagination)
+        
         # Print loaded settings for debugging
         log_print("Auto-generation settings loaded:")
         log_print(f"  Waveforms: {self.auto_gen_waveforms}")
         log_print(f"  Fingerprints: {self.auto_gen_fingerprints}") 
         log_print(f"  Timing: {self.auto_gen_timing}")
+        log_print("Performance settings loaded:")
+        log_print(f"  Pagination enabled: {self.pagination_enabled}")
+        log_print(f"  Chunk size: {self.pagination_chunk_size}")
+        log_print(f"  Parallel workers: {self.parallel_workers} (0=auto)")
 
         # Auto-generation workers and progress tracking
         self._auto_gen_waveform_worker: Optional['AutoWaveformWorker'] = None
@@ -6336,6 +6556,27 @@ class AudioBrowser(QMainWindow):
         self.table.cellClicked.connect(self._on_library_cell_clicked)
         self.table.cellDoubleClicked.connect(self._on_library_cell_double_clicked)
         
+        # Pagination controls
+        pagination_toolbar = QHBoxLayout()
+        self.prev_page_btn = QPushButton("◄ Previous")
+        self.prev_page_btn.clicked.connect(self._on_prev_page)
+        self.prev_page_btn.setVisible(False)  # Initially hidden
+        self.prev_page_btn.setMaximumWidth(100)
+        pagination_toolbar.addWidget(self.prev_page_btn)
+        
+        self.pagination_info_label = QLabel("")
+        self.pagination_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.pagination_info_label.setVisible(False)  # Initially hidden
+        pagination_toolbar.addWidget(self.pagination_info_label, 1)
+        
+        self.next_page_btn = QPushButton("Next ►")
+        self.next_page_btn.clicked.connect(self._on_next_page)
+        self.next_page_btn.setVisible(False)  # Initially hidden
+        self.next_page_btn.setMaximumWidth(100)
+        pagination_toolbar.addWidget(self.next_page_btn)
+        
+        lib_layout.addLayout(pagination_toolbar)
+        
         # Batch operations toolbar
         batch_toolbar = QHBoxLayout()
         batch_toolbar.addWidget(QLabel("Batch operations:"))
@@ -6951,6 +7192,7 @@ class AudioBrowser(QMainWindow):
             # Update current practice folder when folder is selected
             folder_path = Path(fi.absoluteFilePath())
             self._set_current_practice_folder(folder_path)
+            self._reset_pagination()  # Reset to first page when changing folders
             self._stop_playback(); self.now_playing.setText(f"Folder selected: {fi.fileName()}"); self.current_audio_file = None
             self._update_waveform_annotations(); self._load_annotations_for_current(); self._refresh_provided_name_field(); self._refresh_best_take_field(); self._refresh_partial_take_field(); self._refresh_reference_song_field(); self._refresh_right_table()
             # Note: Keep _refresh_right_table() here since folder selection means directory change
@@ -8292,6 +8534,41 @@ class AudioBrowser(QMainWindow):
     def _refresh_right_table(self):
         files = self._list_audio_in_current_dir()
         
+        # Store all files for pagination
+        self._all_files = files
+        self._total_files_count = len(files)
+        
+        # Check if we should use pagination
+        use_pagination = (self.pagination_enabled and 
+                         self._total_files_count >= PAGINATION_THRESHOLD)
+        
+        # Get the chunk to display
+        if use_pagination:
+            start_idx = self._current_chunk_start
+            end_idx = min(start_idx + self.pagination_chunk_size, self._total_files_count)
+            files = files[start_idx:end_idx]
+            
+            # Update pagination info label
+            if hasattr(self, 'pagination_info_label'):
+                self.pagination_info_label.setText(
+                    f"Showing {start_idx + 1}-{end_idx} of {self._total_files_count} files"
+                )
+                self.pagination_info_label.setVisible(True)
+            
+            # Update navigation buttons
+            if hasattr(self, 'prev_page_btn'):
+                self.prev_page_btn.setEnabled(start_idx > 0)
+                self.next_page_btn.setEnabled(end_idx < self._total_files_count)
+                self.prev_page_btn.setVisible(True)
+                self.next_page_btn.setVisible(True)
+        else:
+            # Hide pagination controls if not needed
+            if hasattr(self, 'pagination_info_label'):
+                self.pagination_info_label.setVisible(False)
+            if hasattr(self, 'prev_page_btn'):
+                self.prev_page_btn.setVisible(False)
+                self.next_page_btn.setVisible(False)
+        
         # Adjust column count based on whether we're in auto-label preview mode
         if self.auto_label_in_progress:
             # Add columns for: Apply checkbox and Confidence
@@ -8421,6 +8698,28 @@ class AudioBrowser(QMainWindow):
                 pass
                 
         self.table.blockSignals(False)
+
+    def _on_prev_page(self):
+        """Navigate to the previous page of files."""
+        if self._current_chunk_start >= self.pagination_chunk_size:
+            self._current_chunk_start -= self.pagination_chunk_size
+            self._refresh_right_table()
+            # Scroll to top of table
+            if self.table.rowCount() > 0:
+                self.table.scrollToTop()
+    
+    def _on_next_page(self):
+        """Navigate to the next page of files."""
+        if self._current_chunk_start + self.pagination_chunk_size < self._total_files_count:
+            self._current_chunk_start += self.pagination_chunk_size
+            self._refresh_right_table()
+            # Scroll to top of table
+            if self.table.rowCount() > 0:
+                self.table.scrollToTop()
+    
+    def _reset_pagination(self):
+        """Reset pagination to first page."""
+        self._current_chunk_start = 0
 
     def _on_best_take_widget_clicked(self, row: int):
         """Handle clicks on the best take indicator widget to toggle best take for current set."""
@@ -11926,7 +12225,10 @@ class AudioBrowser(QMainWindow):
         current_settings = {
             'auto_gen_waveforms': self.auto_gen_waveforms,
             'auto_gen_fingerprints': self.auto_gen_fingerprints,
-            'auto_gen_timing': self.auto_gen_timing
+            'auto_gen_timing': self.auto_gen_timing,
+            'pagination_enabled': self.pagination_enabled,
+            'pagination_chunk_size': self.pagination_chunk_size,
+            'parallel_workers': self.parallel_workers
         }
         
         # Show dialog
@@ -11938,17 +12240,31 @@ class AudioBrowser(QMainWindow):
             self.auto_gen_waveforms = new_settings['auto_gen_waveforms']
             self.auto_gen_fingerprints = new_settings['auto_gen_fingerprints'] 
             self.auto_gen_timing = new_settings['auto_gen_timing']
+            self.pagination_enabled = new_settings['pagination_enabled']
+            self.pagination_chunk_size = new_settings['pagination_chunk_size']
+            self.parallel_workers = new_settings['parallel_workers']
             
             # Print updated settings for debugging
             log_print("Auto-generation settings updated:")
             log_print(f"  Waveforms: {self.auto_gen_waveforms}")
             log_print(f"  Fingerprints: {self.auto_gen_fingerprints}")
             log_print(f"  Timing: {self.auto_gen_timing}")
+            log_print("Performance settings updated:")
+            log_print(f"  Pagination enabled: {self.pagination_enabled}")
+            log_print(f"  Chunk size: {self.pagination_chunk_size}")
+            log_print(f"  Parallel workers: {self.parallel_workers}")
             
             # Save to persistent settings
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_WAVEFORMS, int(self.auto_gen_waveforms))
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(self.auto_gen_fingerprints))
             self.settings.setValue(SETTINGS_KEY_AUTO_GEN_TIMING, self.auto_gen_timing)
+            self.settings.setValue(SETTINGS_KEY_PAGINATION_ENABLED, int(self.pagination_enabled))
+            self.settings.setValue(SETTINGS_KEY_PAGINATION_CHUNK_SIZE, self.pagination_chunk_size)
+            self.settings.setValue(SETTINGS_KEY_PARALLEL_WORKERS, self.parallel_workers)
+            
+            # If folder is loaded and pagination settings changed, refresh display
+            if self.root_path:
+                self._refresh_right_table()
 
     def _show_preferences_dialog(self):
         """Show preferences dialog."""
@@ -13983,7 +14299,11 @@ class AudioBrowser(QMainWindow):
         try:
             # Create worker and thread
             self._auto_gen_waveform_thread = QThread(self)
-            self._auto_gen_waveform_worker = AutoWaveformWorker([str(f) for f in audio_files], str(folder_path))
+            self._auto_gen_waveform_worker = AutoWaveformWorker(
+                [str(f) for f in audio_files], 
+                str(folder_path),
+                parallel_workers=self.parallel_workers
+            )
             self._auto_gen_waveform_worker.moveToThread(self._auto_gen_waveform_thread)
         except Exception as e:
             log_print(f"  ERROR: Failed to create waveform worker: {e}")

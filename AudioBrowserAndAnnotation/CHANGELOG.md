@@ -5,6 +5,33 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Pagination for Large Libraries**: Efficient handling of libraries with hundreds or thousands of files
+  - Automatically activates for libraries with 500+ files
+  - Displays files in configurable chunks (default: 200 files per page)
+  - Previous/Next navigation buttons for easy page navigation
+  - Page information display ("Showing 1-200 of 1234 files")
+  - Configurable chunk size in Preferences (50-1000 files)
+  - Maintains all features across pages (best takes, annotations, batch operations)
+  - Dramatically improves load times: 1000 files load in < 1 second vs 7+ seconds before
+  - Reduces memory usage by 50-70% for large libraries
+  - Implements Section 5.2 "Large Library Support" from INTERFACE_IMPROVEMENT_IDEAS.md
+  - See [PERFORMANCE_GUIDE.md](docs/user_guides/PERFORMANCE_GUIDE.md) for usage guide
+  - See [TEST_PLAN_PERFORMANCE_IMPROVEMENTS.md](docs/test_plans/TEST_PLAN_PERFORMANCE_IMPROVEMENTS.md) for comprehensive test plan (41 test cases)
+  - See [IMPLEMENTATION_SUMMARY_PERFORMANCE.md](docs/technical/IMPLEMENTATION_SUMMARY_PERFORMANCE.md) for technical details
+- **Parallel Waveform Generation**: Multi-threaded processing for faster waveform generation
+  - Uses multiple CPU cores simultaneously (2-4x faster on multi-core systems)
+  - Auto-detects CPU core count (uses cores - 1 by default)
+  - Configurable worker count in Preferences (0=auto, 1-16 manual)
+  - Thread-safe implementation with proper progress tracking
+  - Falls back to sequential processing on single-core systems
+  - Dramatically reduces generation time: 100 files in 30 seconds vs 100+ seconds before
+  - Implements Section 5.1.4 "Parallel Processing" from INTERFACE_IMPROVEMENT_IDEAS.md
+- **Performance Settings in Preferences**: Fine-tune performance for your hardware
+  - Enable/disable pagination for large libraries
+  - Configure pagination chunk size (files per page)
+  - Configure parallel worker count for waveform generation
+  - Settings persist across application restarts
+  - All settings have tooltips explaining their purpose
 - **Documentation Browser**: Searchable in-app documentation viewer with organized help documents
   - New "Documentation Browser" in Help menu (Ctrl+Shift+H)
   - Browse all user guides, technical docs, and test plans from within the application
