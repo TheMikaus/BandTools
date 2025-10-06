@@ -5,6 +5,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Phase 2.1: ProgressDialog**: Reusable progress dialog for long-running operations
+  - Added `ProgressDialog` class at line 1237 (~86 lines) for consistent progress reporting
+  - Operation label, progress bar, file label, and cancel button
+  - `update_progress()` method for standardized progress updates
+  - `set_operation()` method for dynamic operation description
+  - `cancelled` signal for graceful operation cancellation
+  - Reduces duplicate progress dialog code (~100 lines when adopted)
+  - Provides template for future progress dialog usage
+  - Part of Phase 2 Medium-Risk Refactoring (IMMEDIATE_SIMPLIFICATION_GUIDE.md)
+- **Phase 2.2: BaseWorker**: Base class for background workers with common patterns
+  - Added `BaseWorker` class at line 1324 (~91 lines) for worker standardization
+  - Standardized signals: `progress`, `finished`, `error`
+  - Cancellation support via `stop()` and `should_stop()` methods
+  - Helper methods: `emit_progress()`, `emit_finished()`, `emit_error()`
+  - Template for implementing new background workers
+  - Reduces worker boilerplate code (~100 lines when adopted)
+  - Flexible design allows subclasses to override signals as needed
+  - Part of Phase 2 Medium-Risk Refactoring (IMMEDIATE_SIMPLIFICATION_GUIDE.md)
 - **Phase 1.2: JSON Persistence Utility**: Centralized JSON file operations with enhanced error handling
   - Added `JSONPersistence` class after ConfigManager for robust JSON operations
   - `load_json()` method with detailed error logging for corrupted files
