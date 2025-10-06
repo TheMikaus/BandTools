@@ -46,6 +46,7 @@ from backend.waveform_engine import WaveformEngine
 from backend.waveform_view import WaveformView
 from backend.annotation_manager import AnnotationManager
 from backend.clip_manager import ClipManager
+from backend.folder_notes_manager import FolderNotesManager
 
 
 class ApplicationViewModel(QObject):
@@ -97,6 +98,7 @@ def main():
     waveform_engine = WaveformEngine()
     annotation_manager = AnnotationManager()
     clip_manager = ClipManager()
+    folder_notes_manager = FolderNotesManager()
     
     # Create data models
     file_list_model = FileListModel()
@@ -116,6 +118,7 @@ def main():
     engine.rootContext().setContextProperty("waveformEngine", waveform_engine)
     engine.rootContext().setContextProperty("annotationManager", annotation_manager)
     engine.rootContext().setContextProperty("clipManager", clip_manager)
+    engine.rootContext().setContextProperty("folderNotesManager", folder_notes_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)

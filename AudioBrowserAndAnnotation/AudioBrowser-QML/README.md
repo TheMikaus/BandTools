@@ -127,6 +127,26 @@ AudioBrowser-QML/
 - Automatic persistence
 - Multi-user attribution
 
+### 🚧 Phase 7: Additional Features (In Progress)
+
+**Objectives**: Add features from original audio_browser.py for feature parity
+
+**Completed Tasks**:
+- ✅ Created FolderNotesManager backend module (250 lines)
+- ✅ Created FolderNotesTab with auto-save (235 lines)
+- ✅ Created FileContextMenu component (240 lines)
+- ✅ Extended FileManager with system integration
+- ✅ Added right-click context menus to Library tab
+- ✅ Added file properties dialog
+- ✅ Added Ctrl+4 keyboard shortcut for Folder Notes
+
+**Features**:
+- Folder-level notes with auto-save
+- Right-click context menus on files
+- System file manager integration
+- File properties display
+- Copy file path to clipboard
+
 ### ✅ Phase 5: Clips System (Complete)
 
 **Objectives**: Implement audio clip management and export
@@ -247,6 +267,16 @@ The application will automatically install PyQt6 dependencies if they are not pr
 - Comprehensive tooltips throughout the interface
 - Improved version tracking and display
 - Enhanced user experience refinements
+
+**Phase 7 Features** (Additional Features - In Progress):
+- Folder Notes tab for per-folder note-taking
+- Auto-save notes as you type
+- Character and word count display
+- File context menus (right-click on files)
+- System file manager integration (Show in Explorer)
+- File properties display
+- Copy file path to clipboard
+- Quick actions: Play, Annotate, Create Clip
 
 ## Development Notes
 

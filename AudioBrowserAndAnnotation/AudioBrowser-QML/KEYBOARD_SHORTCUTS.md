@@ -18,6 +18,7 @@ This document lists all keyboard shortcuts available in the AudioBrowser QML app
 | **Ctrl+1** | Library Tab | Switch to Library tab |
 | **Ctrl+2** | Annotations Tab | Switch to Annotations tab |
 | **Ctrl+3** | Clips Tab | Switch to Clips tab |
+| **Ctrl+4** | Folder Notes Tab | Switch to Folder Notes tab |
 
 ## Interface
 
@@ -51,6 +52,25 @@ This document lists all keyboard shortcuts available in the AudioBrowser QML app
 3. Clip dialog automatically opens with both timestamps pre-filled
 4. Fill in name and notes, then click OK to create the clip
 
+## Folder Notes
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| **Ctrl+S** | Save Notes | Manually save folder notes (when auto-save is off) |
+
+## Context Menu (Right-Click on Files)
+
+The following actions are available via right-click context menu:
+
+| Action | Description |
+|--------|-------------|
+| **Play** | Load and play the selected file |
+| **Add Annotation...** | Switch to Annotations tab for quick annotation |
+| **Create Clip...** | Switch to Clips tab for quick clip creation |
+| **Show in Explorer** | Open file location in system file manager |
+| **Copy Path** | Copy file path to clipboard |
+| **Properties** | Show file properties dialog |
+
 ## Future Shortcuts (Planned)
 
 These shortcuts will be implemented in future phases:
@@ -61,7 +81,9 @@ These shortcuts will be implemented in future phases:
 | **Ctrl+Right** | Next File | Play next file in list |
 | **Ctrl+O** | Open Directory | Open directory picker dialog |
 | **Ctrl+F** | Find Files | Focus file filter field |
-| **Ctrl+S** | Save | Save current workspace/annotations |
+| **Ctrl+L** | Open Location | Show current file in file manager |
+| **Delete** | Delete File | Delete selected file (with confirmation) |
+| **F2** | Rename File | Quick rename dialog for selected file |
 | **F11** | Fullscreen | Toggle fullscreen mode |
 
 ## Notes
@@ -78,4 +100,4 @@ Keyboard shortcuts can be customized in future versions through the preferences 
 
 ---
 
-*Last updated: Phase 6 Implementation*
+*Last updated: Phase 7 Implementation*

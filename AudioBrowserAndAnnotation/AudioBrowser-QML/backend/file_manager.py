@@ -373,3 +373,80 @@ class FileManager(QObject):
                 
         except Exception:
             return "0 B"
+    
+    @pyqtSlot(str)
+    def openInFileManager(self, file_path: str) -> None:
+        """
+        Open the file's location in the system file manager.
+        
+        Args:
+            file_path: Path to the file
+        """
+        try:
+            import subprocess
+            import platform
+            
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Get the directory containing the file
+            directory = path.parent if path.is_file() else path
+            
+            system = platform.system()
+            if system == "Windows":
+                # Open Windows Explorer and select the file
+                subprocess.Popen(['explorer', '/select,', str(path)])
+            elif system == "Darwin":  # macOS
+                # Open Finder and select the file
+                subprocess.Popen(['open', '-R', str(path)])
+            else:  # Linux and others
+                # Open the directory in the default file manager
+                subprocess.Popen(['xdg-open', str(directory)])
+                
+        except Exception as e:
+            self.errorOccurred.emit(f"Error opening file manager: {e}")
+    
+    @pyqtSlot(str, result=str)
+    def getFileProperties(self, file_path: str) -> str:
+        """
+        Get file properties as a formatted string.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Formatted string with file properties
+        """
+        try:
+            import datetime
+            
+            path = Path(file_path)
+            if not path.exists():
+                return "File not found"
+            
+            stat = path.stat()
+            
+            # Format properties
+            props = []
+            props.append(f"Name: {path.name}")
+            props.append(f"Path: {path.parent}")
+            props.append(f"Size: {self.formatFileSize(file_path)}")
+            props.append(f"Extension: {path.suffix}")
+            
+            # Modification time
+            mtime = datetime.datetime.fromtimestamp(stat.st_mtime)
+            props.append(f"Modified: {mtime.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Creation time (if available)
+            try:
+                ctime = datetime.datetime.fromtimestamp(stat.st_ctime)
+                props.append(f"Created: {ctime.strftime('%Y-%m-%d %H:%M:%S')}")
+            except:
+                pass
+            
+            return "\n".join(props)
+            
+        except Exception as e:
+            return f"Error getting properties: {e}"
