@@ -1,14 +1,42 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "../components"
 import "../styles"
+import "../dialogs"
 
 Item {
     id: libraryTab
     
     // Properties
     property string currentDirectory: ""
+    
+    // Folder picker dialog
+    FileDialog {
+        id: folderDialog
+        title: "Select Audio Directory"
+        fileMode: FileDialog.OpenFile
+        currentFolder: "file://" + fileManager.getCurrentDirectory()
+        
+        onAccepted: {
+            var folderPath = selectedFile.toString()
+            
+            // Remove file:// prefix
+            if (folderPath.startsWith("file://")) {
+                folderPath = folderPath.substring(7)
+            }
+            
+            // Extract directory from selected file
+            var lastSlash = folderPath.lastIndexOf("/")
+            if (lastSlash > 0) {
+                folderPath = folderPath.substring(0, lastSlash)
+            }
+            
+            fileManager.setCurrentDirectory(folderPath)
+            directoryField.text = folderPath
+        }
+    }
     
     ColumnLayout {
         anchors.fill: parent
@@ -57,8 +85,7 @@ Item {
                 StyledButton {
                     text: "Browse..."
                     onClicked: {
-                        // TODO: Open directory picker dialog
-                        console.log("Browse directory clicked")
+                        folderDialog.open()
                     }
                 }
                 
