@@ -5,6 +5,20 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **QML Migration Phase 0: Preparation and Infrastructure** (COMPLETE)
+  - Created `AudioBrowser-QML/` project structure for Qt Quick/QML migration
+  - Implemented `main.py` entry point (85 lines) with auto-dependency installation
+  - Created `qml/main.qml` (185 lines) with dark theme UI and Phase 0 status display
+  - Established Python-QML communication using ApplicationViewModel and context properties
+  - Set up directory structure: backend/, qml/{components,tabs,dialogs,styles}/, resources/{icons,images}/
+  - Created `AudioBrowser-QML/README.md` with project documentation
+  - Created `docs/technical/PHASE_0_QML_COMPLETION.md` documenting Phase 0 completion
+  - Added launch script `run.sh` for easy application startup
+  - Verified PyQt6.QtQuick dependencies install and work correctly
+  - Total: ~710 lines of new code in separate QML project
+  - QML application runs independently from existing audio_browser.py
+  - Foundation ready for Phase 1: Core Infrastructure implementation
+  - See [QML_MIGRATION_STRATEGY.md](docs/technical/QML_MIGRATION_STRATEGY.md) for full migration plan
 - **Phase 3.1: Data Models**: Type-safe data classes for annotations, clips, and metadata
   - Added `Annotation` dataclass at line 1413 (~62 lines) for type-safe annotation handling
   - Time, text, important flag, category, user, and created timestamp attributes
