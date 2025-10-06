@@ -10,7 +10,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 5 (Clips & Annotations)"
+    title: "AudioBrowser (QML) - Phase 7 (Additional Features)"
     
     // Use theme for background color
     color: Theme.backgroundColor
@@ -121,6 +121,23 @@ ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
+            
+            TabButton {
+                text: "Folder Notes"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 3 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 3 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
         
         // Tab content
@@ -141,6 +158,11 @@ ApplicationWindow {
                 id: clipsTab
                 clipManager: clipManager
                 audioEngine: audioEngine
+            }
+            
+            FolderNotesTab {
+                id: folderNotesTab
+                folderNotesManager: folderNotesManager
             }
         }
         
@@ -171,7 +193,7 @@ ApplicationWindow {
                 }
                 
                 Label {
-                    text: "Phase 3 (Annotations) • Theme: " + settingsManager.getTheme()
+                    text: "Phase 7 (Additional Features) • Theme: " + settingsManager.getTheme()
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
                 }
@@ -228,6 +250,11 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+3"
         onActivated: tabBar.currentIndex = 2
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+4"
+        onActivated: tabBar.currentIndex = 3
     }
     
     Shortcut {
