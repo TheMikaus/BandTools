@@ -5,6 +5,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Added
+- **Phase 1.2: JSON Persistence Utility**: Centralized JSON file operations with enhanced error handling
+  - Added `JSONPersistence` class after ConfigManager for robust JSON operations
+  - `load_json()` method with detailed error logging for corrupted files
+  - `save_json()` method with automatic backup support and directory creation
+  - `load_with_migration()` method for handling data format migrations
+  - Improved error messages for debugging JSON-related issues
+  - Foundation for future migration of existing JSON operations
+  - Part of incremental code simplification (Phase 1 of IMMEDIATE_SIMPLIFICATION_GUIDE.md)
+- **Phase 1.3: UI Factory**: Factory methods for consistent UI component creation
+  - Added `UIFactory` class after JSONPersistence for standardized UI element creation
+  - `create_push_button()` method for buttons with icon, tooltip, and callback
+  - `create_label()` method for labels with bold and color options
+  - `create_hbox_layout()` and `create_vbox_layout()` for simplified layout creation
+  - `create_form_row()` for form label/widget pairs
+  - `create_group_box()` for grouped UI sections
+  - `create_toolbar_separator()` for visual separators
+  - Reduces UI boilerplate code and ensures consistent styling
+  - Foundation for future UI refactoring (Phase 1 of IMMEDIATE_SIMPLIFICATION_GUIDE.md)
 - **Qt Quick/QML Migration Documentation**: Comprehensive documentation for future UI modernization
   - [QML_MIGRATION_STRATEGY.md](docs/technical/QML_MIGRATION_STRATEGY.md) - Complete migration strategy with phases, timeline, component mapping, and risk analysis (25KB, 700+ lines)
   - [CURRENT_ARCHITECTURE_INVENTORY.md](docs/technical/CURRENT_ARCHITECTURE_INVENTORY.md) - Detailed inventory of current architecture with 22 classes cataloged, simplification opportunities identified (27KB, 800+ lines)

@@ -1074,6 +1074,165 @@ class JSONPersistence:
                 return default
         return data
 
+
+class UIFactory:
+    """Factory methods for creating common UI components with consistent styling."""
+    
+    @staticmethod
+    def create_push_button(text: str, icon: Optional[Any] = None, 
+                          tooltip: Optional[str] = None,
+                          callback: Optional[Callable] = None):
+        """Create a configured push button.
+        
+        Args:
+            text: Button text
+            icon: Optional QIcon for the button
+            tooltip: Optional tooltip text
+            callback: Optional function to connect to clicked signal
+            
+        Returns:
+            Configured QPushButton
+        """
+        # Import here to avoid issues during module initialization
+        from PyQt6.QtWidgets import QPushButton
+        
+        button = QPushButton(text)
+        if icon:
+            button.setIcon(icon)
+        if tooltip:
+            button.setToolTip(tooltip)
+        if callback:
+            button.clicked.connect(callback)
+        return button
+    
+    @staticmethod
+    def create_label(text: str, bold: bool = False, 
+                    color: Optional[str] = None):
+        """Create a configured label.
+        
+        Args:
+            text: Label text
+            bold: If True, make text bold
+            color: Optional color name or hex value (e.g., 'red' or '#FF0000')
+            
+        Returns:
+            Configured QLabel
+        """
+        from PyQt6.QtWidgets import QLabel
+        
+        label = QLabel(text)
+        if bold:
+            font = label.font()
+            font.setBold(True)
+            label.setFont(font)
+        if color:
+            label.setStyleSheet(f"color: {color};")
+        return label
+    
+    @staticmethod
+    def create_hbox_layout(*widgets, spacing: int = 5, 
+                          margins: Tuple[int, int, int, int] = (0, 0, 0, 0)):
+        """Create a horizontal box layout with widgets.
+        
+        Args:
+            *widgets: Widgets to add to layout. Use None to add stretch.
+            spacing: Spacing between widgets (default: 5)
+            margins: Layout margins as (left, top, right, bottom) tuple (default: (0,0,0,0))
+            
+        Returns:
+            Configured QHBoxLayout
+        """
+        from PyQt6.QtWidgets import QHBoxLayout
+        
+        layout = QHBoxLayout()
+        layout.setSpacing(spacing)
+        layout.setContentsMargins(*margins)
+        for widget in widgets:
+            if widget is None:
+                layout.addStretch()
+            else:
+                layout.addWidget(widget)
+        return layout
+    
+    @staticmethod
+    def create_vbox_layout(*widgets, spacing: int = 5,
+                          margins: Tuple[int, int, int, int] = (0, 0, 0, 0)):
+        """Create a vertical box layout with widgets.
+        
+        Args:
+            *widgets: Widgets to add to layout. Use None to add stretch.
+            spacing: Spacing between widgets (default: 5)
+            margins: Layout margins as (left, top, right, bottom) tuple (default: (0,0,0,0))
+            
+        Returns:
+            Configured QVBoxLayout
+        """
+        from PyQt6.QtWidgets import QVBoxLayout
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(spacing)
+        layout.setContentsMargins(*margins)
+        for widget in widgets:
+            if widget is None:
+                layout.addStretch()
+            else:
+                layout.addWidget(widget)
+        return layout
+    
+    @staticmethod
+    def create_form_row(label_text: str, widget: Any):
+        """Create a form row with label and widget.
+        
+        Args:
+            label_text: Text for the label
+            widget: Widget to place next to the label
+            
+        Returns:
+            QHBoxLayout with label, widget, and stretch
+        """
+        from PyQt6.QtWidgets import QLabel, QHBoxLayout
+        
+        label = QLabel(label_text)
+        layout = QHBoxLayout()
+        layout.addWidget(label)
+        layout.addWidget(widget)
+        layout.addStretch()
+        return layout
+    
+    @staticmethod
+    def create_group_box(title: str, *widgets):
+        """Create a group box with vertical layout.
+        
+        Args:
+            title: Title for the group box
+            *widgets: Widgets to add to the group box
+            
+        Returns:
+            Configured QGroupBox
+        """
+        from PyQt6.QtWidgets import QGroupBox, QVBoxLayout
+        
+        group = QGroupBox(title)
+        layout = QVBoxLayout()
+        for widget in widgets:
+            layout.addWidget(widget)
+        group.setLayout(layout)
+        return group
+    
+    @staticmethod
+    def create_toolbar_separator():
+        """Create a vertical separator for toolbars.
+        
+        Returns:
+            QFrame configured as a vertical separator
+        """
+        from PyQt6.QtWidgets import QFrame
+        
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        return separator
+
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
 class SeekSlider(QSlider):
