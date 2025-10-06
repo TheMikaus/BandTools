@@ -7,9 +7,17 @@ Provides file discovery, filtering, and metadata access.
 """
 
 import os
+import wave
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+# Try to import optional dependencies for MP3 support
+try:
+    from pydub import AudioSegment
+    HAVE_PYDUB = True
+except ImportError:
+    HAVE_PYDUB = False
 
 
 # Audio file extensions
@@ -450,3 +458,70 @@ class FileManager(QObject):
             
         except Exception as e:
             return f"Error getting properties: {e}"
+    
+    @pyqtSlot(str, result=int)
+    def getAudioDuration(self, file_path: str) -> int:
+        """
+        Get the duration of an audio file in milliseconds.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Duration in milliseconds, or 0 on error
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return 0
+            
+            suffix = path.suffix.lower()
+            
+            # Handle WAV files
+            if suffix in ['.wav', '.wave']:
+                try:
+                    with wave.open(str(path), 'rb') as wf:
+                        frames = wf.getnframes()
+                        rate = wf.getframerate()
+                        duration_ms = int((frames / rate) * 1000)
+                        return duration_ms
+                except Exception:
+                    return 0
+            
+            # Handle MP3 files (if pydub is available)
+            elif suffix == '.mp3' and HAVE_PYDUB:
+                try:
+                    audio = AudioSegment.from_mp3(str(path))
+                    return len(audio)  # pydub returns duration in milliseconds
+                except Exception:
+                    return 0
+            
+            return 0
+            
+        except Exception:
+            return 0
+    
+    @pyqtSlot(str, result=str)
+    def formatDuration(self, duration_ms: int) -> str:
+        """
+        Format duration in human-readable form (MM:SS or HH:MM:SS).
+        
+        Args:
+            duration_ms: Duration in milliseconds
+            
+        Returns:
+            Formatted duration string
+        """
+        try:
+            total_seconds = duration_ms // 1000
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            
+            if hours > 0:
+                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                return f"{minutes:02d}:{seconds:02d}"
+                
+        except Exception:
+            return "00:00"

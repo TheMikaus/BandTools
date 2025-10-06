@@ -11,6 +11,8 @@ Item {
     
     // Properties
     property string currentDirectory: ""
+    property string sortField: "filename"
+    property bool sortAscending: true
     
     // Folder picker dialog
     FileDialog {
@@ -116,7 +118,7 @@ Item {
                 anchors.margins: Theme.spacingSmall
                 spacing: 0
                 
-                // Header
+                // Header with column labels
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Theme.buttonHeight
@@ -148,6 +150,115 @@ Item {
                                 radius: Theme.radiusSmall
                             }
                             color: Theme.textColor
+                        }
+                    }
+                }
+                
+                // Column Headers (clickable for sorting)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 28
+                    color: Theme.backgroundMedium
+                    
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.spacingNormal
+                        anchors.rightMargin: Theme.spacingNormal
+                        spacing: Theme.spacingNormal
+                        
+                        // Name column header
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                text: "Name " + (sortField === "filename" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "filename" ? Theme.accentPrimary : Theme.textColor
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "filename") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "filename"
+                                        sortAscending = true
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
+                        }
+                        
+                        // Duration column header
+                        Rectangle {
+                            Layout.preferredWidth: 80
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.rightMargin: 4
+                                text: "Duration " + (sortField === "duration" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "duration" ? Theme.accentPrimary : Theme.textColor
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "duration") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "duration"
+                                        sortAscending = false  // Default to longest first
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
+                        }
+                        
+                        // Size column header
+                        Rectangle {
+                            Layout.preferredWidth: 80
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.rightMargin: 4
+                                text: "Size " + (sortField === "filesize" ? (sortAscending ? "▲" : "▼") : "")
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: sortField === "filesize" ? Theme.accentPrimary : Theme.textColor
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (sortField === "filesize") {
+                                        sortAscending = !sortAscending
+                                    } else {
+                                        sortField = "filesize"
+                                        sortAscending = false  // Default to largest first
+                                    }
+                                    fileListModel.sortBy(sortField, sortAscending)
+                                }
+                            }
                         }
                     }
                 }
@@ -196,6 +307,14 @@ Item {
                                 color: Theme.textColor
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
+                            }
+                            
+                            Label {
+                                text: formatDuration(model.duration)
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                Layout.preferredWidth: 80
+                                horizontalAlignment: Text.AlignRight
                             }
                             
                             Label {
@@ -281,6 +400,27 @@ Item {
             return (bytes / (1024 * 1024)).toFixed(1) + " MB"
         } else {
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB"
+        }
+    }
+    
+    // Helper function to format duration
+    function formatDuration(durationMs) {
+        if (durationMs <= 0) {
+            return "--:--"
+        }
+        
+        var totalSeconds = Math.floor(durationMs / 1000)
+        var hours = Math.floor(totalSeconds / 3600)
+        var minutes = Math.floor((totalSeconds % 3600) / 60)
+        var seconds = totalSeconds % 60
+        
+        if (hours > 0) {
+            return hours.toString().padStart(2, '0') + ":" + 
+                   minutes.toString().padStart(2, '0') + ":" + 
+                   seconds.toString().padStart(2, '0')
+        } else {
+            return minutes.toString().padStart(2, '0') + ":" + 
+                   seconds.toString().padStart(2, '0')
         }
     }
     

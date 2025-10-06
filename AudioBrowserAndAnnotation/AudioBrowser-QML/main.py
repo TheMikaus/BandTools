@@ -100,8 +100,8 @@ def main():
     clip_manager = ClipManager()
     folder_notes_manager = FolderNotesManager()
     
-    # Create data models
-    file_list_model = FileListModel()
+    # Create data models (pass file_manager to FileListModel for duration extraction)
+    file_list_model = FileListModel(file_manager=file_manager)
     annotations_model = AnnotationsModel()
     
     # Create and expose view model to QML

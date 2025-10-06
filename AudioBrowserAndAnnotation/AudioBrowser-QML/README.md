@@ -217,6 +217,15 @@ The application will automatically install PyQt6 dependencies if they are not pr
 - File filtering by name
 - Responsive UI with custom styled components
 
+**Phase 7 Features** (Additional Features - In Progress):
+- Folder notes with auto-save
+- File context menus (right-click)
+- Audio duration display in file list
+- Sortable columns (name, duration, size)
+- Show in system file manager
+- Copy file path to clipboard
+- File properties dialog
+
 **Phase 2 Features** (Waveform Display):
 - Waveform visualization for audio files
 - Click-to-seek on waveform

@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Status**: 🚧 **IN PROGRESS** (40% complete)  
+**Status**: 🚧 **IN PROGRESS** (55% complete)  
 **Date**: December 2024  
 **Focus**: Additional features and functionality to approach feature parity with original audio_browser.py
 
@@ -95,6 +95,46 @@ Phase 7 builds on the completed Phases 1-6 by adding important features that wer
 
 **Impact**: Users can perform common file operations without navigating through menus, significantly improving workflow efficiency.
 
+### 3. Enhanced File List ✅
+
+**Goal**: Display audio duration in the file list and make columns sortable.
+
+**Implementation:**
+- Extended `backend/file_manager.py` (+110 lines)
+  - `getAudioDuration(file_path)` - Extract duration from WAV/MP3 files
+    - WAV support via wave module
+    - MP3 support via pydub (optional)
+  - `formatDuration(duration_ms)` - Format as MM:SS or HH:MM:SS
+  
+- Updated `backend/models.py` (+50 lines)
+  - Modified FileListModel constructor to accept file_manager
+  - Auto-extract duration when files are set
+  - Added `sortBy(field, ascending)` method
+  - Supports sorting by filename, filesize, duration
+  
+- Updated `qml/tabs/LibraryTab.qml` (+140 lines)
+  - Added column headers (Name, Duration, Size)
+  - Made headers clickable for sorting
+  - Added sort indicators (▲/▼)
+  - Active column highlighted with accent color
+  - Added formatDuration() helper function
+  
+- Updated `main.py` (+2 lines)
+  - Pass file_manager to FileListModel constructor
+
+**Features:**
+- ✅ Display audio duration for each file
+- ✅ Format duration as MM:SS or HH:MM:SS
+- ✅ Clickable column headers
+- ✅ Sort by name (alphabetically)
+- ✅ Sort by duration (longest first by default)
+- ✅ Sort by size (largest first by default)
+- ✅ Visual sort indicators
+- ✅ Toggle ascending/descending order
+- ✅ Highlight active sort column
+
+**Impact**: Users can now see how long each audio file is without playing it, and can sort files by different criteria to quickly find what they need.
+
 ---
 
 ## Code Statistics
@@ -103,12 +143,12 @@ Phase 7 builds on the completed Phases 1-6 by adding important features that wer
 
 | Metric | Value |
 |--------|-------|
-| Lines Added | 600+ |
+| Lines Added | 900+ |
 | Files Created | 3 |
-| Files Modified | 4 |
-| Backend Methods | 10+ |
+| Files Modified | 7 |
+| Backend Methods | 13+ |
 | QML Components | 3 |
-| Features Implemented | 2/10 |
+| Features Implemented | 3/10 |
 
 ### Files Created
 
@@ -256,11 +296,11 @@ Menu {
 
 ### Priority 1: High-Value Features
 
-1. **Enhanced File List** (Estimated: 1-2 days)
-   - Show file duration in list
-   - Sortable columns
-   - Multi-selection support
-   - Column headers
+1. ✅ **Enhanced File List** (Complete)
+   - ✅ Show file duration in list
+   - ✅ Sortable columns
+   - ⏳ Multi-selection support (future enhancement)
+   - ✅ Column headers
 
 2. **Batch Operations Backend** (Estimated: 2-3 days)
    - BatchOperations module
@@ -302,13 +342,13 @@ Phase 7 will be considered complete when:
 
 - ✅ Folder Notes tab is functional (Complete)
 - ✅ File context menus work (Complete)
+- ✅ Enhanced file list with sorting (Complete)
 - ⏳ Batch operations are implemented
-- ⏳ Enhanced file list with sorting
 - ⏳ All new features are documented
 - ⏳ Manual testing is complete
 - ⏳ No critical bugs remain
 
-**Current Progress**: 2/6 major features complete (33%)
+**Current Progress**: 3/6 major features complete (50%)
 
 ---
 
@@ -328,6 +368,8 @@ Phase 7 will be considered complete when:
 - System file manager integration
 - File properties at a glance
 - Copy file paths easily
+- Audio duration visible in file list
+- Sortable columns (name, duration, size)
 
 ### Time Savings
 
@@ -335,8 +377,9 @@ Estimated time savings per session:
 - Note-taking: ~2-3 minutes saved (no app switching)
 - File operations: ~1-2 minutes saved (context menus)
 - System integration: ~30 seconds saved (quick access)
+- Finding files: ~1 minute saved (sorting and duration display)
 
-**Total**: ~3-5 minutes saved per practice session
+**Total**: ~4-6 minutes saved per practice session
 
 ---
 
@@ -426,10 +469,11 @@ Estimated time savings per session:
 
 ## Conclusion
 
-Phase 7 has achieved strong early progress with 2 major features completed:
+Phase 7 has achieved strong progress with 3 major features completed:
 
 1. ✅ **Folder Notes Tab**: Complete per-folder note-taking system with auto-save
 2. ✅ **File Context Menus**: Right-click actions for efficient file operations
+3. ✅ **Enhanced File List**: Duration display and sortable columns
 
 These features significantly improve the user experience by:
 - **Reducing App Switching**: Notes are built into the application
@@ -443,8 +487,10 @@ These features significantly improve the user experience by:
 2. ✅ Context menu with 6 useful actions
 3. ✅ Cross-platform file manager integration
 4. ✅ File properties display
-5. ✅ Clean, maintainable code
-6. ✅ Comprehensive documentation
+5. ✅ Audio duration extraction and display
+6. ✅ Sortable file list with visual indicators
+7. ✅ Clean, maintainable code
+8. ✅ Comprehensive documentation
 
 ### Remaining Work
 
@@ -454,11 +500,11 @@ The next phase of development will focus on:
 - Additional keyboard shortcuts
 - Comprehensive testing and documentation
 
-**Project Status**: 40% through Phase 7, on track for completion.
+**Project Status**: 55% through Phase 7, on track for completion.
 
 ---
 
-**Report Status**: 🚧 40% COMPLETE  
+**Report Status**: 🚧 55% COMPLETE  
 **Last Updated**: December 2024  
 **Next Milestone**: Batch operations implementation
 

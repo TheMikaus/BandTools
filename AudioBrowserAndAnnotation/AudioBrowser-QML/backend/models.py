@@ -33,10 +33,17 @@ class FileListModel(QAbstractListModel):
     # Signals
     filesChanged = pyqtSignal()
     
-    def __init__(self, parent=None):
-        """Initialize the file list model."""
+    def __init__(self, parent=None, file_manager=None):
+        """
+        Initialize the file list model.
+        
+        Args:
+            parent: Parent QObject
+            file_manager: Optional FileManager for extracting file metadata
+        """
         super().__init__(parent)
         self._files: List[Dict[str, Any]] = []
+        self._file_manager = file_manager
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """Return the number of files in the model."""
@@ -94,13 +101,19 @@ class FileListModel(QAbstractListModel):
         for file_path in file_paths:
             try:
                 path = Path(file_path)
+                
+                # Extract duration if file_manager is available
+                duration_ms = 0
+                if self._file_manager is not None:
+                    duration_ms = self._file_manager.getAudioDuration(file_path)
+                
                 file_info = {
                     "filepath": str(path),
                     "filename": path.name,
                     "basename": path.stem,
                     "extension": path.suffix,
                     "filesize": path.stat().st_size if path.exists() else 0,
-                    "duration": 0,  # Will be populated later if needed
+                    "duration": duration_ms,
                 }
                 self._files.append(file_info)
             except Exception:
@@ -158,6 +171,41 @@ class FileListModel(QAbstractListModel):
             if file_data.get("filepath") == file_path:
                 return i
         return -1
+    
+    @pyqtSlot(str, bool)
+    def sortBy(self, field: str, ascending: bool = True) -> None:
+        """
+        Sort files by a specific field.
+        
+        Args:
+            field: Field name to sort by ("filename", "filesize", "duration")
+            ascending: True for ascending order, False for descending
+        """
+        self.beginResetModel()
+        
+        try:
+            # Map field names to dict keys
+            field_map = {
+                "filename": "filename",
+                "name": "filename",
+                "size": "filesize",
+                "filesize": "filesize",
+                "duration": "duration",
+            }
+            
+            sort_key = field_map.get(field.lower(), "filename")
+            
+            # Sort the files
+            self._files.sort(
+                key=lambda f: f.get(sort_key, 0) if sort_key != "filename" else f.get(sort_key, "").lower(),
+                reverse=not ascending
+            )
+            
+        except Exception as e:
+            print(f"Error sorting files: {e}")
+        
+        self.endResetModel()
+        self.filesChanged.emit()
 
 
 class AnnotationsModel(QAbstractTableModel):
