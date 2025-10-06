@@ -1233,6 +1233,177 @@ class UIFactory:
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         return separator
 
+# ========== Progress Dialog (Phase 2.1) ==========
+class ProgressDialog(QDialog):
+    """Reusable progress dialog for long-running operations.
+    
+    Provides a consistent progress dialog with:
+    - Operation label
+    - Progress bar (percentage-based)
+    - Current file label
+    - Cancel button
+    
+    Usage:
+        progress = ProgressDialog("Converting Files", parent)
+        progress.cancelled.connect(worker.cancel)
+        worker.progress.connect(progress.update_progress)
+        worker.finished.connect(progress.finish)
+        progress.show()
+    """
+    
+    cancelled = pyqtSignal()
+    
+    def __init__(self, title: str, parent=None):
+        """Initialize progress dialog.
+        
+        Args:
+            title: Window title for the dialog
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(400)
+        
+        # UI setup
+        layout = QVBoxLayout(self)
+        
+        # Operation label
+        self.operation_label = QLabel("")
+        layout.addWidget(self.operation_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        layout.addWidget(self.progress_bar)
+        
+        # File label
+        self.file_label = QLabel("")
+        self.file_label.setWordWrap(True)
+        layout.addWidget(self.file_label)
+        
+        # Cancel button
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.on_cancel)
+        layout.addWidget(self.cancel_button)
+    
+    def update_progress(self, current: int, total: int, filename: str = ""):
+        """Update progress display.
+        
+        Args:
+            current: Current progress count
+            total: Total count
+            filename: Optional current filename to display
+        """
+        percentage = int((current / total) * 100) if total > 0 else 0
+        self.progress_bar.setValue(percentage)
+        self.operation_label.setText(f"Processing {current} of {total} files...")
+        if filename:
+            self.file_label.setText(f"Current file: {filename}")
+        QApplication.processEvents()  # Keep UI responsive
+    
+    def set_operation(self, operation: str):
+        """Set the operation description.
+        
+        Args:
+            operation: Description of the operation being performed
+        """
+        self.operation_label.setText(operation)
+    
+    def on_cancel(self):
+        """Handle cancel button click."""
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setText("Cancelling...")
+        self.cancelled.emit()
+    
+    def finish(self):
+        """Close dialog when operation completes."""
+        self.accept()
+
+# ========== Base Worker Class (Phase 2.2) ==========
+class BaseWorker(QObject):
+    """Base class for background workers with common signal patterns.
+    
+    Provides standardized signals and methods for all background workers:
+    - progress: Emit progress updates (current, total, filename)
+    - finished: Emit when work completes (with optional result)
+    - error: Emit error messages
+    - Cancellation support via stop() method
+    
+    Subclasses should:
+    1. Override run() method with worker logic
+    2. Call emit_progress() to report progress
+    3. Call emit_finished() when complete
+    4. Call emit_error() on errors
+    5. Check self.should_stop() periodically for cancellation
+    
+    Example:
+        class MyWorker(BaseWorker):
+            def run(self):
+                for i, item in enumerate(items):
+                    if self.should_stop():
+                        break
+                    # Process item
+                    self.emit_progress(i, len(items), item.name)
+                self.emit_finished()
+    """
+    
+    progress = pyqtSignal(int, int, str)  # current, total, filename
+    finished = pyqtSignal(object)  # result (varies by subclass)
+    error = pyqtSignal(str)  # error message
+    
+    def __init__(self):
+        """Initialize base worker."""
+        super().__init__()
+        self._should_stop = False
+    
+    def stop(self):
+        """Request worker to stop gracefully."""
+        self._should_stop = True
+    
+    def should_stop(self) -> bool:
+        """Check if worker should stop.
+        
+        Returns:
+            True if stop was requested, False otherwise
+        """
+        return self._should_stop
+    
+    def emit_progress(self, current: int, total: int, filename: str = ""):
+        """Safely emit progress signal.
+        
+        Args:
+            current: Current progress count
+            total: Total count
+            filename: Optional filename being processed
+        """
+        if not self._should_stop:
+            self.progress.emit(current, total, filename)
+    
+    def emit_finished(self, result=None):
+        """Safely emit finished signal.
+        
+        Args:
+            result: Optional result data to emit
+        """
+        self.finished.emit(result)
+    
+    def emit_error(self, error_msg: str):
+        """Safely emit error signal.
+        
+        Args:
+            error_msg: Error message to emit
+        """
+        self.error.emit(error_msg)
+    
+    def run(self):
+        """Override in subclass to implement worker logic.
+        
+        Raises:
+            NotImplementedError: If not overridden in subclass
+        """
+        raise NotImplementedError("Subclass must implement run()")
+
 # ========== SeekSlider (click-to-seek) ==========
 from PyQt6.QtWidgets import QSlider
 class SeekSlider(QSlider):
