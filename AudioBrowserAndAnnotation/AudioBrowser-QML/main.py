@@ -82,7 +82,7 @@ def main():
     app.setOrganizationName("BandTools")
     app.setOrganizationDomain("github.com/TheMikaus/BandTools")
     app.setApplicationName("AudioBrowser-QML")
-    app.setApplicationVersion("0.5.0")  # Phase 5 complete
+    app.setApplicationVersion("0.7.0")  # Phase 7 in progress (55% complete)
     
     # Register custom QML types
     qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")
@@ -148,7 +148,7 @@ def main():
         print("Error: Failed to load QML file")
         return 1
     
-    print("AudioBrowser QML Phase 5 - Application started successfully")
+    print("AudioBrowser QML Phase 7 - Application started successfully")
     sys.stdout.flush()  # Ensure message is printed immediately
     return app.exec()
 
