@@ -11,6 +11,10 @@ import "../styles"
  * A wrapper around FileDialog configured for selecting directories.
  * Provides a consistent interface for directory selection across the app.
  * 
+ * NOTE: Qt Quick Dialogs FileDialog in Qt6 doesn't have a native folder selection mode.
+ * This implementation asks users to navigate to a folder and select any file in it,
+ * then uses the parent directory of that file.
+ * 
  * Signals:
  *   - folderSelected(string folder): Emitted when a folder is selected
  * 
@@ -33,25 +37,47 @@ FileDialog {
     signal folderSelected(string folder)
     
     // Dialog configuration
-    title: "Select Audio Directory"
-    fileMode: FileDialog.OpenFile  // Will be overridden by selectFolder
-    selectFolder: true  // Qt 6 way to select folders
+    title: "Navigate to Audio Directory (select any file in the folder)"
+    fileMode: FileDialog.OpenFile
     
     // Handle folder selection
     onAccepted: {
-        // Extract directory from selected folder URL
-        // When in OpenDirectory mode, selectedFile contains the selected directory
-        var folderPath = selectedFile.toString()
+        var folderPath = ""
         
-        // Remove file:// prefix if present
-        if (folderPath.startsWith("file://")) {
-            folderPath = folderPath.substring(7)
-        }
-        
-        // On Windows, handle the extra slash issue
-        // file:///C:/path becomes /C:/path, should be C:/path
-        if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
-            folderPath = folderPath.substring(1)
+        // Get the selected file or current folder
+        if (selectedFile.toString().length > 0) {
+            // User selected a file, extract its parent directory
+            folderPath = selectedFile.toString()
+            
+            // Remove file:// prefix if present
+            if (folderPath.startsWith("file://")) {
+                folderPath = folderPath.substring(7)
+            }
+            
+            // On Windows, handle the extra slash issue
+            // file:///C:/path becomes /C:/path, should be C:/path
+            if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
+                folderPath = folderPath.substring(1)
+            }
+            
+            // Extract directory from the file path
+            var lastSlash = Math.max(folderPath.lastIndexOf('/'), folderPath.lastIndexOf('\\'))
+            if (lastSlash > 0) {
+                folderPath = folderPath.substring(0, lastSlash)
+            }
+        } else {
+            // No file selected, use current folder
+            folderPath = currentFolder.toString()
+            
+            // Remove file:// prefix if present
+            if (folderPath.startsWith("file://")) {
+                folderPath = folderPath.substring(7)
+            }
+            
+            // On Windows, handle the extra slash issue
+            if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
+                folderPath = folderPath.substring(1)
+            }
         }
         
         console.log("FolderDialog: Selected folder:", folderPath)
