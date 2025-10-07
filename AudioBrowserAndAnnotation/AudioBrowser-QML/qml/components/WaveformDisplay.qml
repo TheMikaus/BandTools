@@ -354,6 +354,9 @@ Rectangle {
         waveform.peaks = peaks
         waveform.durationMs = duration
         
+        // Set audio file path for spectrogram computation
+        waveform.setAudioFile(filePath)
+        
         hasWaveform = peaks.length > 0
     }
     
@@ -374,6 +377,14 @@ Rectangle {
     
     function resetZoom() {
         zoomLevel = 1.0
+    }
+    
+    function setSpectrogramMode(enabled) {
+        waveform.showSpectrogram = enabled
+        // Set audio file path for spectrogram computation
+        if (enabled && filePath !== "") {
+            waveform.setAudioFile(filePath)
+        }
     }
     
     // Listen for clip changes to update markers

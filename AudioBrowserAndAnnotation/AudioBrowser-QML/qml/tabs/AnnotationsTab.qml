@@ -83,6 +83,35 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                 }
                 
+                // Spectrogram toggle
+                CheckBox {
+                    id: spectrogramToggle
+                    text: "Spectrogram"
+                    checked: false
+                    onCheckedChanged: {
+                        waveformDisplay.setSpectrogramMode(checked)
+                    }
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Show spectrogram view (frequency analysis)"
+                    ToolTip.delay: 500
+                    
+                    contentItem: Text {
+                        text: spectrogramToggle.text
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textColor
+                        leftPadding: spectrogramToggle.indicator.width + spectrogramToggle.spacing
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                
+                Rectangle {
+                    width: 1
+                    height: parent.height * 0.6
+                    color: Theme.borderColor
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                
                 StyledButton {
                     text: "Generate"
                     primary: true
