@@ -26,6 +26,7 @@ try:
     HAVE_PYDUB = True
 except ImportError:
     HAVE_PYDUB = False
+    AudioSegment = None
 
 
 # Constants
@@ -236,9 +237,14 @@ class WaveformWorker(QObject):
                 return samples, sr, dur_ms
                 
             except Exception as e:
-                raise RuntimeError(f"Failed to decode MP3 file: {e}")
+                # Check if this is an FFmpeg-related error
+                error_msg = str(e).lower()
+                if "ffmpeg" in error_msg or "decoder" in error_msg or "not found" in error_msg:
+                    raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
+                else:
+                    raise RuntimeError(f"Failed to decode audio file: {e}")
         
-        raise RuntimeError("No MP3 decoder found (install pydub and FFmpeg)")
+        raise RuntimeError("Audio format not supported (WAV files work without pydub; MP3/other formats require pydub and FFmpeg).")
     
     def _compute_peaks_progressive(self, samples: List[float], columns: int, chunk: int):
         """
