@@ -2,6 +2,14 @@
 
 This directory contains the QML-based implementation of the AudioBrowser application. This is a phased migration from the PyQt6 Widgets-based `audio_browser.py` to a modern Qt Quick/QML architecture.
 
+## 🚀 Quick Start
+
+**Getting QML errors?** Run this one command:
+```bash
+python3 verify_qml_installation.py
+```
+See [QUICK_VERIFICATION.md](QUICK_VERIFICATION.md) for instant help.
+
 ## Project Structure
 
 ```
