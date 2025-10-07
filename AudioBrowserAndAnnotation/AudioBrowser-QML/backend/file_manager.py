@@ -9,7 +9,7 @@ Provides file discovery, filtering, and metadata access.
 import os
 import wave
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 # Try to import optional dependencies for MP3 support
