@@ -22,6 +22,7 @@ Rectangle {
     // Properties
     property string filePath: ""
     property bool autoGenerate: true
+    property real bpm: 0.0  // Tempo in BPM for measure markers
     
     // State indicators
     property bool isLoading: false
@@ -58,9 +59,13 @@ Rectangle {
                 waveformColor: Theme.accentPrimary
                 playheadColor: Theme.accentDanger
                 axisColor: Theme.backgroundLight
+                tempoMarkerColor: Theme.textMuted
                 
                 // Bind playback position
                 positionMs: audioEngine.getPosition()
+                
+                // Bind BPM for tempo markers
+                bpm: root.bpm
                 
                 // Handle seek requests
                 onSeekRequested: function(positionMs) {

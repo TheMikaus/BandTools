@@ -33,11 +33,15 @@ class WaveformView(QQuickPaintedItem):
         # Playback state
         self._position_ms: int = 0
         
+        # Tempo/BPM for markers
+        self._bpm: float = 0.0
+        
         # Colors (default dark theme)
         self._background_color = QColor("#1e1e1e")
         self._waveform_color = QColor("#4a9eff")
         self._playhead_color = QColor("#ff4444")
         self._axis_color = QColor("#3e3e3e")
+        self._tempo_marker_color = QColor("#666666")
         
         # Enable mouse tracking for click-to-seek
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
@@ -114,6 +118,25 @@ class WaveformView(QQuickPaintedItem):
     
     axisColor = pyqtProperty(QColor, _get_axis_color, _set_axis_color)
     
+    def _get_bpm(self) -> float:
+        return self._bpm
+    
+    def _set_bpm(self, bpm: float) -> None:
+        if bpm != self._bpm:
+            self._bpm = float(bpm) if bpm > 0 else 0.0
+            self.update()
+    
+    bpm = pyqtProperty(float, _get_bpm, _set_bpm)
+    
+    def _get_tempo_marker_color(self) -> QColor:
+        return self._tempo_marker_color
+    
+    def _set_tempo_marker_color(self, color: QColor) -> None:
+        self._tempo_marker_color = color
+        self.update()
+    
+    tempoMarkerColor = pyqtProperty(QColor, _get_tempo_marker_color, _set_tempo_marker_color)
+    
     # ========== Painting ==========
     
     def paint(self, painter: QPainter) -> None:
@@ -131,6 +154,10 @@ class WaveformView(QQuickPaintedItem):
         mid_y = height / 2
         painter.setPen(QPen(self._axis_color, 1))
         painter.drawLine(0, int(mid_y), width, int(mid_y))
+        
+        # Draw tempo markers if BPM is set
+        if self._bpm > 0 and self._duration_ms > 0:
+            self._paint_tempo_markers(painter, width, height)
         
         # Draw waveform if data available
         if self._peaks and len(self._peaks) > 0:
@@ -182,6 +209,46 @@ class WaveformView(QQuickPaintedItem):
         # Draw playhead line
         painter.setPen(QPen(self._playhead_color, 2))
         painter.drawLine(x, 0, x, height)
+    
+    def _paint_tempo_markers(self, painter: QPainter, width: int, height: int) -> None:
+        """Paint tempo/measure markers based on BPM."""
+        if self._bpm <= 0 or self._duration_ms <= 0:
+            return
+        
+        # Calculate measure duration in milliseconds (assuming 4/4 time signature)
+        # 1 beat = 60,000ms / BPM
+        # 1 measure (4 beats) = 4 * (60,000 / BPM) = 240,000 / BPM
+        measure_duration_ms = 240000.0 / self._bpm
+        
+        # Calculate number of measures
+        num_measures = int(self._duration_ms / measure_duration_ms)
+        
+        # Limit to 1000 measures for performance
+        if num_measures > 1000:
+            return
+        
+        # Draw measure markers
+        pen = QPen(self._tempo_marker_color, 1, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        
+        for i in range(1, num_measures + 1):
+            measure_time_ms = i * measure_duration_ms
+            if measure_time_ms > self._duration_ms:
+                break
+            
+            # Calculate x position
+            progress = measure_time_ms / self._duration_ms
+            x = int(progress * width)
+            
+            # Draw vertical dashed line
+            painter.drawLine(x, 0, x, height)
+            
+            # Draw measure number every 4 measures
+            if i % 4 == 0:
+                painter.setPen(QPen(self._tempo_marker_color, 1))
+                painter.drawText(x + 2, 12, f"M{i}")
+                pen = QPen(self._tempo_marker_color, 1, Qt.PenStyle.DashLine)
+                painter.setPen(pen)
     
     # ========== Mouse interaction ==========
     
