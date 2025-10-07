@@ -129,6 +129,9 @@ def main():
     # Connect file manager to waveform engine for cache directory
     file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
     
+    # Save directory changes to settings
+    file_manager.currentDirectoryChanged.connect(settings_manager.setRootDir)
+    
     # Connect annotation manager to annotations model
     def update_annotations_model(file_path):
         annotations = annotation_manager.getAnnotations()
@@ -137,6 +140,11 @@ def main():
     
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())
+    
+    # Load saved root directory on startup
+    saved_root = settings_manager.getRootDir()
+    if saved_root and Path(saved_root).exists():
+        file_manager.setCurrentDirectory(saved_root)
     
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
