@@ -167,6 +167,23 @@ Item {
                         updateFileList()
                     }
                 }
+                
+                // Separator
+                Rectangle {
+                    width: 1
+                    Layout.fillHeight: true
+                    Layout.margins: 4
+                    color: Theme.borderColor
+                }
+                
+                // Practice Statistics button
+                StyledButton {
+                    text: "📊 Practice Stats"
+                    info: true
+                    onClicked: {
+                        practiceStatisticsDialog.open()
+                    }
+                }
             }
         }
         
