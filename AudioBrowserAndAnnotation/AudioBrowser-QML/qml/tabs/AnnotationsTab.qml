@@ -203,6 +203,14 @@ Item {
                         Layout.preferredWidth: 80
                         onClicked: clearAllDialog.open()
                     }
+                    
+                    StyledButton {
+                        text: "Export..."
+                        success: true
+                        enabled: annotationManager.getAnnotationCount() > 0
+                        Layout.preferredWidth: 80
+                        onClicked: exportAnnotationsDialog.open()
+                    }
                 }
                 
                 // Filter and display options

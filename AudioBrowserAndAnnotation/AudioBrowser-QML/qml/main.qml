@@ -244,6 +244,14 @@ ApplicationWindow {
             fileManager: fileManager
         }
         
+        // Export Annotations Dialog
+        ExportAnnotationsDialog {
+            id: exportAnnotationsDialog
+            currentFile: audioEngine.currentFile
+            annotationManager: annotationManager
+            fileManager: fileManager
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true
