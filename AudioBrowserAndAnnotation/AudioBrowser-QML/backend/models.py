@@ -31,21 +31,24 @@ class FileListModel(QAbstractListModel):
     ExtensionRole = Qt.ItemDataRole.UserRole + 6
     IsBestTakeRole = Qt.ItemDataRole.UserRole + 7
     IsPartialTakeRole = Qt.ItemDataRole.UserRole + 8
+    BPMRole = Qt.ItemDataRole.UserRole + 9
     
     # Signals
     filesChanged = pyqtSignal()
     
-    def __init__(self, parent=None, file_manager=None):
+    def __init__(self, parent=None, file_manager=None, tempo_manager=None):
         """
         Initialize the file list model.
         
         Args:
             parent: Parent QObject
             file_manager: Optional FileManager for extracting file metadata
+            tempo_manager: Optional TempoManager for BPM data
         """
         super().__init__(parent)
         self._files: List[Dict[str, Any]] = []
         self._file_manager = file_manager
+        self._tempo_manager = tempo_manager
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """Return the number of files in the model."""
@@ -76,6 +79,8 @@ class FileListModel(QAbstractListModel):
             return file_data.get("isBestTake", False)
         elif role == self.IsPartialTakeRole:
             return file_data.get("isPartialTake", False)
+        elif role == self.BPMRole:
+            return file_data.get("bpm", 0)
         
         return None
     
@@ -91,6 +96,7 @@ class FileListModel(QAbstractListModel):
             self.ExtensionRole: b"extension",
             self.IsBestTakeRole: b"isBestTake",
             self.IsPartialTakeRole: b"isPartialTake",
+            self.BPMRole: b"bpm",
         }
     
     # ========== QML-accessible methods ==========
@@ -134,6 +140,11 @@ class FileListModel(QAbstractListModel):
                     is_best_take = self._file_manager.isBestTake(file_path)
                     is_partial_take = self._file_manager.isPartialTake(file_path)
                 
+                # Get BPM from tempo manager
+                bpm = 0
+                if self._tempo_manager is not None:
+                    bpm = self._tempo_manager.getBPM(path.name)
+                
                 file_info = {
                     "filepath": str(path),
                     "filename": display_name,  # Use provided name if available
@@ -143,6 +154,7 @@ class FileListModel(QAbstractListModel):
                     "duration": duration_ms,
                     "isBestTake": is_best_take,
                     "isPartialTake": is_partial_take,
+                    "bpm": bpm,
                 }
                 self._files.append(file_info)
             except Exception:

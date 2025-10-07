@@ -51,6 +51,7 @@ from backend.batch_operations import BatchOperations
 from backend.practice_statistics import PracticeStatistics
 from backend.practice_goals import PracticeGoals
 from backend.setlist_manager import SetlistManager
+from backend.tempo_manager import TempoManager
 
 
 class ApplicationViewModel(QObject):
@@ -99,6 +100,7 @@ def main():
     color_manager = ColorManager(theme=settings_manager.getTheme())
     audio_engine = AudioEngine()
     file_manager = FileManager()
+    tempo_manager = TempoManager()
     waveform_engine = WaveformEngine()
     annotation_manager = AnnotationManager()
     clip_manager = ClipManager()
@@ -113,8 +115,8 @@ def main():
     # Create setlist manager (will be initialized with root path when directory changes)
     setlist_manager = SetlistManager(Path.home())
     
-    # Create data models (pass file_manager to FileListModel for duration extraction)
-    file_list_model = FileListModel(file_manager=file_manager)
+    # Create data models (pass file_manager and tempo_manager to FileListModel)
+    file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
     annotations_model = AnnotationsModel()
     
     # Create and expose view model to QML
@@ -126,6 +128,7 @@ def main():
     engine.rootContext().setContextProperty("colorManager", color_manager)
     engine.rootContext().setContextProperty("audioEngine", audio_engine)
     engine.rootContext().setContextProperty("fileManager", file_manager)
+    engine.rootContext().setContextProperty("tempoManager", tempo_manager)
     engine.rootContext().setContextProperty("fileListModel", file_list_model)
     engine.rootContext().setContextProperty("annotationsModel", annotations_model)
     engine.rootContext().setContextProperty("waveformEngine", waveform_engine)
@@ -145,6 +148,18 @@ def main():
     
     # Connect file manager to waveform engine for cache directory
     file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
+    
+    # Connect file manager to tempo manager
+    def update_tempo_directory(directory):
+        if directory:
+            tempo_manager.setCurrentDirectory(Path(directory))
+    file_manager.currentDirectoryChanged.connect(update_tempo_directory)
+    
+    # Connect tempo manager changes to file list refresh
+    def refresh_file_list_on_tempo_change():
+        # Re-populate the file list model to refresh BPM data
+        file_list_model.setFiles([str(f) for f in file_manager._discovered_files])
+    tempo_manager.tempoDataChanged.connect(refresh_file_list_on_tempo_change)
     
     # Connect file manager to batch operations
     file_manager.currentDirectoryChanged.connect(batch_operations.setCurrentDirectory)

@@ -451,6 +451,48 @@ Item {
                                 }
                             }
                             
+                            // BPM field (editable)
+                            TextField {
+                                id: bpmField
+                                Layout.preferredWidth: 50
+                                text: model.bpm > 0 ? Math.round(model.bpm).toString() : ""
+                                placeholderText: "BPM"
+                                font.pixelSize: Theme.fontSizeSmall
+                                horizontalAlignment: Text.AlignCenter
+                                color: Theme.textColor
+                                background: Rectangle {
+                                    color: bpmField.activeFocus ? Theme.backgroundLight : "transparent"
+                                    border.color: bpmField.activeFocus ? Theme.accentPrimary : Theme.borderColor
+                                    border.width: 1
+                                    radius: 2
+                                }
+                                validator: IntValidator { bottom: 0; top: 300 }
+                                
+                                onEditingFinished: {
+                                    var bpmValue = parseFloat(text)
+                                    if (isNaN(bpmValue) || text === "") {
+                                        bpmValue = 0
+                                    }
+                                    // Get the base filename for the model
+                                    var fileName = model.filename
+                                    // Extract actual filename from path if needed
+                                    var filePath = model.filepath
+                                    var pathParts = filePath.split("/")
+                                    fileName = pathParts[pathParts.length - 1]
+                                    
+                                    tempoManager.setBPM(fileName, bpmValue)
+                                }
+                                
+                                // Prevent mouse area from capturing clicks
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onPressed: function(mouse) {
+                                        bpmField.forceActiveFocus()
+                                        mouse.accepted = false
+                                    }
+                                }
+                            }
+                            
                             Label {
                                 text: model.filename
                                 font.pixelSize: Theme.fontSizeNormal
