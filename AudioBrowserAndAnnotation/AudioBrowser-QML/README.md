@@ -393,7 +393,12 @@ The application will attempt to install PyQt6 dependencies automatically if they
 - [Annotation Guide](docs/user_guides/ANNOTATION_GUIDE.md)
 - [Waveform Guide](docs/user_guides/WAVEFORM_GUIDE.md)
 - [Keyboard Shortcuts](docs/user_guides/KEYBOARD_SHORTCUTS.md)
-- [Batch Operations Guide](docs/user_guides/BATCH_OPERATIONS_GUIDE.md) ⭐ NEW
+- [Batch Operations Guide](docs/user_guides/BATCH_OPERATIONS_GUIDE.md)
+- [QML Error Troubleshooting](docs/user_guides/QML_ERROR_TROUBLESHOOTING.md) - Fix QML loading errors
+
+## Troubleshooting
+
+If you encounter QML compilation errors like "Duplicate signal name" or "Cannot assign to non-existent property", see the [QML Error Troubleshooting Guide](docs/user_guides/QML_ERROR_TROUBLESHOOTING.md) for detailed solutions.
 
 ## References
 
