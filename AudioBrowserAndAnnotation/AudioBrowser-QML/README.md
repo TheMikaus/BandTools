@@ -139,6 +139,13 @@ AudioBrowser-QML/
 - ✅ Added right-click context menus to Library tab
 - ✅ Added file properties dialog
 - ✅ Added Ctrl+4 keyboard shortcut for Folder Notes
+- ✅ Created BatchOperations backend module (~700 lines)
+- ✅ Created BatchRenameDialog QML component (~280 lines)
+- ✅ Created BatchConvertDialog QML component (~450 lines)
+- ✅ Created ProgressDialog QML component (~220 lines)
+- ✅ Added batch operations toolbar buttons
+- ✅ Integrated batch operations with main application
+- ✅ Comprehensive test suite for batch operations
 
 **Features**:
 - Folder-level notes with auto-save
@@ -146,6 +153,13 @@ AudioBrowser-QML/
 - System file manager integration
 - File properties display
 - Copy file path to clipboard
+- **Batch rename files** with sequential numbering (##_pattern format)
+- **Convert WAV to MP3** with bitrate selection
+- **Convert stereo to mono** with channel selection
+- **Volume boost export** with adjustable dB boost
+- Progress tracking for all batch operations
+- Preview before execution for batch rename
+- Error handling and status reporting
 
 ### ✅ Phase 5: Clips System (Complete)
 
@@ -264,6 +278,13 @@ The application will attempt to install PyQt6 dependencies automatically if they
 - Show in system file manager
 - Copy file path to clipboard
 - File properties dialog
+- **Batch rename files** with sequential numbering
+- **Batch convert WAV to MP3** with customizable bitrate
+- **Convert stereo to mono** with channel selection
+- **Volume boost export** with adjustable dB level
+- Progress dialogs for long-running operations
+- Preview before batch rename execution
+- Automatic file refresh after operations
 
 **Phase 2 Features** (Waveform Display):
 - Waveform visualization for audio files
@@ -346,6 +367,14 @@ The application will attempt to install PyQt6 dependencies automatically if they
 - **Python → QML**: Signals and Q_PROPERTY bindings
 - **QML → Python**: Q_INVOKABLE methods and pyqtSlot decorators
 - **Context Properties**: Backend objects exposed to QML via QQmlContext
+
+## User Guides
+
+- [Quick Start Guide](docs/user_guides/QUICK_START.md)
+- [Annotation Guide](docs/user_guides/ANNOTATION_GUIDE.md)
+- [Waveform Guide](docs/user_guides/WAVEFORM_GUIDE.md)
+- [Keyboard Shortcuts](docs/user_guides/KEYBOARD_SHORTCUTS.md)
+- [Batch Operations Guide](docs/user_guides/BATCH_OPERATIONS_GUIDE.md) ⭐ NEW
 
 ## References
 
