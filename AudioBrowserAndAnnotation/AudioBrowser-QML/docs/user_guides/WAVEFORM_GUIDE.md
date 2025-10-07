@@ -263,15 +263,18 @@ rm .waveform_cache.json
 
 ### MP3 Files Not Working
 
-**Problem**: Error when loading MP3 files
+**Problem**: Error when loading MP3 files, or MP3 playback works but waveforms don't generate
+
+**Important Note**: Qt Multimedia has built-in FFmpeg for audio *playback*, but **waveform generation requires a separate FFmpeg installation** that pydub can access.
 
 **Solutions**:
 1. Install pydub: `pip install pydub`
 2. Install FFmpeg on your system:
-   - **Windows**: Download from ffmpeg.org
+   - **Windows**: `winget install ffmpeg` (recommended) or download from ffmpeg.org
    - **Linux**: `sudo apt install ffmpeg`
    - **macOS**: `brew install ffmpeg`
-3. Convert MP3 to WAV as workaround
+3. Verify FFmpeg detection: Run `python3 test_ffmpeg_detection.py` in the AudioBrowser-QML directory
+4. If the above doesn't work, convert MP3 to WAV as a workaround
 
 ### Zoom Not Smooth
 
