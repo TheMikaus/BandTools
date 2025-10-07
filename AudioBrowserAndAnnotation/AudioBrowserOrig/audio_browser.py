@@ -1879,6 +1879,8 @@ def decode_audio_samples(path: Path, stereo: bool = False) -> Tuple[List[float],
             raise RuntimeError(f"Failed to decode WAV file: {e}")
         
     if HAVE_PYDUB:
+        # Ensure FFmpeg is found and configured before attempting MP3 decode
+        find_ffmpeg()
         try:
             seg = AudioSegment.from_file(str(path))
             sr = seg.frame_rate
@@ -1933,6 +1935,8 @@ def get_audio_channel_count(path: Path) -> int:
         except Exception:
             pass
     if HAVE_PYDUB:
+        # Ensure FFmpeg is found and configured before attempting audio decode
+        find_ffmpeg()
         try:
             seg = AudioSegment.from_file(str(path))
             return seg.channels
@@ -3308,6 +3312,8 @@ class ConvertWorker(QObject):
     def cancel(self): self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before conversion
+        find_ffmpeg()
         total = len(self._paths); done = 0
         for srcs in self._paths:
             if self._cancel: self.finished.emit(True); return
@@ -3350,6 +3356,9 @@ class MonoConvertWorker(QObject):
         self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before conversion
+        find_ffmpeg()
+        
         if self._cancel: 
             self.finished.emit(True)
             return
@@ -3431,6 +3440,9 @@ class VolumeBoostWorker(QObject):
         self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
+        
         if self._cancel: 
             self.finished.emit(True)
             return
@@ -3491,6 +3503,9 @@ class ChannelMutingWorker(QObject):
 
     def run(self):
         """Create channel-muted audio file in background."""
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
+        
         try:
             from pydub import AudioSegment
             
@@ -9168,6 +9183,9 @@ class AudioBrowser(QMainWindow):
                     return temp_path  # Use existing temp file
             except Exception:
                 pass
+        
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
         
         try:
             # Create channel-muted audio file
