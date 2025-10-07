@@ -213,6 +213,13 @@ ApplicationWindow {
             fileManager: fileManager
         }
         
+        // Setlist Builder Dialog
+        SetlistBuilderDialog {
+            id: setlistBuilderDialog
+            setlistManager: setlistManager
+            fileManager: fileManager
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true
