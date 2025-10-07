@@ -156,13 +156,10 @@ ApplicationWindow {
             
             ClipsTab {
                 id: clipsTab
-                clipManager: clipManager
-                audioEngine: audioEngine
             }
             
             FolderNotesTab {
                 id: folderNotesTab
-                folderNotesManager: folderNotesManager
             }
         }
         

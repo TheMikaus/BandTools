@@ -435,10 +435,6 @@ Item {
     
     FileContextMenu {
         id: contextMenu
-        audioEngine: audioEngine
-        annotationManager: annotationManager
-        clipManager: clipManager
-        fileManager: fileManager
         
         onAnnotationRequested: {
             // Switch to Annotations tab
@@ -477,7 +473,7 @@ Item {
             
             Label {
                 text: fileManager.getFileProperties(propertiesDialog.filePath)
-                color: Theme.foregroundColor
+                color: Theme.textColor
                 font.pixelSize: Theme.fontSizeNormal
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
@@ -525,6 +521,16 @@ Item {
             border.color: Theme.borderColor
             border.width: 1
             radius: Theme.radiusSmall
+        }
+    }
+    
+    // Initialize on component load
+    Component.onCompleted: {
+        // Check if we have a directory set
+        var currentDir = fileManager.getCurrentDirectory()
+        if (!currentDir || currentDir.length === 0) {
+            // No directory set, prompt user to select one
+            promptForDirectory()
         }
     }
 }
