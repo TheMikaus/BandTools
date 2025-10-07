@@ -236,10 +236,29 @@ sudo apt-get install -y \
 If system packages are not available, PyQt6 can be installed via pip (this will be attempted automatically on first run):
 
 ```bash
-pip install PyQt6
+pip install PyQt6 pydub
 ```
 
 Note: The QML modules may not be available via pip on all platforms. System packages are recommended.
+
+#### FFmpeg Requirement (For MP3 Support)
+
+**Important**: While Qt Multimedia includes built-in FFmpeg for audio playback, **waveform generation requires a separate FFmpeg installation** that pydub can access.
+
+Install FFmpeg:
+- **Windows**: `winget install ffmpeg`
+- **Linux**: `sudo apt install ffmpeg`
+- **macOS**: `brew install ffmpeg`
+
+Without FFmpeg:
+- ✅ WAV files will work (native Python support)
+- ✅ MP3/OGG/FLAC playback will work (Qt's built-in FFmpeg)
+- ❌ MP3/OGG/FLAC waveform generation will not work
+
+To verify FFmpeg is detected, run:
+```bash
+python3 test_ffmpeg_detection.py
+```
 
 ### Launch
 
