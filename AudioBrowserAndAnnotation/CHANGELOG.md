@@ -4,6 +4,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **QML Application: Menu Loading Error** - Fixed runtime error caused by Windows-specific QtQuick.Controls style plugin
+  - Replaced `import QtQuick.Controls` with `import QtQuick.Controls.Basic` in all 17 QML files
+  - The Windows style plugin (`qtquickcontrols2windowsstyleimplplugin.dll`) was causing "Type Menu unavailable" errors
+  - Basic style provides cross-platform compatibility without requiring platform-specific plugins
+  - Affected files: main.qml, all components/*, tabs/*, and dialogs/*
+  - Updated DEVELOPER_GUIDE.md templates to use QtQuick.Controls.Basic
+
 ### Added
 - **QML Migration Phase 1: Core Infrastructure** (IN PROGRESS)
   - Created `backend/settings_manager.py` (238 lines) - Centralized QSettings wrapper
