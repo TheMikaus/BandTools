@@ -103,13 +103,25 @@ class FileListModel(QAbstractListModel):
                 path = Path(file_path)
                 
                 # Extract duration if file_manager is available
+                # Try cached duration first, then extract from audio file
                 duration_ms = 0
                 if self._file_manager is not None:
-                    duration_ms = self._file_manager.getAudioDuration(file_path)
+                    # Try to get cached duration from .duration_cache.json
+                    duration_ms = self._file_manager.getCachedDuration(file_path)
+                    # If not cached, extract from audio file
+                    if duration_ms == 0:
+                        duration_ms = self._file_manager.getAudioDuration(file_path)
+                
+                # Get provided name from .provided_names.json if available
+                display_name = path.name
+                if self._file_manager is not None:
+                    provided_name = self._file_manager.getProvidedName(file_path)
+                    if provided_name:
+                        display_name = provided_name
                 
                 file_info = {
                     "filepath": str(path),
-                    "filename": path.name,
+                    "filename": display_name,  # Use provided name if available
                     "basename": path.stem,
                     "extension": path.suffix,
                     "filesize": path.stat().st_size if path.exists() else 0,
