@@ -46,6 +46,9 @@ class SettingsManager(QObject):
     def __init__(self, org_name: str = "BandTools", app_name: str = "AudioBrowser-QML"):
         super().__init__()
         self.settings = QSettings(org_name, app_name)
+        
+        # Check for and migrate legacy settings from old application
+        self._migrate_legacy_settings()
     
     # Geometry and layout
     @pyqtSlot(result=bytes)
@@ -224,3 +227,35 @@ class SettingsManager(QObject):
     def setAutoFingerprints(self, enabled: bool):
         """Set whether fingerprints are auto-generated."""
         self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(enabled))
+    
+    # Private helper methods
+    def _migrate_legacy_settings(self):
+        """
+        Migrate settings from legacy "Audio Folder Player" application.
+        
+        Checks for settings from the old PyQt5-based application and imports
+        the root directory if available and not already set.
+        """
+        # Check if we already have settings (don't overwrite)
+        current_root = self.settings.value(SETTINGS_KEY_ROOT, "", type=str)
+        if current_root:
+            # Already have settings, no need to migrate
+            return
+        
+        # Try to load legacy settings
+        legacy_settings = QSettings("YourCompany", "Audio Folder Player")
+        legacy_root = legacy_settings.value("root_dir", "", type=str)
+        
+        if legacy_root:
+            # Migrate the root directory setting
+            print(f"Migrating legacy root directory: {legacy_root}")
+            self.settings.setValue(SETTINGS_KEY_ROOT, legacy_root)
+            
+            # Optionally migrate other settings that exist
+            legacy_theme = legacy_settings.value("theme", "")
+            if legacy_theme:
+                self.settings.setValue(SETTINGS_KEY_THEME, legacy_theme)
+            
+            legacy_volume = legacy_settings.value("volume")
+            if legacy_volume is not None:
+                self.settings.setValue(SETTINGS_KEY_VOLUME, legacy_volume)

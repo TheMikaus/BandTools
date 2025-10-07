@@ -196,7 +196,7 @@ Item {
                 selectByMouse: true
                 
                 // Styling
-                color: Theme.foregroundColor
+                color: Theme.textColor
                 font.pixelSize: Theme.fontSizeNormal
                 font.family: "Monospace"
                 
@@ -239,7 +239,7 @@ Item {
         Label {
             text: "Are you sure you want to clear all notes for this folder?\n\n" +
                   "This action cannot be undone."
-            color: Theme.foregroundColor
+            color: Theme.textColor
         }
         
         background: Rectangle {

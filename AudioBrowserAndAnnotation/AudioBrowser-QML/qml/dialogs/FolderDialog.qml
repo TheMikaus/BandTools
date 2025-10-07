@@ -34,7 +34,8 @@ FileDialog {
     
     // Dialog configuration
     title: "Select Audio Directory"
-    fileMode: FileDialog.OpenDirectory  // Select directories, not files
+    fileMode: FileDialog.OpenFile  // Will be overridden by selectFolder
+    selectFolder: true  // Qt 6 way to select folders
     
     // Handle folder selection
     onAccepted: {
