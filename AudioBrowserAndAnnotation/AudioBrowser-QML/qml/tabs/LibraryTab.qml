@@ -15,28 +15,13 @@ Item {
     property bool sortAscending: true
     
     // Folder picker dialog
-    FileDialog {
+    FolderDialog {
         id: folderDialog
-        title: "Select Audio Directory"
-        fileMode: FileDialog.OpenFile
-        currentFolder: "file://" + fileManager.getCurrentDirectory()
         
-        onAccepted: {
-            var folderPath = selectedFile.toString()
-            
-            // Remove file:// prefix
-            if (folderPath.startsWith("file://")) {
-                folderPath = folderPath.substring(7)
-            }
-            
-            // Extract directory from selected file
-            var lastSlash = folderPath.lastIndexOf("/")
-            if (lastSlash > 0) {
-                folderPath = folderPath.substring(0, lastSlash)
-            }
-            
-            fileManager.setCurrentDirectory(folderPath)
-            directoryField.text = folderPath
+        onFolderSelected: function(folder) {
+            console.log("Folder selected:", folder)
+            fileManager.setCurrentDirectory(folder)
+            directoryField.text = folder
         }
     }
     
@@ -80,6 +65,8 @@ Item {
                     onAccepted: {
                         if (text.length > 0) {
                             fileManager.setCurrentDirectory(text)
+                        } else {
+                            promptForDirectory()
                         }
                     }
                 }
@@ -98,6 +85,8 @@ Item {
                         var dir = fileManager.getCurrentDirectory()
                         if (dir.length > 0) {
                             fileManager.discoverAudioFiles(dir)
+                        } else {
+                            promptForDirectory()
                         }
                     }
                 }
@@ -390,6 +379,11 @@ Item {
         }
     }
     
+    // Prompt user to select a directory
+    function promptForDirectory() {
+        noDirectoryDialog.open()
+    }
+    
     // Helper function to format file size
     function formatFileSize(bytes) {
         if (bytes < 1024) {
@@ -488,6 +482,42 @@ Item {
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
+        }
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusSmall
+        }
+    }
+    
+    // ========== No Directory Dialog ==========
+    
+    Dialog {
+        id: noDirectoryDialog
+        title: "No Directory Selected"
+        modal: true
+        anchors.centerIn: parent
+        width: 350
+        
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        
+        ColumnLayout {
+            width: parent.width
+            spacing: Theme.spacingNormal
+            
+            Label {
+                text: "No audio directory has been selected.\n\nWould you like to select a directory now?"
+                color: Theme.textColor
+                font.pixelSize: Theme.fontSizeNormal
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        
+        onAccepted: {
+            folderDialog.open()
         }
         
         background: Rectangle {

@@ -525,3 +525,117 @@ class FileManager(QObject):
                 
         except Exception:
             return "00:00"
+    
+    # ========== Metadata loading from original AudioBrowser ==========
+    
+    def _load_provided_names(self, directory: Path) -> Dict[str, str]:
+        """
+        Load provided names from .provided_names.json file.
+        
+        Args:
+            directory: Directory to check for metadata
+            
+        Returns:
+            Dictionary mapping filenames to provided names
+        """
+        try:
+            import json
+            names_file = directory / ".provided_names.json"
+            if names_file.exists():
+                with open(names_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load provided names: {e}")
+        return {}
+    
+    def _load_duration_cache(self, directory: Path) -> Dict[str, int]:
+        """
+        Load duration cache from .duration_cache.json file.
+        
+        Args:
+            directory: Directory to check for metadata
+            
+        Returns:
+            Dictionary mapping filenames to durations in milliseconds
+        """
+        try:
+            import json
+            cache_file = directory / ".duration_cache.json"
+            if cache_file.exists():
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Convert seconds to milliseconds if needed
+                    if data and isinstance(next(iter(data.values())), (int, float)):
+                        return {k: int(v * 1000) if v < 10000 else int(v) for k, v in data.items()}
+                    return data
+        except Exception as e:
+            print(f"Warning: Could not load duration cache: {e}")
+        return {}
+    
+    @pyqtSlot(str, result=str)
+    def getProvidedName(self, file_path: str) -> str:
+        """
+        Get the provided name for a file from metadata.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Provided name if available, otherwise empty string
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return ""
+            
+            directory = path.parent
+            provided_names = self._load_provided_names(directory)
+            
+            # Try both with and without extension
+            filename = path.name
+            if filename in provided_names:
+                return provided_names[filename]
+            
+            # Try stem (without extension)
+            stem = path.stem
+            if stem in provided_names:
+                return provided_names[stem]
+                
+        except Exception as e:
+            print(f"Error getting provided name: {e}")
+        
+        return ""
+    
+    @pyqtSlot(str, result=int)
+    def getCachedDuration(self, file_path: str) -> int:
+        """
+        Get cached duration for a file from metadata.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Cached duration in milliseconds, or 0 if not available
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return 0
+            
+            directory = path.parent
+            duration_cache = self._load_duration_cache(directory)
+            
+            # Try both with and without extension
+            filename = path.name
+            if filename in duration_cache:
+                return duration_cache[filename]
+            
+            # Try stem (without extension)
+            stem = path.stem
+            if stem in duration_cache:
+                return duration_cache[stem]
+                
+        except Exception as e:
+            print(f"Error getting cached duration: {e}")
+        
+        return 0

@@ -8,7 +8,7 @@ import "../styles"
 /**
  * FolderDialog - Directory selection dialog
  * 
- * A simple dialog wrapper around the FileDialog for selecting directories.
+ * A wrapper around FileDialog configured for selecting directories.
  * Provides a consistent interface for directory selection across the app.
  * 
  * Signals:
@@ -33,15 +33,13 @@ FileDialog {
     signal folderSelected(string folder)
     
     // Dialog configuration
-    title: "Select Directory"
-    fileMode: FileDialog.SaveFile  // Workaround: use SaveFile mode to get directory picker
-    
-    // Custom current folder property for convenience
-    property string currentFolder: ""
+    title: "Select Audio Directory"
+    fileMode: FileDialog.OpenDirectory  // Select directories, not files
     
     // Handle folder selection
     onAccepted: {
-        // Extract directory from selected file URL
+        // Extract directory from selected folder URL
+        // When in OpenDirectory mode, selectedFile contains the selected directory
         var folderPath = selectedFile.toString()
         
         // Remove file:// prefix if present
@@ -49,12 +47,13 @@ FileDialog {
             folderPath = folderPath.substring(7)
         }
         
-        // Get parent directory
-        var lastSlash = folderPath.lastIndexOf("/")
-        if (lastSlash > 0) {
-            folderPath = folderPath.substring(0, lastSlash)
+        // On Windows, handle the extra slash issue
+        // file:///C:/path becomes /C:/path, should be C:/path
+        if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
+            folderPath = folderPath.substring(1)
         }
         
+        console.log("FolderDialog: Selected folder:", folderPath)
         folderSelected(folderPath)
     }
 }
