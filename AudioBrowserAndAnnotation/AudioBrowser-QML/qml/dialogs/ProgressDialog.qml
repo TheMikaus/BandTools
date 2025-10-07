@@ -35,7 +35,6 @@ Dialog {
     // ========== Signals ==========
     
     signal cancelRequested()
-    signal closed()
     
     // ========== Dialog Configuration ==========
     
@@ -91,10 +90,6 @@ Dialog {
                 batchOperations.cancelCurrentOperation()
             }
         }
-    }
-    
-    onClosed: {
-        closed()
     }
     
     // ========== Content ==========

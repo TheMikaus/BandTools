@@ -19,6 +19,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Completes QML Migration Issue #2
 
 ### Fixed
+- **QML Compilation Errors** - Fixed QML loading errors in AudioBrowser-QML application
+  - **ProgressDialog.qml**: Removed duplicate `signal closed()` declaration that conflicted with Dialog's built-in signal
+  - **StyledButton.qml**: Added missing `info` property support with proper Theme.accentInfo styling
+  - Fixes error: "qt.qml.invalidOverride: Duplicate signal name: invalid override of property change signal"
+  - Fixes error: "Cannot assign to non-existent property 'info'" in LibraryTab.qml
+  - StyledButton now supports `info: true` property similar to `primary`, `danger`, and `success` variants
 - **FFmpeg Error Messages with Installation Instructions** - Enhanced error messages to include platform-specific FFmpeg installation commands
   - **AudioBrowserOrig**: Updated error messages in `decode_audio_samples()` function and `WaveformView._on_worker_error()`
     - FFmpeg-related errors now include installation instructions for Windows, Linux, and macOS
