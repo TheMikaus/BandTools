@@ -52,6 +52,7 @@ from backend.practice_statistics import PracticeStatistics
 from backend.practice_goals import PracticeGoals
 from backend.setlist_manager import SetlistManager
 from backend.tempo_manager import TempoManager
+from backend.fingerprint_engine import FingerprintEngine
 
 
 class ApplicationViewModel(QObject):
@@ -115,6 +116,9 @@ def main():
     # Create setlist manager (will be initialized with root path when directory changes)
     setlist_manager = SetlistManager(Path.home())
     
+    # Create fingerprint engine
+    fingerprint_engine = FingerprintEngine()
+    
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
     annotations_model = AnnotationsModel()
@@ -139,6 +143,7 @@ def main():
     engine.rootContext().setContextProperty("practiceStatistics", practice_statistics)
     engine.rootContext().setContextProperty("practiceGoals", practice_goals)
     engine.rootContext().setContextProperty("setlistManager", setlist_manager)
+    engine.rootContext().setContextProperty("fingerprintEngine", fingerprint_engine)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
@@ -180,6 +185,23 @@ def main():
         annotations = annotation_manager.getAnnotations()
         annotations_model.setAnnotations(annotations)
     annotation_manager.annotationsChanged.connect(update_annotations_model)
+    
+    # Connect fingerprint engine to file manager
+    file_manager.currentDirectoryChanged.connect(fingerprint_engine.setCurrentDirectory)
+    
+    # Set up audio loader for fingerprint engine
+    def load_audio_for_fingerprinting(filepath: str):
+        """Load audio samples for fingerprinting."""
+        try:
+            # Use waveform engine's audio loading capability
+            from backend.waveform_engine import load_audio_data
+            samples, sr = load_audio_data(Path(filepath))
+            return samples, sr
+        except Exception as e:
+            print(f"Error loading audio for fingerprinting: {e}")
+            return None, None
+    
+    fingerprint_engine.setAudioLoader(load_audio_for_fingerprinting)
     
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())

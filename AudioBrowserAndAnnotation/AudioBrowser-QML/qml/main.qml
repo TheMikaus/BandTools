@@ -139,6 +139,23 @@ ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
+            
+            TabButton {
+                text: "Fingerprints"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 4 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 4 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
         
         // Tab content
@@ -161,6 +178,13 @@ ApplicationWindow {
             
             FolderNotesTab {
                 id: folderNotesTab
+            }
+            
+            FingerprintsTab {
+                id: fingerprintsTab
+                fingerprintEngine: fingerprintEngine
+                fileManager: fileManager
+                fileListModel: fileListModel
             }
         }
         
