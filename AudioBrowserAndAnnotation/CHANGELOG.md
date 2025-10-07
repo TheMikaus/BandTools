@@ -5,6 +5,28 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **Python 3.13 Compatibility** - Replaced deprecated `audioop` module with pure Python implementation
+  - The `audioop` module was removed in Python 3.13
+  - Added `convert_audio_samples()` function as replacement for `audioop.lin2lin()`
+  - Updated both AudioBrowserOrig/audio_browser.py and AudioBrowser-QML/backend/waveform_engine.py
+  - Supports all sample width conversions (8-bit, 16-bit, 24-bit, 32-bit)
+  - Properly handles sample value clamping and scaling
+  - No functionality changes - transparent replacement
+
+### Changed
+- **Documentation Reorganization** - Restructured repository for better organization
+  - Created `AudioBrowserOrig/` folder for the original PyQt6 widgets version
+  - Moved `audio_browser.py` and all related files to `AudioBrowserOrig/`
+  - Moved original documentation to `AudioBrowserOrig/docs/`
+  - Organized AudioBrowser-QML documentation into subfolders:
+    - `docs/user_guides/` - User-facing documentation
+    - `docs/technical/` - Developer and technical docs
+    - `docs/phase_reports/` - Development phase reports
+  - Created documentation index files for easy navigation
+  - Updated all cross-references in README.md
+  - Both versions (Original and QML) are now clearly separated
+
+### Fixed (QML Application)
 - **QML Application: Folder Dialog Selection** - Fixed folder selection requiring file selection instead of directory
   - Changed `FolderDialog.qml` from `FileDialog.SaveFile` to `FileDialog.OpenDirectory` mode
   - Added Windows path handling to remove extra "/" from paths like `/C:/path`
