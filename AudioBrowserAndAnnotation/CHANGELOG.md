@@ -19,6 +19,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Completes QML Migration Issue #2
 
 ### Fixed
+- **AudioBrowserOrig: Waveform Generation Error Handling** - Fixed misleading FFmpeg error messages
+  - Added proper exception handling to `decode_audio_samples()` function
+  - WAV file decoding now has dedicated error handling with clear error messages
+  - MP3/pydub decoding now catches FFmpeg-related errors separately
+  - Improved error messages to differentiate between missing pydub and missing FFmpeg
+  - Fixed undefined variable issues when pydub import fails
+  - Error messages now accurately reflect the actual problem (WAV decode error, pydub unavailable, or FFmpeg missing)
 - **Python 3.13 Compatibility** - Replaced deprecated `audioop` module with pure Python implementation
   - The `audioop` module was removed in Python 3.13
   - Added `convert_audio_samples()` function as replacement for `audioop.lin2lin()`

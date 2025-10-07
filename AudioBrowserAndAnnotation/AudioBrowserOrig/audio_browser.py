@@ -129,6 +129,11 @@ if HAVE_PYDUB:
         from pydub.utils import which as pydub_which
     except Exception:
         HAVE_PYDUB = False
+        AudioSegment = None
+        pydub_which = None
+else:
+    AudioSegment = None
+    pydub_which = None
 
 # ========== Qt imports ==========
 from PyQt6.QtCore import (
