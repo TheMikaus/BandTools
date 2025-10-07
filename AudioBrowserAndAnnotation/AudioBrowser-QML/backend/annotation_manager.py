@@ -454,3 +454,112 @@ class AnnotationManager(QObject):
                 
         except Exception as e:
             self.errorOccurred.emit(f"Failed to save annotations: {str(e)}")
+    
+    # ========== Export methods ==========
+    
+    @pyqtSlot(str, str, result=bool)
+    def exportAnnotations(self, export_path: str, export_format: str = "text") -> bool:
+        """
+        Export annotations to a file in the specified format.
+        
+        Args:
+            export_path: Path to save the export file
+            export_format: Export format - "text", "csv", or "markdown"
+            
+        Returns:
+            True if export was successful, False otherwise
+        """
+        if not self._current_file:
+            self.errorOccurred.emit("No file selected")
+            return False
+        
+        annotations = self._annotations.get(self._current_file, [])
+        if not annotations:
+            self.errorOccurred.emit("No annotations to export")
+            return False
+        
+        try:
+            export_file = Path(export_path)
+            export_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            if export_format == "csv":
+                self._export_csv(export_file, annotations)
+            elif export_format == "markdown":
+                self._export_markdown(export_file, annotations)
+            else:  # default to text
+                self._export_text(export_file, annotations)
+            
+            return True
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Failed to export annotations: {str(e)}")
+            return False
+    
+    def _export_text(self, export_file: Path, annotations: List[Dict[str, Any]]) -> None:
+        """Export annotations as plain text."""
+        with open(export_file, 'w', encoding='utf-8') as f:
+            f.write(f"Annotations for: {Path(self._current_file).name}\n")
+            f.write(f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("=" * 80 + "\n\n")
+            
+            for i, annotation in enumerate(annotations, 1):
+                timestamp_ms = annotation.get("timestamp_ms", 0)
+                minutes = timestamp_ms // 60000
+                seconds = (timestamp_ms % 60000) / 1000
+                
+                f.write(f"[{i}] {minutes:02.0f}:{seconds:06.3f}\n")
+                f.write(f"    Category: {annotation.get('category', 'notes')}\n")
+                f.write(f"    User: {annotation.get('user', 'unknown')}\n")
+                
+                if annotation.get("important", False):
+                    f.write(f"    ⭐ IMPORTANT\n")
+                
+                f.write(f"    Text: {annotation.get('text', '')}\n")
+                f.write("\n")
+    
+    def _export_csv(self, export_file: Path, annotations: List[Dict[str, Any]]) -> None:
+        """Export annotations as CSV."""
+        import csv
+        
+        with open(export_file, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            
+            # Write header
+            writer.writerow(['Timestamp', 'Time (MM:SS.mmm)', 'Category', 'User', 'Important', 'Text'])
+            
+            # Write annotations
+            for annotation in annotations:
+                timestamp_ms = annotation.get("timestamp_ms", 0)
+                minutes = timestamp_ms // 60000
+                seconds = (timestamp_ms % 60000) / 1000
+                time_str = f"{minutes:02.0f}:{seconds:06.3f}"
+                
+                writer.writerow([
+                    timestamp_ms,
+                    time_str,
+                    annotation.get('category', 'notes'),
+                    annotation.get('user', 'unknown'),
+                    'Yes' if annotation.get('important', False) else 'No',
+                    annotation.get('text', '')
+                ])
+    
+    def _export_markdown(self, export_file: Path, annotations: List[Dict[str, Any]]) -> None:
+        """Export annotations as Markdown."""
+        with open(export_file, 'w', encoding='utf-8') as f:
+            f.write(f"# Annotations for {Path(self._current_file).name}\n\n")
+            f.write(f"**Exported:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"**Total annotations:** {len(annotations)}\n\n")
+            f.write("---\n\n")
+            
+            for i, annotation in enumerate(annotations, 1):
+                timestamp_ms = annotation.get("timestamp_ms", 0)
+                minutes = timestamp_ms // 60000
+                seconds = (timestamp_ms % 60000) / 1000
+                
+                important_marker = "⭐ " if annotation.get("important", False) else ""
+                
+                f.write(f"## {important_marker}[{i}] {minutes:02.0f}:{seconds:06.3f}\n\n")
+                f.write(f"- **Category:** {annotation.get('category', 'notes')}\n")
+                f.write(f"- **User:** {annotation.get('user', 'unknown')}\n")
+                f.write(f"\n{annotation.get('text', '')}\n\n")
+                f.write("---\n\n")

@@ -100,11 +100,11 @@ This document provides a comprehensive comparison of features between the origin
 | Drag markers | ✅ | ✅ | ✅ Complete |
 | Multi-user support | ✅ | ✅ | ✅ Complete |
 | Merged view (all users) | ✅ | 🚧 | 🚧 Partial |
-| Export to text file | ✅ | ❌ | ❌ Not Implemented |
+| Export to text file | ✅ | ✅ | ✅ Complete (Phase 8) |
 | Folder notes | ✅ | ✅ | ✅ Complete (Phase 7) |
 | Keyboard shortcuts (Ctrl+A) | ✅ | ✅ | ✅ Complete |
 
-**Notes**: Annotation system is fully functional. Export feature pending.
+**Notes**: Annotation system is fully functional. Export feature now complete with enhanced formats (text, CSV, markdown).
 
 ---
 
@@ -259,7 +259,7 @@ This document provides a comprehensive comparison of features between the origin
 | Documentation Browser | ✅ | ❌ | ❌ Not Implemented |
 | Export Best Takes | ✅ | ❌ | ❌ Not Implemented |
 | Batch Rename Confirmation | ✅ | ❌ | ❌ Not Implemented |
-| Export Annotations | ✅ | ❌ | ❌ Not Implemented |
+| Export Annotations | ✅ | ✅ | ✅ Complete (Phase 8) |
 | Fingerprint Progress | ✅ | ❌ | ❌ Not Implemented |
 
 **Notes**: Most dialogs for advanced features are not yet implemented.
