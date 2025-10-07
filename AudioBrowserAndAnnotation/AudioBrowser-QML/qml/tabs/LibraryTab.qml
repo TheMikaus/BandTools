@@ -184,6 +184,15 @@ Item {
                         practiceStatisticsDialog.open()
                     }
                 }
+                
+                // Practice Goals button
+                StyledButton {
+                    text: "🎯 Practice Goals"
+                    info: true
+                    onClicked: {
+                        practiceGoalsDialog.open()
+                    }
+                }
             }
         }
         

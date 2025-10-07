@@ -205,6 +205,14 @@ ApplicationWindow {
             fileManager: fileManager
         }
         
+        // Practice Goals Dialog
+        PracticeGoalsDialog {
+            id: practiceGoalsDialog
+            practiceGoals: practiceGoals
+            practiceStatistics: practiceStatistics
+            fileManager: fileManager
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true
