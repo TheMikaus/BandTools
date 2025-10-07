@@ -786,7 +786,7 @@ class FileManager(QObject):
     
     def _load_takes_metadata(self, directory: Path) -> Dict[str, Any]:
         """
-        Load takes metadata from .takes_metadata.json file.
+        Load takes metadata from .takes_metadata.json file or legacy .audio_notes_*.json files.
         
         Args:
             directory: Directory to check for metadata
@@ -794,16 +794,44 @@ class FileManager(QObject):
         Returns:
             Dictionary with 'best_takes' and 'partial_takes' lists
         """
+        result = {"best_takes": [], "partial_takes": []}
+        
         try:
             import json
+            
+            # Try new format first
             takes_file = self._get_takes_file(directory)
             if takes_file.exists():
                 with open(takes_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if data:
+                        return data
+            
+            # Fall back to legacy format: .audio_notes_*.json files
+            # These files contain per-file annotations with best_take and partial_take flags
+            for notes_file in directory.glob(".audio_notes_*.json"):
+                try:
+                    with open(notes_file, 'r', encoding='utf-8') as f:
+                        notes_data = json.load(f)
+                        
+                        # The old format stores data per filename
+                        # Each entry can have 'best_take' and 'partial_take' boolean flags
+                        for filename, file_data in notes_data.items():
+                            if isinstance(file_data, dict):
+                                if file_data.get('best_take', False):
+                                    if filename not in result['best_takes']:
+                                        result['best_takes'].append(filename)
+                                if file_data.get('partial_take', False):
+                                    if filename not in result['partial_takes']:
+                                        result['partial_takes'].append(filename)
+                except Exception as e:
+                    print(f"Warning: Could not load legacy notes file {notes_file}: {e}")
+                    continue
+                    
         except Exception as e:
             print(f"Warning: Could not load takes metadata: {e}")
         
-        return {"best_takes": [], "partial_takes": []}
+        return result
     
     def _save_takes_metadata(self, directory: Path, metadata: Dict[str, Any]) -> None:
         """

@@ -689,9 +689,8 @@ Item {
                         policy: ScrollBar.AsNeeded
                     }
                 }
-            }
-        }
-        }  // End of Files panel ColumnLayout
+            }  // End of Files panel ColumnLayout
+        }  // End of Files panel Rectangle
         }  // End of RowLayout (split view)
         
         // Status bar
