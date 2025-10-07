@@ -149,3 +149,8 @@ service_account.json
 
 # Sync version files (local state)
 .sync_version.json
+
+# QML cache files
+*.qmlc
+.qmlcache/
+.waveform_cache.json

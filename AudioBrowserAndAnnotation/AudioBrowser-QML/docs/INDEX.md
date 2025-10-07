@@ -17,6 +17,7 @@ End-user documentation and how-to guides:
 - [ANNOTATION_GUIDE.md](user_guides/ANNOTATION_GUIDE.md) - Guide to using annotations
 - [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
+- [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
 - [SPECTROGRAM_USER_GUIDE.md](user_guides/SPECTROGRAM_USER_GUIDE.md) - Spectrogram feature guide (Issue 7)
