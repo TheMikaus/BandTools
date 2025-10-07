@@ -14,6 +14,8 @@ Dialog {
     
     property string currentFile: ""
     property int annotationCount: 0
+    property var annotationManager: null
+    property var fileManager: null
     
     // Update annotation count when dialog opens
     onOpened: {
