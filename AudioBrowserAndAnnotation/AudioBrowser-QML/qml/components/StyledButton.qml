@@ -32,6 +32,7 @@ Button {
     property bool primary: false
     property bool danger: false
     property bool success: false
+    property bool info: false
     
     // Sizing
     implicitHeight: Theme.buttonHeight
@@ -51,7 +52,7 @@ Button {
             if (!control.enabled) {
                 return Theme.textMuted
             }
-            if (primary || danger || success) {
+            if (primary || danger || success || info) {
                 return "#ffffff"
             }
             return control.hovered ? Theme.textColor : Theme.textSecondary
@@ -71,17 +72,20 @@ Button {
                 if (primary) return Qt.darker(Theme.accentPrimary, 1.3)
                 if (danger) return Qt.darker(Theme.accentDanger, 1.3)
                 if (success) return Qt.darker(Theme.accentSuccess, 1.3)
+                if (info) return Qt.darker(Theme.accentInfo, 1.3)
                 return Qt.darker(Theme.backgroundLight, 1.2)
             }
             if (control.hovered) {
                 if (primary) return Qt.lighter(Theme.accentPrimary, 1.1)
                 if (danger) return Qt.lighter(Theme.accentDanger, 1.1)
                 if (success) return Qt.lighter(Theme.accentSuccess, 1.1)
+                if (info) return Qt.lighter(Theme.accentInfo, 1.1)
                 return Theme.backgroundLight
             }
             if (primary) return Theme.accentPrimary
             if (danger) return Theme.accentDanger
             if (success) return Theme.accentSuccess
+            if (info) return Theme.accentInfo
             return Theme.backgroundLight
         }
         border.color: {
@@ -92,11 +96,12 @@ Button {
                 if (primary) return Theme.accentPrimary
                 if (danger) return Theme.accentDanger
                 if (success) return Theme.accentSuccess
+                if (info) return Theme.accentInfo
                 return Theme.textSecondary
             }
             return Theme.borderColor
         }
-        border.width: primary || danger || success ? 0 : 1
+        border.width: primary || danger || success || info ? 0 : 1
         radius: Theme.radiusSmall
         
         // Smooth color transitions
