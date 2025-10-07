@@ -15,8 +15,10 @@ This directory contains all documentation for the AudioBrowser-QML application, 
 End-user documentation and how-to guides:
 
 - [ANNOTATION_GUIDE.md](user_guides/ANNOTATION_GUIDE.md) - Guide to using annotations
+- [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
+- [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
 - [WAVEFORM_GUIDE.md](user_guides/WAVEFORM_GUIDE.md) - Waveform display features
 
 ### Technical Documentation (`technical/`)
@@ -39,9 +41,10 @@ Developer and technical documentation:
 
 Feature implementation summaries and completion reports:
 
-- [BEST_PARTIAL_TAKE_INDICATORS.md](BEST_PARTIAL_TAKE_INDICATORS.md) - Best/Partial take indicators feature
+- [BEST_PARTIAL_TAKE_INDICATORS.md](BEST_PARTIAL_TAKE_INDICATORS.md) - Best/Partial take indicators feature (Issue 2)
 - [ISSUE_2_COMPLETION_SUMMARY.md](ISSUE_2_COMPLETION_SUMMARY.md) - Issue 2 completion summary
 - [PRACTICE_STATISTICS_IMPLEMENTATION.md](PRACTICE_STATISTICS_IMPLEMENTATION.md) - Practice statistics feature (Issue 3)
+- [technical/SETLIST_BUILDER_IMPLEMENTATION.md](technical/SETLIST_BUILDER_IMPLEMENTATION.md) - Setlist builder feature (Issue 5)
 
 ### Phase Reports (`phase_reports/`)
 
