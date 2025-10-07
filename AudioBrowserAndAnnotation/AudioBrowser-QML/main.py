@@ -34,6 +34,30 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
             __import__(mod_name)
             return True
         except ImportError as post_install_error:
+            # Special handling for pydub: if it fails with pyaudioop error on Python 3.13+,
+            # install audioop-lts which provides the missing audioop module
+            if mod_name == "pydub" and "pyaudioop" in str(post_install_error) and sys.version_info >= (3, 13):
+                print(f"WARNING: pydub requires audioop module (removed in Python 3.13+). Installing audioop-lts...", file=sys.stderr)
+                try:
+                    import subprocess
+                    # Try to install audioop-lts
+                    for args in ([sys.executable, "-m", "pip", "install", "audioop-lts"],
+                                 [sys.executable, "-m", "pip", "install", "--user", "audioop-lts"]):
+                        try:
+                            subprocess.check_call(args)
+                            break
+                        except subprocess.CalledProcessError:
+                            continue
+                    
+                    # Try importing pydub again
+                    __import__(mod_name)
+                    print(f"SUCCESS: {mod_name} now works with audioop-lts", file=sys.stderr)
+                    return True
+                except Exception as audioop_error:
+                    error_msg = f"Successfully installed {pip_name} but still cannot import {mod_name}: {post_install_error}. Also tried installing audioop-lts: {audioop_error}"
+                    print(f"ERROR: {error_msg}", file=sys.stderr)
+                    raise
+            
             error_msg = f"Successfully installed {pip_name} but still cannot import {mod_name}: {post_install_error}"
             print(f"ERROR: {error_msg}", file=sys.stderr)
             raise
