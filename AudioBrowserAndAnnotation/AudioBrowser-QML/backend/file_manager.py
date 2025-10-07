@@ -9,7 +9,7 @@ Provides file discovery, filtering, and metadata access.
 import os
 import wave
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 # Try to import optional dependencies for MP3 support
@@ -45,6 +45,10 @@ class FileManager(QObject):
         self._current_directory: Optional[Path] = None
         self._discovered_files: List[Path] = []
         self._audio_extensions = AUDIO_EXTENSIONS
+        
+        # Best/Partial take tracking
+        self._best_takes: Set[str] = set()  # Set of file paths marked as best takes
+        self._partial_takes: Set[str] = set()  # Set of file paths marked as partial takes
     
     # ========== QML-accessible methods ==========
     
@@ -68,6 +72,9 @@ class FileManager(QObject):
             
             self._current_directory = path
             self.currentDirectoryChanged.emit(str(path))
+            
+            # Load takes metadata for the new directory
+            self._load_takes_for_directory(path)
             
             # Automatically discover files in the new directory
             self.discoverAudioFiles(str(path))
@@ -639,3 +646,239 @@ class FileManager(QObject):
             print(f"Error getting cached duration: {e}")
         
         return 0
+    
+    # ========== Best/Partial Take Tracking ==========
+    
+    def _get_takes_file(self, directory: Path) -> Path:
+        """
+        Get the path to the takes metadata file for a directory.
+        
+        Args:
+            directory: Directory to get metadata file for
+            
+        Returns:
+            Path to .takes_metadata.json file
+        """
+        return directory / ".takes_metadata.json"
+    
+    def _load_takes_metadata(self, directory: Path) -> Dict[str, Any]:
+        """
+        Load takes metadata from .takes_metadata.json file.
+        
+        Args:
+            directory: Directory to check for metadata
+            
+        Returns:
+            Dictionary with 'best_takes' and 'partial_takes' lists
+        """
+        try:
+            import json
+            takes_file = self._get_takes_file(directory)
+            if takes_file.exists():
+                with open(takes_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load takes metadata: {e}")
+        
+        return {"best_takes": [], "partial_takes": []}
+    
+    def _save_takes_metadata(self, directory: Path, metadata: Dict[str, Any]) -> None:
+        """
+        Save takes metadata to .takes_metadata.json file.
+        
+        Args:
+            directory: Directory to save metadata to
+            metadata: Dictionary with 'best_takes' and 'partial_takes' lists
+        """
+        try:
+            import json
+            takes_file = self._get_takes_file(directory)
+            with open(takes_file, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.errorOccurred.emit(f"Error saving takes metadata: {e}")
+    
+    def _load_takes_for_directory(self, directory: Path) -> None:
+        """
+        Load takes metadata for a directory into internal state.
+        
+        Args:
+            directory: Directory to load metadata for
+        """
+        metadata = self._load_takes_metadata(directory)
+        
+        # Clear existing state
+        self._best_takes.clear()
+        self._partial_takes.clear()
+        
+        # Load best takes (convert to full paths)
+        for filename in metadata.get("best_takes", []):
+            file_path = directory / filename
+            self._best_takes.add(str(file_path))
+        
+        # Load partial takes (convert to full paths)
+        for filename in metadata.get("partial_takes", []):
+            file_path = directory / filename
+            self._partial_takes.add(str(file_path))
+    
+    @pyqtSlot(str)
+    def markAsBestTake(self, file_path: str) -> None:
+        """
+        Mark a file as a best take.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Add to best takes set
+            self._best_takes.add(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename not in metadata.get("best_takes", []):
+                metadata.setdefault("best_takes", []).append(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error marking best take: {e}")
+    
+    @pyqtSlot(str)
+    def unmarkAsBestTake(self, file_path: str) -> None:
+        """
+        Unmark a file as a best take.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Remove from best takes set
+            self._best_takes.discard(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename in metadata.get("best_takes", []):
+                metadata["best_takes"].remove(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error unmarking best take: {e}")
+    
+    @pyqtSlot(str)
+    def markAsPartialTake(self, file_path: str) -> None:
+        """
+        Mark a file as a partial take.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Add to partial takes set
+            self._partial_takes.add(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename not in metadata.get("partial_takes", []):
+                metadata.setdefault("partial_takes", []).append(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error marking partial take: {e}")
+    
+    @pyqtSlot(str)
+    def unmarkAsPartialTake(self, file_path: str) -> None:
+        """
+        Unmark a file as a partial take.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Remove from partial takes set
+            self._partial_takes.discard(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename in metadata.get("partial_takes", []):
+                metadata["partial_takes"].remove(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error unmarking partial take: {e}")
+    
+    @pyqtSlot(str, result=bool)
+    def isBestTake(self, file_path: str) -> bool:
+        """
+        Check if a file is marked as a best take.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            True if marked as best take
+        """
+        return file_path in self._best_takes
+    
+    @pyqtSlot(str, result=bool)
+    def isPartialTake(self, file_path: str) -> bool:
+        """
+        Check if a file is marked as a partial take.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            True if marked as partial take
+        """
+        return file_path in self._partial_takes
+    
+    @pyqtSlot(result=list)
+    def getBestTakes(self) -> List[str]:
+        """
+        Get list of files marked as best takes.
+        
+        Returns:
+            List of file paths marked as best takes
+        """
+        return list(self._best_takes)
+    
+    @pyqtSlot(result=list)
+    def getPartialTakes(self) -> List[str]:
+        """
+        Get list of files marked as partial takes.
+        
+        Returns:
+            List of file paths marked as partial takes
+        """
+        return list(self._partial_takes)

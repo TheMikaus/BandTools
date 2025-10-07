@@ -137,6 +137,71 @@ Menu {
     }
     
     MenuItem {
+        text: fileManager && fileManager.isBestTake(filePath) ? "★ Unmark Best Take" : "★ Mark as Best Take"
+        enabled: filePath !== ""
+        
+        background: Rectangle {
+            implicitWidth: 200
+            implicitHeight: 30
+            color: parent.hovered ? Theme.backgroundLight : "transparent"
+        }
+        
+        contentItem: Text {
+            text: parent.text
+            font.pixelSize: Theme.fontSizeNormal
+            color: parent.enabled ? Theme.foregroundColor : Theme.textMuted
+            leftPadding: 10
+            verticalAlignment: Text.AlignVCenter
+        }
+        
+        onTriggered: {
+            if (fileManager && filePath) {
+                if (fileManager.isBestTake(filePath)) {
+                    fileManager.unmarkAsBestTake(filePath);
+                } else {
+                    fileManager.markAsBestTake(filePath);
+                }
+            }
+        }
+    }
+    
+    MenuItem {
+        text: fileManager && fileManager.isPartialTake(filePath) ? "◐ Unmark Partial Take" : "◐ Mark as Partial Take"
+        enabled: filePath !== ""
+        
+        background: Rectangle {
+            implicitWidth: 200
+            implicitHeight: 30
+            color: parent.hovered ? Theme.backgroundLight : "transparent"
+        }
+        
+        contentItem: Text {
+            text: parent.text
+            font.pixelSize: Theme.fontSizeNormal
+            color: parent.enabled ? Theme.foregroundColor : Theme.textMuted
+            leftPadding: 10
+            verticalAlignment: Text.AlignVCenter
+        }
+        
+        onTriggered: {
+            if (fileManager && filePath) {
+                if (fileManager.isPartialTake(filePath)) {
+                    fileManager.unmarkAsPartialTake(filePath);
+                } else {
+                    fileManager.markAsPartialTake(filePath);
+                }
+            }
+        }
+    }
+    
+    MenuSeparator {
+        background: Rectangle {
+            implicitHeight: 1
+            color: Theme.borderColor
+        }
+    }
+    
+    MenuItem {
         text: "📁 Show in Explorer"
         enabled: filePath !== ""
         

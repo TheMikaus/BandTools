@@ -29,6 +29,8 @@ class FileListModel(QAbstractListModel):
     FileSizeRole = Qt.ItemDataRole.UserRole + 4
     DurationRole = Qt.ItemDataRole.UserRole + 5
     ExtensionRole = Qt.ItemDataRole.UserRole + 6
+    IsBestTakeRole = Qt.ItemDataRole.UserRole + 7
+    IsPartialTakeRole = Qt.ItemDataRole.UserRole + 8
     
     # Signals
     filesChanged = pyqtSignal()
@@ -70,6 +72,10 @@ class FileListModel(QAbstractListModel):
             return file_data.get("duration", 0)
         elif role == self.ExtensionRole:
             return file_data.get("extension", "")
+        elif role == self.IsBestTakeRole:
+            return file_data.get("isBestTake", False)
+        elif role == self.IsPartialTakeRole:
+            return file_data.get("isPartialTake", False)
         
         return None
     
@@ -83,6 +89,8 @@ class FileListModel(QAbstractListModel):
             self.FileSizeRole: b"filesize",
             self.DurationRole: b"duration",
             self.ExtensionRole: b"extension",
+            self.IsBestTakeRole: b"isBestTake",
+            self.IsPartialTakeRole: b"isPartialTake",
         }
     
     # ========== QML-accessible methods ==========
@@ -119,6 +127,13 @@ class FileListModel(QAbstractListModel):
                     if provided_name:
                         display_name = provided_name
                 
+                # Get best/partial take status
+                is_best_take = False
+                is_partial_take = False
+                if self._file_manager is not None:
+                    is_best_take = self._file_manager.isBestTake(file_path)
+                    is_partial_take = self._file_manager.isPartialTake(file_path)
+                
                 file_info = {
                     "filepath": str(path),
                     "filename": display_name,  # Use provided name if available
@@ -126,6 +141,8 @@ class FileListModel(QAbstractListModel):
                     "extension": path.suffix,
                     "filesize": path.stat().st_size if path.exists() else 0,
                     "duration": duration_ms,
+                    "isBestTake": is_best_take,
+                    "isPartialTake": is_partial_take,
                 }
                 self._files.append(file_info)
             except Exception:
