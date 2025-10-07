@@ -183,7 +183,7 @@ Dialog {
                                         StyledButton {
                                             Layout.alignment: Qt.AlignRight
                                             text: "Delete Goal"
-                                            destructive: true
+                                            danger: true
                                             visible: model.status === "complete" || model.status === "expired"
                                             onClicked: {
                                                 deleteGoal(model.category, model.goalId)
