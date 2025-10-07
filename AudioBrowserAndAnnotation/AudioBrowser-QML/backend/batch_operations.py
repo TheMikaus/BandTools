@@ -8,17 +8,64 @@ Provides batch rename, format conversion, and other bulk operations.
 
 import os
 import re
+import sys
+import subprocess
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
-# Try to import optional dependencies for audio conversion
-try:
-    from pydub import AudioSegment
-    from pydub.utils import which as pydub_which
-    HAVE_PYDUB = True
-except ImportError:
-    HAVE_PYDUB = False
+
+def _ensure_import(mod_name: str, pip_name: str | None = None) -> tuple[bool, str]:
+    """Try to import a module, auto-installing if needed.
+    
+    Args:
+        mod_name: Module name to import
+        pip_name: Package name for pip (defaults to mod_name)
+    
+    Returns:
+        tuple[bool, str]: (success, error_message)
+    """
+    try:
+        __import__(mod_name)
+        return True, ""
+    except ImportError:
+        if getattr(sys, "frozen", False):
+            return False, f"{mod_name} is not available in this frozen build"
+        
+        pkg = pip_name or mod_name
+        
+        print(f"Installing {pkg}...")
+        install_errors = []
+        for args in ([sys.executable, "-m", "pip", "install", pkg],
+                     [sys.executable, "-m", "pip", "install", "--user", pkg]):
+            try:
+                subprocess.check_call(args)
+                break
+            except subprocess.CalledProcessError as e:
+                install_errors.append(f"'{' '.join(args)}' failed with exit code {e.returncode}")
+                continue
+        else:
+            error_msg = f"Failed to install {pkg}. Attempted installations:\n" + "\n".join(f"  - {err}" for err in install_errors)
+            return False, error_msg
+        
+        try:
+            __import__(mod_name)
+            return True, ""
+        except ImportError as e:
+            return False, f"Successfully installed {pkg} but still cannot import {mod_name}: {e}"
+
+
+# Try to import optional dependencies for audio conversion with auto-install
+HAVE_PYDUB, pydub_error = _ensure_import("pydub", "pydub")
+if HAVE_PYDUB:
+    try:
+        from pydub import AudioSegment
+        from pydub.utils import which as pydub_which
+    except ImportError:
+        HAVE_PYDUB = False
+        AudioSegment = None
+        pydub_which = None
+else:
     AudioSegment = None
     pydub_which = None
 
