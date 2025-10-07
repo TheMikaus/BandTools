@@ -193,6 +193,15 @@ Item {
                         practiceGoalsDialog.open()
                     }
                 }
+                
+                // Setlist Builder button
+                StyledButton {
+                    text: "🎵 Setlist Builder"
+                    info: true
+                    onClicked: {
+                        setlistBuilderDialog.open()
+                    }
+                }
             }
         }
         

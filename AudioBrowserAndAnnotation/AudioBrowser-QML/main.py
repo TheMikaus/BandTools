@@ -50,6 +50,7 @@ from backend.folder_notes_manager import FolderNotesManager
 from backend.batch_operations import BatchOperations
 from backend.practice_statistics import PracticeStatistics
 from backend.practice_goals import PracticeGoals
+from backend.setlist_manager import SetlistManager
 
 
 class ApplicationViewModel(QObject):
@@ -109,6 +110,9 @@ def main():
     # Connect practice goals to practice statistics
     practice_goals.setPracticeStatistics(practice_statistics)
     
+    # Create setlist manager (will be initialized with root path when directory changes)
+    setlist_manager = SetlistManager(Path.home())
+    
     # Create data models (pass file_manager to FileListModel for duration extraction)
     file_list_model = FileListModel(file_manager=file_manager)
     annotations_model = AnnotationsModel()
@@ -131,6 +135,7 @@ def main():
     engine.rootContext().setContextProperty("batchOperations", batch_operations)
     engine.rootContext().setContextProperty("practiceStatistics", practice_statistics)
     engine.rootContext().setContextProperty("practiceGoals", practice_goals)
+    engine.rootContext().setContextProperty("setlistManager", setlist_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
@@ -143,6 +148,14 @@ def main():
     
     # Connect file manager to batch operations
     file_manager.currentDirectoryChanged.connect(batch_operations.setCurrentDirectory)
+    
+    # Connect file manager to setlist manager (update root path when directory changes)
+    def update_setlist_root(directory):
+        if directory:
+            setlist_manager.root_path = Path(directory)
+            setlist_manager._load_setlists()
+            setlist_manager.setlistsChanged.emit()
+    file_manager.currentDirectoryChanged.connect(update_setlist_root)
     
     # Save directory changes to settings
     file_manager.currentDirectoryChanged.connect(settings_manager.setRootDir)
