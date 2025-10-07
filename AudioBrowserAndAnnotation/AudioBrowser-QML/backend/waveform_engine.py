@@ -7,7 +7,7 @@ Provides QML-accessible waveform data generation, caching, and progressive loadi
 """
 
 import wave
-import audioop
+import struct
 from array import array
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
@@ -31,6 +31,67 @@ except ImportError:
 # Constants
 WAVEFORM_COLUMNS = 2000
 WAVEFORM_CACHE_FILE = ".waveform_cache.json"
+
+
+def convert_audio_samples(data: bytes, old_width: int, new_width: int) -> bytes:
+    """
+    Convert audio samples from one width to another.
+    Replacement for deprecated audioop.lin2lin().
+    
+    Args:
+        data: Raw audio data as bytes
+        old_width: Original sample width in bytes (1, 2, 3, or 4)
+        new_width: Target sample width in bytes (1, 2, 3, or 4)
+    
+    Returns:
+        Converted audio data as bytes
+    """
+    if old_width == new_width:
+        return data
+    
+    # Format strings for struct: 'b'=int8, 'h'=int16, 'i'=int32
+    old_fmt = {1: 'b', 2: 'h', 3: 'i', 4: 'i'}[old_width]
+    new_fmt = {1: 'b', 2: 'h', 3: 'i', 4: 'i'}[new_width]
+    
+    # Calculate number of samples
+    num_samples = len(data) // old_width
+    
+    # Unpack old samples
+    if old_width == 3:
+        # 24-bit samples need special handling
+        samples = []
+        for i in range(num_samples):
+            byte_offset = i * 3
+            # Little-endian 24-bit to int32
+            sample_bytes = data[byte_offset:byte_offset+3] + b'\x00'
+            sample = struct.unpack('<i', sample_bytes)[0]
+            # Shift to get sign-extended 24-bit value
+            sample = sample >> 8
+            samples.append(sample)
+    else:
+        samples = list(struct.unpack(f'<{num_samples}{old_fmt}', data))
+    
+    # Scale samples to new width
+    old_max = (1 << (old_width * 8 - 1)) - 1 if old_width < 4 else (1 << 23) - 1
+    new_max = (1 << (new_width * 8 - 1)) - 1 if new_width < 4 else (1 << 23) - 1
+    new_min = -(1 << (new_width * 8 - 1)) if new_width < 4 else -(1 << 23)
+    
+    if old_width != new_width:
+        samples = [max(new_min, min(new_max, int(sample * new_max / old_max))) for sample in samples]
+    
+    # Pack new samples
+    if new_width == 3:
+        # 24-bit samples need special handling
+        result = bytearray()
+        for sample in samples:
+            # Clamp to 24-bit range
+            sample = max(-8388608, min(8388607, sample))
+            # Convert to bytes (little-endian)
+            sample_bytes = struct.pack('<i', sample << 8)[:3]
+            result.extend(sample_bytes)
+        return bytes(result)
+    else:
+        return struct.pack(f'<{num_samples}{new_fmt}', *samples)
 
 
 class WaveformWorker(QObject):
@@ -111,7 +172,7 @@ class WaveformWorker(QObject):
                 # Convert to 16-bit if needed
                 if sw != 2:
                     try:
-                        raw = audioop.lin2lin(raw, sw, 2)
+                        raw = convert_audio_samples(raw, sw, 2)
                         sw = 2
                     except Exception:
                         pass
