@@ -198,6 +198,13 @@ ApplicationWindow {
             batchOperations: batchOperations
         }
         
+        // Practice Statistics Dialog
+        PracticeStatisticsDialog {
+            id: practiceStatisticsDialog
+            practiceStatistics: practiceStatistics
+            fileManager: fileManager
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true

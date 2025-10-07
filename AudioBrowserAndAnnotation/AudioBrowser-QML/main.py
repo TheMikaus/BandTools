@@ -48,6 +48,7 @@ from backend.annotation_manager import AnnotationManager
 from backend.clip_manager import ClipManager
 from backend.folder_notes_manager import FolderNotesManager
 from backend.batch_operations import BatchOperations
+from backend.practice_statistics import PracticeStatistics
 
 
 class ApplicationViewModel(QObject):
@@ -101,6 +102,7 @@ def main():
     clip_manager = ClipManager()
     folder_notes_manager = FolderNotesManager()
     batch_operations = BatchOperations()
+    practice_statistics = PracticeStatistics()
     
     # Create data models (pass file_manager to FileListModel for duration extraction)
     file_list_model = FileListModel(file_manager=file_manager)
@@ -122,6 +124,7 @@ def main():
     engine.rootContext().setContextProperty("clipManager", clip_manager)
     engine.rootContext().setContextProperty("folderNotesManager", folder_notes_manager)
     engine.rootContext().setContextProperty("batchOperations", batch_operations)
+    engine.rootContext().setContextProperty("practiceStatistics", practice_statistics)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
