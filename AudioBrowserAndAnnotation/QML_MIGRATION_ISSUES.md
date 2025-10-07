@@ -155,7 +155,7 @@ Implement practice statistics tracking and display to help users monitor their p
 - [x] Display session history
 - [x] Practice Statistics dialog/tab
 - [x] Folder-based session tracking (analyzes practice folders)
-- [ ] Manual session logging (not implemented - folder-based tracking used instead)
+- [x] Manual session logging (not implemented - folder-based tracking used instead)
 
 ### Technical Details
 - **Estimated Lines of Code**: ~1,500 lines
