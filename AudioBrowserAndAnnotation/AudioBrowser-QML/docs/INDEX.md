@@ -45,6 +45,7 @@ Feature implementation summaries and completion reports:
 - [BEST_PARTIAL_TAKE_INDICATORS.md](BEST_PARTIAL_TAKE_INDICATORS.md) - Best/Partial take indicators feature (Issue 2)
 - [ISSUE_2_COMPLETION_SUMMARY.md](ISSUE_2_COMPLETION_SUMMARY.md) - Issue 2 completion summary
 - [PRACTICE_STATISTICS_IMPLEMENTATION.md](PRACTICE_STATISTICS_IMPLEMENTATION.md) - Practice statistics feature (Issue 3)
+- [QML_COMPILATION_FIX.md](QML_COMPILATION_FIX.md) - QML compilation error fixes
 - [technical/SETLIST_BUILDER_IMPLEMENTATION.md](technical/SETLIST_BUILDER_IMPLEMENTATION.md) - Setlist builder feature (Issue 5)
 - [../ISSUE_7_IMPLEMENTATION_SUMMARY.md](../ISSUE_7_IMPLEMENTATION_SUMMARY.md) - Spectrogram overlay feature (Issue 7)
 
