@@ -68,6 +68,19 @@ See the [main documentation](docs/INDEX.md) for complete feature details.
 
 **Important**: As of December 2024, this version has been updated to work with Python 3.13+, which removed the deprecated `audioop` module. The audio sample conversion functionality previously provided by `audioop` has been replaced with a pure Python implementation.
 
+## FFmpeg Detection (Updated)
+
+**New**: Improved FFmpeg detection now supports modern package managers (winget, chocolatey, scoop) and provides better error messages. If you're having issues with MP3 files:
+
+1. Run the diagnostic: `python test_ffmpeg_detection.py`
+2. See `FFMPEG_TESTING.md` for troubleshooting
+3. Install FFmpeg if needed:
+   - Windows: `winget install ffmpeg`
+   - Linux: `sudo apt install ffmpeg`
+   - macOS: `brew install ffmpeg`
+
+See `FFMPEG_FIX_SUMMARY.md` for technical details about the improved detection.
+
 ## Why Keep This Version?
 
 The original version is kept because:
