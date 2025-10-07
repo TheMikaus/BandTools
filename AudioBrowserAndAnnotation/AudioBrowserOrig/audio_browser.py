@@ -135,6 +135,77 @@ else:
     AudioSegment = None
     pydub_which = None
 
+# Import shutil for more reliable which() fallback
+import shutil
+
+# Cache for FFmpeg path to avoid repeated lookups
+_ffmpeg_path_cache: Optional[str] = None
+_ffmpeg_checked = False
+
+
+def find_ffmpeg() -> Optional[str]:
+    """
+    Robust FFmpeg detection that tries multiple methods and configures pydub.
+    
+    Returns:
+        Path to ffmpeg executable if found, None otherwise
+    """
+    global _ffmpeg_path_cache, _ffmpeg_checked
+    
+    # Return cached result if we've already checked
+    if _ffmpeg_checked:
+        return _ffmpeg_path_cache
+    
+    _ffmpeg_checked = True
+    logger = logging.getLogger()
+    
+    # Method 1: Try pydub's which() first (for compatibility)
+    if pydub_which:
+        try:
+            result = pydub_which("ffmpeg")
+            if result:
+                logger.info(f"FFmpeg found via pydub.utils.which(): {result}")
+                _ffmpeg_path_cache = result
+                if HAVE_PYDUB and AudioSegment:
+                    AudioSegment.converter = result
+                return result
+        except Exception as e:
+            logger.debug(f"pydub.utils.which() failed: {e}")
+    
+    # Method 2: Use Python's standard shutil.which() (more reliable)
+    try:
+        result = shutil.which("ffmpeg")
+        if result:
+            logger.info(f"FFmpeg found via shutil.which(): {result}")
+            _ffmpeg_path_cache = result
+            if HAVE_PYDUB and AudioSegment:
+                AudioSegment.converter = result
+            return result
+    except Exception as e:
+        logger.debug(f"shutil.which() failed: {e}")
+    
+    # Method 3: Check common Windows installation paths
+    if sys.platform == "win32":
+        common_paths = [
+            r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+            r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
+            r"C:\ffmpeg\bin\ffmpeg.exe",
+            os.path.expanduser(r"~\ffmpeg\bin\ffmpeg.exe"),
+            os.path.expanduser(r"~\scoop\apps\ffmpeg\current\bin\ffmpeg.exe"),
+        ]
+        
+        logger.debug(f"Checking common Windows paths for FFmpeg...")
+        for path in common_paths:
+            if os.path.isfile(path):
+                logger.info(f"FFmpeg found at common Windows path: {path}")
+                _ffmpeg_path_cache = path
+                if HAVE_PYDUB and AudioSegment:
+                    AudioSegment.converter = path
+                return path
+    
+    logger.warning("FFmpeg not found using any detection method")
+    return None
+
 # ========== Qt imports ==========
 from PyQt6.QtCore import (
     QItemSelection, QModelIndex, QSettings, QTimer, Qt, QUrl, QPoint, QSize,
@@ -1808,6 +1879,8 @@ def decode_audio_samples(path: Path, stereo: bool = False) -> Tuple[List[float],
             raise RuntimeError(f"Failed to decode WAV file: {e}")
         
     if HAVE_PYDUB:
+        # Ensure FFmpeg is found and configured before attempting MP3 decode
+        find_ffmpeg()
         try:
             seg = AudioSegment.from_file(str(path))
             sr = seg.frame_rate
@@ -1862,6 +1935,8 @@ def get_audio_channel_count(path: Path) -> int:
         except Exception:
             pass
     if HAVE_PYDUB:
+        # Ensure FFmpeg is found and configured before attempting audio decode
+        find_ffmpeg()
         try:
             seg = AudioSegment.from_file(str(path))
             return seg.channels
@@ -3237,6 +3312,8 @@ class ConvertWorker(QObject):
     def cancel(self): self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before conversion
+        find_ffmpeg()
         total = len(self._paths); done = 0
         for srcs in self._paths:
             if self._cancel: self.finished.emit(True); return
@@ -3279,6 +3356,9 @@ class MonoConvertWorker(QObject):
         self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before conversion
+        find_ffmpeg()
+        
         if self._cancel: 
             self.finished.emit(True)
             return
@@ -3360,6 +3440,9 @@ class VolumeBoostWorker(QObject):
         self._cancel = True
 
     def run(self):
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
+        
         if self._cancel: 
             self.finished.emit(True)
             return
@@ -3420,6 +3503,9 @@ class ChannelMutingWorker(QObject):
 
     def run(self):
         """Create channel-muted audio file in background."""
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
+        
         try:
             from pydub import AudioSegment
             
@@ -9098,6 +9184,9 @@ class AudioBrowser(QMainWindow):
             except Exception:
                 pass
         
+        # Ensure FFmpeg is found and configured before processing
+        find_ffmpeg()
+        
         try:
             # Create channel-muted audio file
             audio = AudioSegment.from_file(str(path))
@@ -11899,10 +11988,13 @@ class AudioBrowser(QMainWindow):
                 "Export requires the 'pydub' package and FFmpeg installed on your system."); return
         try:
             from pydub import AudioSegment
-            from pydub.utils import which as pydub_which
-            if not pydub_which("ffmpeg"):
+            if not find_ffmpeg():
                 QMessageBox.warning(self, "FFmpeg not found",
-                    "FFmpeg isn't available on your PATH. Please install FFmpeg and try again."); return
+                    "FFmpeg isn't available. Please install FFmpeg:\n\n"
+                    "• Windows: winget install ffmpeg\n"
+                    "• Linux: sudo apt install ffmpeg\n"
+                    "• macOS: brew install ffmpeg\n\n"
+                    "After installation, restart the application."); return
         except Exception as e:
             QMessageBox.warning(self, "pydub error", f"pydub not available: {e}"); return
 
@@ -12328,9 +12420,13 @@ class AudioBrowser(QMainWindow):
             QMessageBox.warning(self, "Missing dependency",
                                 "This feature requires the 'pydub' package and FFmpeg installed on your system.")
             return
-        if not pydub_which("ffmpeg"):
+        if not find_ffmpeg():
             QMessageBox.warning(self, "FFmpeg not found",
-                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+                                "FFmpeg isn't available. Please install FFmpeg:\n\n"
+                                "• Windows: winget install ffmpeg\n"
+                                "• Linux: sudo apt install ffmpeg\n"
+                                "• macOS: brew install ffmpeg\n\n"
+                                "After installation, restart the application.")
             return
         
         # Check if we have a currently selected audio file
@@ -12423,9 +12519,13 @@ class AudioBrowser(QMainWindow):
             QMessageBox.warning(self, "Missing dependency",
                                 "This feature requires the 'pydub' package and FFmpeg installed on your system.")
             return
-        if not pydub_which("ffmpeg"):
+        if not find_ffmpeg():
             QMessageBox.warning(self, "FFmpeg not found",
-                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+                                "FFmpeg isn't available. Please install FFmpeg:\n\n"
+                                "• Windows: winget install ffmpeg\n"
+                                "• Linux: sudo apt install ffmpeg\n"
+                                "• macOS: brew install ffmpeg\n\n"
+                                "After installation, restart the application.")
             return
         
         # Check if we have a currently selected audio file
@@ -12512,9 +12612,13 @@ class AudioBrowser(QMainWindow):
             QMessageBox.warning(self, "Missing dependency",
                                 "This feature requires the 'pydub' package and FFmpeg installed on your system.")
             return
-        if not pydub_which("ffmpeg"):
+        if not find_ffmpeg():
             QMessageBox.warning(self, "FFmpeg not found",
-                                "FFmpeg isn't available on your PATH. Please install FFmpeg and try again.")
+                                "FFmpeg isn't available. Please install FFmpeg:\n\n"
+                                "• Windows: winget install ffmpeg\n"
+                                "• Linux: sudo apt install ffmpeg\n"
+                                "• macOS: brew install ffmpeg\n\n"
+                                "After installation, restart the application.")
             return
         wavs = self._list_wav_in_root()
         if not wavs:
