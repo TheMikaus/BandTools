@@ -4,6 +4,20 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **QML Application: Best/Partial Take Indicators** - Added visual indicators for marking and filtering audio takes
+  - Created `BestTakeIndicator.qml` component with gold star icon
+  - Created `PartialTakeIndicator.qml` component with half-filled star icon
+  - Added take tracking methods to `FileManager` backend
+  - Added JSON persistence via `.takes_metadata.json` in each directory
+  - Added `isBestTake` and `isPartialTake` roles to `FileListModel`
+  - Added indicator column to LibraryTab file list
+  - Added filter buttons to toolbar: "★ Best Takes" and "◐ Partial Takes"
+  - Added mark/unmark options to context menu
+  - Click indicators to toggle take status
+  - Comprehensive test suite in `test_take_indicators.py`
+  - Completes QML Migration Issue #2
+
 ### Fixed
 - **Python 3.13 Compatibility** - Replaced deprecated `audioop` module with pure Python implementation
   - The `audioop` module was removed in Python 3.13
