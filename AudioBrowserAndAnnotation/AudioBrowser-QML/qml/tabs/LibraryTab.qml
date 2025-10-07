@@ -24,6 +24,8 @@ Item {
             console.log("Folder selected:", folder)
             fileManager.setCurrentDirectory(folder)
             directoryField.text = folder
+            // Populate folder tree with new root directory
+            populateFolderTree(folder)
         }
     }
     
@@ -32,228 +34,367 @@ Item {
         anchors.margins: Theme.spacingNormal
         spacing: Theme.spacingNormal
         
-        // Toolbar
-        Rectangle {
+        // Toolbar - organized into two rows
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Theme.toolbarHeight
-            color: Theme.backgroundLight
-            radius: Theme.radiusSmall
+            spacing: Theme.spacingSmall
             
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingSmall
-                spacing: Theme.spacingNormal
+            // First row: Directory selection
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Theme.toolbarHeight
+                color: Theme.backgroundLight
+                radius: Theme.radiusSmall
                 
-                Label {
-                    text: "Directory:"
-                    font.pixelSize: Theme.fontSizeNormal
-                    color: Theme.textColor
-                }
-                
-                TextField {
-                    id: directoryField
-                    Layout.fillWidth: true
-                    placeholderText: "Select a directory..."
-                    text: fileManager.getCurrentDirectory()
-                    font.pixelSize: Theme.fontSizeNormal
-                    background: Rectangle {
-                        color: Theme.backgroundColor
-                        border.color: Theme.borderColor
-                        border.width: 1
-                        radius: Theme.radiusSmall
-                    }
-                    color: Theme.textColor
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacingSmall
+                    spacing: Theme.spacingNormal
                     
-                    onAccepted: {
-                        if (text.length > 0) {
-                            fileManager.setCurrentDirectory(text)
-                        } else {
-                            promptForDirectory()
+                    Label {
+                        text: "Directory:"
+                        font.pixelSize: Theme.fontSizeNormal
+                        color: Theme.textColor
+                    }
+                    
+                    TextField {
+                        id: directoryField
+                        Layout.fillWidth: true
+                        placeholderText: "Select a directory..."
+                        text: fileManager.getCurrentDirectory()
+                        font.pixelSize: Theme.fontSizeNormal
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            radius: Theme.radiusSmall
                         }
-                    }
-                }
-                
-                StyledButton {
-                    text: "Browse..."
-                    onClicked: {
-                        folderDialog.open()
-                    }
-                }
-                
-                StyledButton {
-                    text: "Refresh"
-                    success: true
-                    onClicked: {
-                        var dir = fileManager.getCurrentDirectory()
-                        if (dir.length > 0) {
-                            fileManager.discoverAudioFiles(dir)
-                        } else {
-                            promptForDirectory()
-                        }
-                    }
-                }
-                
-                // Separator
-                Rectangle {
-                    width: 1
-                    Layout.fillHeight: true
-                    Layout.margins: 4
-                    color: Theme.borderColor
-                }
-                
-                // Batch operations buttons
-                StyledButton {
-                    text: "Batch Rename"
-                    info: true
-                    enabled: fileListModel.count() > 0
-                    onClicked: {
-                        // Get all files from the model
-                        var files = []
-                        for (var i = 0; i < fileListModel.count(); i++) {
-                            var filePath = fileListModel.getFilePath(i)
-                            if (filePath) {
-                                files.push(filePath)
+                        color: Theme.textColor
+                        
+                        onAccepted: {
+                            if (text.length > 0) {
+                                fileManager.setCurrentDirectory(text)
+                            } else {
+                                promptForDirectory()
                             }
                         }
-                        batchRenameDialog.openDialog(files)
                     }
-                }
-                
-                StyledButton {
-                    text: "Convert WAV→MP3"
-                    warning: true
-                    enabled: fileListModel.count() > 0
-                    onClicked: {
-                        // Get all WAV files from the model
-                        var wavFiles = []
-                        for (var i = 0; i < fileListModel.count(); i++) {
-                            var filePath = fileListModel.getFilePath(i)
-                            if (filePath && filePath.toLowerCase().endsWith(".wav")) {
-                                wavFiles.push(filePath)
+                    
+                    StyledButton {
+                        text: "Browse..."
+                        onClicked: {
+                            folderDialog.open()
+                        }
+                    }
+                    
+                    StyledButton {
+                        text: "Refresh"
+                        success: true
+                        onClicked: {
+                            var dir = fileManager.getCurrentDirectory()
+                            if (dir.length > 0) {
+                                fileManager.discoverAudioFiles(dir)
+                            } else {
+                                promptForDirectory()
                             }
                         }
-                        if (wavFiles.length === 0) {
-                            console.log("No WAV files found")
-                            return
+                    }
+                }
+            }
+            
+            // Second row: Actions and filters
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Theme.toolbarHeight
+                color: Theme.backgroundLight
+                radius: Theme.radiusSmall
+                
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacingSmall
+                    spacing: Theme.spacingNormal
+                    
+                    Label {
+                        text: "Actions:"
+                        font.pixelSize: Theme.fontSizeNormal
+                        color: Theme.textColor
+                    }
+                    
+                    // Batch operations buttons
+                    StyledButton {
+                        text: "Batch Rename"
+                        info: true
+                        enabled: fileListModel.count() > 0
+                        onClicked: {
+                            // Get all files from the model
+                            var files = []
+                            for (var i = 0; i < fileListModel.count(); i++) {
+                                var filePath = fileListModel.getFilePath(i)
+                                if (filePath) {
+                                    files.push(filePath)
+                                }
+                            }
+                            batchRenameDialog.openDialog(files)
                         }
-                        batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
                     }
-                }
-                
-                // Separator
-                Rectangle {
-                    width: 1
-                    Layout.fillHeight: true
-                    Layout.margins: 4
-                    color: Theme.borderColor
-                }
-                
-                // Filter: Best Takes
-                StyledButton {
-                    text: filterBestTakes ? "★ Best Takes ✓" : "★ Best Takes"
-                    info: filterBestTakes
-                    onClicked: {
-                        filterBestTakes = !filterBestTakes
-                        updateFileList()
+                    
+                    StyledButton {
+                        text: "Convert WAV→MP3"
+                        warning: true
+                        enabled: fileListModel.count() > 0
+                        onClicked: {
+                            // Get all WAV files from the model
+                            var wavFiles = []
+                            for (var i = 0; i < fileListModel.count(); i++) {
+                                var filePath = fileListModel.getFilePath(i)
+                                if (filePath && filePath.toLowerCase().endsWith(".wav")) {
+                                    wavFiles.push(filePath)
+                                }
+                            }
+                            if (wavFiles.length === 0) {
+                                console.log("No WAV files found")
+                                return
+                            }
+                            batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
+                        }
                     }
-                }
-                
-                // Filter: Partial Takes
-                StyledButton {
-                    text: filterPartialTakes ? "◐ Partial Takes ✓" : "◐ Partial Takes"
-                    info: filterPartialTakes
-                    onClicked: {
-                        filterPartialTakes = !filterPartialTakes
-                        updateFileList()
+                    
+                    // Separator
+                    Rectangle {
+                        width: 1
+                        Layout.fillHeight: true
+                        Layout.margins: 4
+                        color: Theme.borderColor
                     }
-                }
-                
-                // Separator
-                Rectangle {
-                    width: 1
-                    Layout.fillHeight: true
-                    Layout.margins: 4
-                    color: Theme.borderColor
-                }
-                
-                // Practice Statistics button
-                StyledButton {
-                    text: "📊 Practice Stats"
-                    info: true
-                    onClicked: {
-                        practiceStatisticsDialog.open()
+                    
+                    Label {
+                        text: "Filters:"
+                        font.pixelSize: Theme.fontSizeNormal
+                        color: Theme.textColor
                     }
-                }
-                
-                // Practice Goals button
-                StyledButton {
-                    text: "🎯 Practice Goals"
-                    info: true
-                    onClicked: {
-                        practiceGoalsDialog.open()
+                    
+                    // Filter: Best Takes
+                    StyledButton {
+                        text: filterBestTakes ? "★ Best Takes ✓" : "★ Best Takes"
+                        info: filterBestTakes
+                        onClicked: {
+                            filterBestTakes = !filterBestTakes
+                            updateFileList()
+                        }
                     }
-                }
-                
-                // Setlist Builder button
-                StyledButton {
-                    text: "🎵 Setlist Builder"
-                    info: true
-                    onClicked: {
-                        setlistBuilderDialog.open()
+                    
+                    // Filter: Partial Takes
+                    StyledButton {
+                        text: filterPartialTakes ? "◐ Partial Takes ✓" : "◐ Partial Takes"
+                        info: filterPartialTakes
+                        onClicked: {
+                            filterPartialTakes = !filterPartialTakes
+                            updateFileList()
+                        }
                     }
+                    
+                    // Separator
+                    Rectangle {
+                        width: 1
+                        Layout.fillHeight: true
+                        Layout.margins: 4
+                        color: Theme.borderColor
+                    }
+                    
+                    Label {
+                        text: "Tools:"
+                        font.pixelSize: Theme.fontSizeNormal
+                        color: Theme.textColor
+                    }
+                    
+                    // Practice Statistics button
+                    StyledButton {
+                        text: "📊 Stats"
+                        info: true
+                        onClicked: {
+                            practiceStatisticsDialog.open()
+                        }
+                    }
+                    
+                    // Practice Goals button
+                    StyledButton {
+                        text: "🎯 Goals"
+                        info: true
+                        onClicked: {
+                            practiceGoalsDialog.open()
+                        }
+                    }
+                    
+                    // Setlist Builder button
+                    StyledButton {
+                        text: "🎵 Setlist"
+                        info: true
+                        onClicked: {
+                            setlistBuilderDialog.open()
+                        }
+                    }
+                    
+                    // Add spacing at the end
+                    Item { Layout.fillWidth: true }
                 }
             }
         }
         
-        // File list
-        Rectangle {
+        // Split view: Folders on left, Files on right
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: Theme.backgroundColor
-            border.color: Theme.borderColor
-            border.width: 1
-            radius: Theme.radiusSmall
+            spacing: Theme.spacingNormal
             
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: Theme.spacingSmall
-                spacing: 0
+            // Folders panel (left side)
+            Rectangle {
+                Layout.preferredWidth: 250
+                Layout.fillHeight: true
+                color: Theme.backgroundColor
+                border.color: Theme.borderColor
+                border.width: 1
+                radius: Theme.radiusSmall
                 
-                // Header with column labels
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Theme.buttonHeight
-                    color: Theme.backgroundLight
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacingSmall
+                    spacing: 0
                     
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingNormal
-                        anchors.rightMargin: Theme.spacingNormal
-                        spacing: Theme.spacingNormal
+                    // Header
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.buttonHeight
+                        color: Theme.backgroundLight
                         
                         Label {
-                            text: "Files (" + fileListModel.count() + ")"
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingNormal
+                            text: "Folders"
                             font.pixelSize: Theme.fontSizeMedium
                             font.bold: true
                             color: Theme.textColor
-                            Layout.fillWidth: true
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    
+                    // Folder ListView
+                    ListView {
+                        id: folderListView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        
+                        model: ListModel {
+                            id: folderTreeModel
                         }
                         
-                        TextField {
-                            id: filterField
-                            Layout.preferredWidth: 200
-                            placeholderText: "Filter..."
-                            font.pixelSize: Theme.fontSizeNormal
-                            background: Rectangle {
-                                color: Theme.backgroundColor
-                                border.color: Theme.borderColor
-                                border.width: 1
-                                radius: Theme.radiusSmall
+                        delegate: Rectangle {
+                            width: folderListView.width
+                            height: 28
+                            color: folderMouseArea.containsMouse ? Theme.backgroundLight : 
+                                   (model.isSelected ? Theme.backgroundMedium : "transparent")
+                            
+                            property bool isSelected: false
+                            
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingSmall + (model.level * 16)
+                                anchors.rightMargin: Theme.spacingSmall
+                                spacing: 4
+                                
+                                Label {
+                                    text: model.isRoot ? "📁 " + model.name : 
+                                          (model.hasAudio ? "📂 " + model.name : "📁 " + model.name)
+                                    font.pixelSize: Theme.fontSizeNormal
+                                    color: Theme.textColor
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideMiddle
+                                }
+                                
+                                Label {
+                                    text: model.audioCount > 0 ? "(" + model.audioCount + ")" : ""
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.textSecondary
+                                    visible: model.audioCount > 0
+                                }
                             }
-                            color: Theme.textColor
+                            
+                            MouseArea {
+                                id: folderMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                
+                                onClicked: {
+                                    // Clear previous selection
+                                    for (var i = 0; i < folderListView.count; i++) {
+                                        folderListView.itemAtIndex(i).isSelected = false
+                                    }
+                                    // Set new selection
+                                    isSelected = true
+                                    
+                                    // Load files from this folder
+                                    console.log("Selected folder:", model.path)
+                                    fileManager.discoverAudioFiles(model.path)
+                                }
+                            }
+                        }
+                        
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AsNeeded
                         }
                     }
                 }
+            }
+            
+            // Files panel (right side)
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: Theme.backgroundColor
+                border.color: Theme.borderColor
+                border.width: 1
+                radius: Theme.radiusSmall
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacingSmall
+                    spacing: 0
+                    
+                    // Header with column labels
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.buttonHeight
+                        color: Theme.backgroundLight
+                        
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingNormal
+                            anchors.rightMargin: Theme.spacingNormal
+                            spacing: Theme.spacingNormal
+                            
+                            Label {
+                                text: "Files (" + fileListModel.count() + ")"
+                                font.pixelSize: Theme.fontSizeMedium
+                                font.bold: true
+                                color: Theme.textColor
+                                Layout.fillWidth: true
+                            }
+                            
+                            TextField {
+                                id: filterField
+                                Layout.preferredWidth: 200
+                                placeholderText: "Filter..."
+                                font.pixelSize: Theme.fontSizeNormal
+                                background: Rectangle {
+                                    color: Theme.backgroundColor
+                                    border.color: Theme.borderColor
+                                    border.width: 1
+                                    radius: Theme.radiusSmall
+                                }
+                                color: Theme.textColor
+                            }
+                        }
+                    }
                 
                 // Column Headers (clickable for sorting)
                 Rectangle {
@@ -550,6 +691,8 @@ Item {
                 }
             }
         }
+        }  // End of Files panel ColumnLayout
+        }  // End of RowLayout (split view)
         
         // Status bar
         Rectangle {
@@ -660,6 +803,8 @@ Item {
         
         function onCurrentDirectoryChanged(directory) {
             directoryField.text = directory
+            // Populate folder tree when directory changes
+            populateFolderTree(directory)
         }
         
         function onErrorOccurred(errorMessage) {
@@ -760,6 +905,49 @@ Item {
         }
     }
     
+    // Populate folder tree from root directory
+    function populateFolderTree(rootDirectory) {
+        if (!rootDirectory || rootDirectory.length === 0) {
+            folderTreeModel.clear()
+            return
+        }
+        
+        console.log("Populating folder tree for:", rootDirectory)
+        
+        // Get all directories with audio files
+        var directories = fileManager.getDirectoriesWithAudioFiles(rootDirectory)
+        
+        // Clear the model
+        folderTreeModel.clear()
+        
+        // Add directories to the model
+        for (var i = 0; i < directories.length; i++) {
+            var dir = directories[i]
+            folderTreeModel.append({
+                path: dir.path,
+                name: dir.name,
+                parent: dir.parent,
+                hasAudio: dir.hasAudio,
+                audioCount: dir.audioCount,
+                isRoot: dir.isRoot,
+                level: 0  // Will be calculated based on path depth
+            })
+        }
+        
+        // Calculate levels for proper indentation
+        for (var j = 0; j < folderTreeModel.count; j++) {
+            var folder = folderTreeModel.get(j)
+            if (folder.isRoot) {
+                folder.level = 0
+            } else {
+                // Count slashes to determine depth
+                var pathParts = folder.path.split('/')
+                var rootParts = rootDirectory.split('/')
+                folder.level = pathParts.length - rootParts.length
+            }
+        }
+    }
+    
     // Initialize on component load
     Component.onCompleted: {
         // Check if we have a directory set
@@ -767,6 +955,9 @@ Item {
         if (!currentDir || currentDir.length === 0) {
             // No directory set, prompt user to select one
             promptForDirectory()
+        } else {
+            // Populate folder tree with current directory
+            populateFolderTree(currentDir)
         }
     }
 }
