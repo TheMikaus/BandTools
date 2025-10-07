@@ -1759,81 +1759,92 @@ def decode_audio_samples(path: Path, stereo: bool = False) -> Tuple[List[float],
     """
     suf = path.suffix.lower()
     if suf in (".wav", ".wave"):
-        with wave.open(str(path), "rb") as wf:
-            nch = wf.getnchannels()
-            sw = wf.getsampwidth()
-            sr = wf.getframerate()
-            nframes = wf.getnframes()
-            raw = wf.readframes(nframes)
-        if sw != 2:
-            try:
-                raw = convert_audio_samples(raw, sw, 2); sw = 2
-            except Exception:
-                pass
-        data = array("h"); data.frombytes(raw[: (len(raw)//2)*2 ])
-        
-        stereo_samples = None
-        if nch > 1:
-            total = len(data) // nch
-            mono = array("h", [0]) * total
-            for i in range(total):
-                s = 0; base = i * nch
-                for c in range(nch): s += data[base + c]
-                mono[i] = int(s / nch)
+        try:
+            with wave.open(str(path), "rb") as wf:
+                nch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                sr = wf.getframerate()
+                nframes = wf.getnframes()
+                raw = wf.readframes(nframes)
+            if sw != 2:
+                try:
+                    raw = convert_audio_samples(raw, sw, 2); sw = 2
+                except Exception:
+                    pass
+            data = array("h"); data.frombytes(raw[: (len(raw)//2)*2 ])
             
-            # Store stereo data if requested and it's stereo
-            if stereo and nch >= 2:
-                if HAVE_NUMPY:
-                    stereo_arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-                    stereo_samples = stereo_arr.tolist()
-                else:
-                    stereo_samples = [s / 32768.0 for s in data]
+            stereo_samples = None
+            if nch > 1:
+                total = len(data) // nch
+                mono = array("h", [0]) * total
+                for i in range(total):
+                    s = 0; base = i * nch
+                    for c in range(nch): s += data[base + c]
+                    mono[i] = int(s / nch)
+                
+                # Store stereo data if requested and it's stereo
+                if stereo and nch >= 2:
+                    if HAVE_NUMPY:
+                        stereo_arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                        stereo_samples = stereo_arr.tolist()
+                    else:
+                        stereo_samples = [s / 32768.0 for s in data]
+                
+                data = mono
             
-            data = mono
-        
-        if HAVE_NUMPY:
-            arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-            samples = arr.tolist()
-        else:
-            samples = [s / 32768.0 for s in data]
-        dur_ms = int((len(samples) / sr) * 1000)
-        return samples, sr, dur_ms, stereo_samples
+            if HAVE_NUMPY:
+                arr = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                samples = arr.tolist()
+            else:
+                samples = [s / 32768.0 for s in data]
+            dur_ms = int((len(samples) / sr) * 1000)
+            return samples, sr, dur_ms, stereo_samples
+        except Exception as e:
+            raise RuntimeError(f"Failed to decode WAV file: {e}")
         
     if HAVE_PYDUB:
-        seg = AudioSegment.from_file(str(path))
-        sr = seg.frame_rate
-        dur_ms = len(seg)
-        ch = seg.channels
-        raw = seg.get_array_of_samples()
-        
-        stereo_samples = None
-        if HAVE_NUMPY:
-            arr = np.array(raw, dtype=np.int16).astype(np.float32)
+        try:
+            seg = AudioSegment.from_file(str(path))
+            sr = seg.frame_rate
+            dur_ms = len(seg)
+            ch = seg.channels
+            raw = seg.get_array_of_samples()
             
-            # Store stereo data if requested and it's stereo
-            if stereo and ch >= 2:
-                stereo_samples = (arr / 32768.0).tolist()
-            
-            if ch > 1: arr = arr.reshape((-1, ch)).mean(axis=1)
-            samples = (arr / 32768.0).tolist()
-        else:
-            ints = list(raw)
-            if ch > 1:
-                # Store stereo data if requested
-                if stereo and ch >= 2:
-                    stereo_samples = [v / 32768.0 for v in ints]
+            stereo_samples = None
+            if HAVE_NUMPY:
+                arr = np.array(raw, dtype=np.int16).astype(np.float32)
                 
-                mono = []
-                for i in range(0, len(ints), ch):
-                    s = 0
-                    for c in range(ch): s += ints[i + c]
-                    mono.append(s / ch)
-                samples = [v / 32768.0 for v in mono]
+                # Store stereo data if requested and it's stereo
+                if stereo and ch >= 2:
+                    stereo_samples = (arr / 32768.0).tolist()
+                
+                if ch > 1: arr = arr.reshape((-1, ch)).mean(axis=1)
+                samples = (arr / 32768.0).tolist()
             else:
-                samples = [v / 32768.0 for v in ints]
-        return samples, sr, dur_ms, stereo_samples
+                ints = list(raw)
+                if ch > 1:
+                    # Store stereo data if requested
+                    if stereo and ch >= 2:
+                        stereo_samples = [v / 32768.0 for v in ints]
+                    
+                    mono = []
+                    for i in range(0, len(ints), ch):
+                        s = 0
+                        for c in range(ch): s += ints[i + c]
+                        mono.append(s / ch)
+                    samples = [v / 32768.0 for v in mono]
+                else:
+                    samples = [v / 32768.0 for v in ints]
+            return samples, sr, dur_ms, stereo_samples
+        except Exception as e:
+            # Check if this is an FFmpeg-related error
+            error_msg = str(e).lower()
+            if "ffmpeg" in error_msg or "decoder" in error_msg or "not found" in error_msg:
+                raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
+            else:
+                raise RuntimeError(f"Failed to decode audio file: {e}")
         
-    raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
+    raise RuntimeError("Audio format not supported (WAV files work without pydub; MP3/other formats require pydub and FFmpeg).")
 
 
 def get_audio_channel_count(path: Path) -> int:
