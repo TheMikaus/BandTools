@@ -7,3 +7,6 @@ QML handles the UI presentation.
 """
 
 __version__ = "0.1.0"
+
+# Export main backend classes
+from .fingerprint_engine import FingerprintEngine
