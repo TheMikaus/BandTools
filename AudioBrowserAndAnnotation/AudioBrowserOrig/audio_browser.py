@@ -1918,11 +1918,23 @@ def decode_audio_samples(path: Path, stereo: bool = False) -> Tuple[List[float],
             # Check if this is an FFmpeg-related error
             error_msg = str(e).lower()
             if "ffmpeg" in error_msg or "decoder" in error_msg or "not found" in error_msg:
-                raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
+                raise RuntimeError(
+                    "No MP3 decoder found. FFmpeg is required for MP3 support.\n\n"
+                    "Install FFmpeg:\n"
+                    "• Windows: winget install ffmpeg\n"
+                    "• Linux: sudo apt install ffmpeg\n"
+                    "• macOS: brew install ffmpeg"
+                )
             else:
                 raise RuntimeError(f"Failed to decode audio file: {e}")
         
-    raise RuntimeError("Audio format not supported (WAV files work without pydub; MP3/other formats require pydub and FFmpeg).")
+    raise RuntimeError(
+        "Audio format not supported. WAV files work without pydub; MP3/other formats require pydub and FFmpeg.\n\n"
+        "Install FFmpeg:\n"
+        "• Windows: winget install ffmpeg\n"
+        "• Linux: sudo apt install ffmpeg\n"
+        "• macOS: brew install ffmpeg"
+    )
 
 
 def get_audio_channel_count(path: Path) -> int:
@@ -4401,7 +4413,10 @@ class WaveformView(QWidget):
             return
         self._peaks = None; self._duration_ms = 0
         self._state = "error"
-        self._msg = "No waveform (MP3 needs FFmpeg installed)" if "No MP3 decoder" in message else "Waveform unavailable"
+        if "No MP3 decoder" in message or "FFmpeg" in message:
+            self._msg = "FFmpeg required for MP3\nWindows: winget install ffmpeg\nLinux: sudo apt install ffmpeg\nmacOS: brew install ffmpeg"
+        else:
+            self._msg = "Waveform unavailable"
         self._pixmap = None; self.update()
 
     def resizeEvent(self, event):

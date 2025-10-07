@@ -240,11 +240,23 @@ class WaveformWorker(QObject):
                 # Check if this is an FFmpeg-related error
                 error_msg = str(e).lower()
                 if "ffmpeg" in error_msg or "decoder" in error_msg or "not found" in error_msg:
-                    raise RuntimeError("No MP3 decoder found (install FFmpeg for pydub).")
+                    raise RuntimeError(
+                        "No MP3 decoder found. FFmpeg is required for MP3 support.\n\n"
+                        "Install FFmpeg:\n"
+                        "• Windows: winget install ffmpeg\n"
+                        "• Linux: sudo apt install ffmpeg\n"
+                        "• macOS: brew install ffmpeg"
+                    )
                 else:
                     raise RuntimeError(f"Failed to decode audio file: {e}")
         
-        raise RuntimeError("Audio format not supported (WAV files work without pydub; MP3/other formats require pydub and FFmpeg).")
+        raise RuntimeError(
+            "Audio format not supported. WAV files work without pydub; MP3/other formats require pydub and FFmpeg.\n\n"
+            "Install FFmpeg:\n"
+            "• Windows: winget install ffmpeg\n"
+            "• Linux: sudo apt install ffmpeg\n"
+            "• macOS: brew install ffmpeg"
+        )
     
     def _compute_peaks_progressive(self, samples: List[float], columns: int, chunk: int):
         """
