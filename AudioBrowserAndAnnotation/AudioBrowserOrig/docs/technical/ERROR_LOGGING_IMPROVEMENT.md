@@ -87,8 +87,13 @@ All modified files:
 - ✅ Maintain backward compatibility
 - ✅ Preserve existing return value behavior
 
+## Related Improvements
+
+This error logging improvement helped identify and fix the pydub/pyaudioop import issue on Python 3.13+. See **PYDUB_PYAUDIOOP_FIX.md** for details on the automatic audioop-lts installation feature that was added as a result of better error visibility.
+
 ---
 
 **Date**: December 2024  
 **Status**: ✅ Complete  
-**Related Issue**: AudioBrowserOrig's ensure_import swallows errors
+**Related Issue**: AudioBrowserOrig's ensure_import swallows errors  
+**Follow-up**: January 2025 - Added automatic audioop-lts installation for pydub on Python 3.13+
