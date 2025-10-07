@@ -31,6 +31,7 @@ Developer and technical documentation:
 - [PROJECT_STRUCTURE.md](technical/PROJECT_STRUCTURE.md) - Project organization
 - [TESTING_GUIDE.md](technical/TESTING_GUIDE.md) - Testing procedures
 - [IMPLEMENTATION_SUMMARY.md](technical/IMPLEMENTATION_SUMMARY.md) - Implementation details
+- [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - **NEW**: Error logging improvements for _ensure_import function
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix

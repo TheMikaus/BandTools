@@ -43,6 +43,7 @@ Implementation details, architecture decisions, and developer-focused documentat
 - **[SIMPLIFICATION_EXAMPLES.md](technical/SIMPLIFICATION_EXAMPLES.md)** - Concrete code simplification patterns with before/after examples
 - **[IMMEDIATE_SIMPLIFICATION_GUIDE.md](technical/IMMEDIATE_SIMPLIFICATION_GUIDE.md)** - Step-by-step implementation guide for simplifications
 - **[PHASE_1_IMPLEMENTATION_SUMMARY.md](technical/PHASE_1_IMPLEMENTATION_SUMMARY.md)** - **NEW**: Phase 1 completion summary (ConfigManager, JSONPersistence, UIFactory)
+- **[ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md)** - **NEW**: Error logging improvements for _ensure_import function
 - **[BUILD.md](technical/BUILD.md)** - Build instructions for developers
 - **[COLOR_CONSISTENCY.md](technical/COLOR_CONSISTENCY.md)** - Color system implementation details
 - **[ENHANCED_AUTO_LABELING.md](technical/ENHANCED_AUTO_LABELING.md)** - Auto-labeling feature details
