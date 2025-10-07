@@ -5,6 +5,22 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **QML Application: Folder Dialog Selection** - Fixed folder selection requiring file selection instead of directory
+  - Changed `FolderDialog.qml` from `FileDialog.SaveFile` to `FileDialog.OpenDirectory` mode
+  - Added Windows path handling to remove extra "/" from paths like `/C:/path`
+  - Updated `LibraryTab.qml` to use proper FolderDialog component
+  - Added prompt dialog when no directory is selected
+  - Fixes issue where selecting a root directory required selecting a file
+- **QML Application: Directory Initialization** - Added automatic loading of saved root directory on startup
+  - Loads saved root directory from settings on application launch
+  - Automatically saves directory changes to settings
+  - Ensures smooth workflow continuation across sessions
+- **QML Application: Metadata Loading** - Added support for loading metadata from original AudioBrowser version
+  - Loads `.provided_names.json` for custom file display names
+  - Loads `.duration_cache.json` for cached audio durations
+  - Automatically converts old duration format (seconds) to new format (milliseconds)
+  - Fallback to actual filename/duration extraction when metadata not available
+  - Improves performance by using cached data when available
 - **QML Application: Menu Loading Error** - Fixed runtime error caused by Windows-specific QtQuick.Controls style plugin
   - Replaced `import QtQuick.Controls` with `import QtQuick.Controls.Basic` in all 17 QML files
   - The Windows style plugin (`qtquickcontrols2windowsstyleimplplugin.dll`) was causing "Type Menu unavailable" errors
