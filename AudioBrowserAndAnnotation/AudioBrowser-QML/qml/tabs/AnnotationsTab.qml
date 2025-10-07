@@ -375,6 +375,11 @@ Item {
                 waveformDisplay.setFilePath(path)
                 annotationManager.setCurrentFile(path)
                 refreshAnnotations()
+                
+                // Set BPM for tempo markers
+                var fileName = fileManager.getFileName(path)
+                var bpm = tempoManager.getBPM(fileName)
+                waveformDisplay.bpm = bpm
             }
         }
     }
@@ -386,6 +391,21 @@ Item {
         function onAnnotationsChanged(path) {
             if (path === audioEngine.getCurrentFile()) {
                 refreshAnnotations()
+            }
+        }
+    }
+    
+    // Update when tempo changes
+    Connections {
+        target: tempoManager
+        
+        function onTempoDataChanged() {
+            // Update BPM for current file
+            var currentPath = audioEngine.getCurrentFile()
+            if (currentPath !== "") {
+                var fileName = fileManager.getFileName(currentPath)
+                var bpm = tempoManager.getBPM(fileName)
+                waveformDisplay.bpm = bpm
             }
         }
     }
