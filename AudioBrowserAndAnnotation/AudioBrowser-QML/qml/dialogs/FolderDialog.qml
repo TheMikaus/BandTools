@@ -30,54 +30,30 @@ import "../styles"
  *       onClicked: folderDialog.open()
  *   }
  */
-FileDialog {
+FolderDialog {
     id: dialog
     
     // Signals
     signal folderSelected(string folder)
     
     // Dialog configuration
-    title: "Navigate to Audio Directory (select any file in the folder)"
-    fileMode: FileDialog.OpenFile
+    title: "Navigate to Audio Directory"
     
     // Handle folder selection
     onAccepted: {
         var folderPath = ""
         
-        // Get the selected file or current folder
-        if (selectedFile.toString().length > 0) {
-            // User selected a file, extract its parent directory
-            folderPath = selectedFile.toString()
-            
-            // Remove file:// prefix if present
-            if (folderPath.startsWith("file://")) {
-                folderPath = folderPath.substring(7)
-            }
-            
-            // On Windows, handle the extra slash issue
-            // file:///C:/path becomes /C:/path, should be C:/path
-            if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
-                folderPath = folderPath.substring(1)
-            }
-            
-            // Extract directory from the file path
-            var lastSlash = Math.max(folderPath.lastIndexOf('/'), folderPath.lastIndexOf('\\'))
-            if (lastSlash > 0) {
-                folderPath = folderPath.substring(0, lastSlash)
-            }
-        } else {
-            // No file selected, use current folder
-            folderPath = currentFolder.toString()
-            
-            // Remove file:// prefix if present
-            if (folderPath.startsWith("file://")) {
-                folderPath = folderPath.substring(7)
-            }
-            
-            // On Windows, handle the extra slash issue
-            if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
-                folderPath = folderPath.substring(1)
-            }
+        // No file selected, use current folder
+        folderPath = currentFolder.toString()
+        
+        // Remove file:// prefix if present
+        if (folderPath.startsWith("file://")) {
+            folderPath = folderPath.substring(7)
+        }
+        
+        // On Windows, handle the extra slash issue
+        if (folderPath.length > 2 && folderPath.charAt(0) === '/' && folderPath.charAt(2) === ':') {
+            folderPath = folderPath.substring(1)
         }
         
         console.log("FolderDialog: Selected folder:", folderPath)
