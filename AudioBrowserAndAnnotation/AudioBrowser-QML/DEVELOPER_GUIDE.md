@@ -143,7 +143,7 @@ Rectangle {
 **Template**:
 ```qml
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import "../styles"
 
 Button {
@@ -183,7 +183,7 @@ Button {
 **Template**:
 ```qml
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import "../components"
 import "../styles"
