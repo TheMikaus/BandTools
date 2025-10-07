@@ -90,6 +90,53 @@ Item {
                         }
                     }
                 }
+                
+                // Separator
+                Rectangle {
+                    width: 1
+                    Layout.fillHeight: true
+                    Layout.margins: 4
+                    color: Theme.borderColor
+                }
+                
+                // Batch operations buttons
+                StyledButton {
+                    text: "Batch Rename"
+                    info: true
+                    enabled: fileListModel.count() > 0
+                    onClicked: {
+                        // Get all files from the model
+                        var files = []
+                        for (var i = 0; i < fileListModel.count(); i++) {
+                            var filePath = fileListModel.getFilePath(i)
+                            if (filePath) {
+                                files.push(filePath)
+                            }
+                        }
+                        batchRenameDialog.openDialog(files)
+                    }
+                }
+                
+                StyledButton {
+                    text: "Convert WAV→MP3"
+                    warning: true
+                    enabled: fileListModel.count() > 0
+                    onClicked: {
+                        // Get all WAV files from the model
+                        var wavFiles = []
+                        for (var i = 0; i < fileListModel.count(); i++) {
+                            var filePath = fileListModel.getFilePath(i)
+                            if (filePath && filePath.toLowerCase().endsWith(".wav")) {
+                                wavFiles.push(filePath)
+                            }
+                        }
+                        if (wavFiles.length === 0) {
+                            console.log("No WAV files found")
+                            return
+                        }
+                        batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
+                    }
+                }
             }
         }
         

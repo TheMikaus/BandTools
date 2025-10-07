@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import "components"
 import "styles"
 import "tabs"
+import "dialogs"
 
 ApplicationWindow {
     id: mainWindow
@@ -161,6 +162,40 @@ ApplicationWindow {
             FolderNotesTab {
                 id: folderNotesTab
             }
+        }
+        
+        // Batch operations dialogs
+        BatchRenameDialog {
+            id: batchRenameDialog
+            batchOperations: batchOperations
+            fileManager: fileManager
+            
+            onRenameCompleted: {
+                // Refresh file list after rename
+                var dir = fileManager.getCurrentDirectory()
+                if (dir.length > 0) {
+                    fileManager.discoverAudioFiles(dir)
+                }
+                progressDialog.showResult(true, "Rename operation completed successfully")
+            }
+        }
+        
+        BatchConvertDialog {
+            id: batchConvertDialog
+            batchOperations: batchOperations
+            
+            onConversionCompleted: {
+                // Refresh file list after conversion
+                var dir = fileManager.getCurrentDirectory()
+                if (dir.length > 0) {
+                    fileManager.discoverAudioFiles(dir)
+                }
+            }
+        }
+        
+        ProgressDialog {
+            id: progressDialog
+            batchOperations: batchOperations
         }
         
         // Status bar
@@ -322,6 +357,27 @@ ApplicationWindow {
             if (audioEngine.getCurrentFile() !== "") {
                 clipsTab.setClipEndMarker()
             }
+        }
+    }
+    
+    // Batch operations signal connections
+    Connections {
+        target: batchOperations
+        
+        function onOperationStarted(operationName) {
+            progressDialog.openDialog(operationName)
+        }
+        
+        function onOperationProgress(done, total, currentFile) {
+            progressDialog.updateProgress(done, total, currentFile)
+        }
+        
+        function onOperationFinished(success, message) {
+            progressDialog.showResult(success, message)
+        }
+        
+        function onErrorOccurred(errorMessage) {
+            progressDialog.showResult(false, "Error: " + errorMessage)
         }
     }
 }

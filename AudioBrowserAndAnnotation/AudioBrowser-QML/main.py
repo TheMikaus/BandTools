@@ -47,6 +47,7 @@ from backend.waveform_view import WaveformView
 from backend.annotation_manager import AnnotationManager
 from backend.clip_manager import ClipManager
 from backend.folder_notes_manager import FolderNotesManager
+from backend.batch_operations import BatchOperations
 
 
 class ApplicationViewModel(QObject):
@@ -99,6 +100,7 @@ def main():
     annotation_manager = AnnotationManager()
     clip_manager = ClipManager()
     folder_notes_manager = FolderNotesManager()
+    batch_operations = BatchOperations()
     
     # Create data models (pass file_manager to FileListModel for duration extraction)
     file_list_model = FileListModel(file_manager=file_manager)
@@ -119,6 +121,7 @@ def main():
     engine.rootContext().setContextProperty("annotationManager", annotation_manager)
     engine.rootContext().setContextProperty("clipManager", clip_manager)
     engine.rootContext().setContextProperty("folderNotesManager", folder_notes_manager)
+    engine.rootContext().setContextProperty("batchOperations", batch_operations)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
@@ -128,6 +131,9 @@ def main():
     
     # Connect file manager to waveform engine for cache directory
     file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
+    
+    # Connect file manager to batch operations
+    file_manager.currentDirectoryChanged.connect(batch_operations.setCurrentDirectory)
     
     # Save directory changes to settings
     file_manager.currentDirectoryChanged.connect(settings_manager.setRootDir)
