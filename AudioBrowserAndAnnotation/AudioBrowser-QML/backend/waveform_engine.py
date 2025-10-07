@@ -8,6 +8,10 @@ Provides QML-accessible waveform data generation, caching, and progressive loadi
 
 import wave
 import struct
+import os
+import sys
+import shutil
+import logging
 from array import array
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
@@ -23,15 +27,89 @@ except ImportError:
 
 try:
     from pydub import AudioSegment
+    from pydub.utils import which as pydub_which
     HAVE_PYDUB = True
 except ImportError:
     HAVE_PYDUB = False
     AudioSegment = None
+    pydub_which = None
 
 
 # Constants
 WAVEFORM_COLUMNS = 2000
 WAVEFORM_CACHE_FILE = ".waveform_cache.json"
+
+# FFmpeg detection cache
+_ffmpeg_path_cache: Optional[str] = None
+_ffmpeg_checked = False
+
+
+def find_ffmpeg() -> Optional[str]:
+    """
+    Robust FFmpeg detection that tries multiple methods and configures pydub.
+    
+    This function addresses the issue where Qt Multimedia has built-in FFmpeg support
+    for playback (which shows "qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg"),
+    but pydub needs a separate FFmpeg installation for waveform generation and audio decoding.
+    
+    Returns:
+        Path to ffmpeg executable if found, None otherwise
+    """
+    global _ffmpeg_path_cache, _ffmpeg_checked
+    
+    # Return cached result if we've already checked
+    if _ffmpeg_checked:
+        return _ffmpeg_path_cache
+    
+    _ffmpeg_checked = True
+    logger = logging.getLogger(__name__)
+    
+    # Method 1: Try pydub's which() first (for compatibility)
+    if pydub_which:
+        try:
+            result = pydub_which("ffmpeg")
+            if result:
+                logger.info(f"FFmpeg found via pydub.utils.which(): {result}")
+                _ffmpeg_path_cache = result
+                if HAVE_PYDUB and AudioSegment:
+                    AudioSegment.converter = result
+                return result
+        except Exception as e:
+            logger.debug(f"pydub.utils.which() failed: {e}")
+    
+    # Method 2: Use Python's standard shutil.which() (more reliable)
+    try:
+        result = shutil.which("ffmpeg")
+        if result:
+            logger.info(f"FFmpeg found via shutil.which(): {result}")
+            _ffmpeg_path_cache = result
+            if HAVE_PYDUB and AudioSegment:
+                AudioSegment.converter = result
+            return result
+    except Exception as e:
+        logger.debug(f"shutil.which() failed: {e}")
+    
+    # Method 3: Check common Windows installation paths
+    if sys.platform == "win32":
+        common_paths = [
+            r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+            r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
+            r"C:\ffmpeg\bin\ffmpeg.exe",
+            os.path.expanduser(r"~\ffmpeg\bin\ffmpeg.exe"),
+            os.path.expanduser(r"~\scoop\apps\ffmpeg\current\bin\ffmpeg.exe"),
+        ]
+        
+        logger.debug("Checking common Windows paths for FFmpeg...")
+        for path in common_paths:
+            if os.path.isfile(path):
+                logger.info(f"FFmpeg found at common Windows path: {path}")
+                _ffmpeg_path_cache = path
+                if HAVE_PYDUB and AudioSegment:
+                    AudioSegment.converter = path
+                return path
+    
+    logger.warning("FFmpeg not found using any detection method")
+    return None
 
 
 def convert_audio_samples(data: bytes, old_width: int, new_width: int) -> bytes:
@@ -209,6 +287,9 @@ class WaveformWorker(QObject):
         
         # Try MP3 using pydub
         if HAVE_PYDUB:
+            # Ensure FFmpeg is found and configured for pydub
+            ffmpeg_path = find_ffmpeg()
+            
             try:
                 seg = AudioSegment.from_file(str(path))
                 sr = seg.frame_rate
@@ -240,18 +321,35 @@ class WaveformWorker(QObject):
                 # Check if this is an FFmpeg-related error
                 error_msg = str(e).lower()
                 if "ffmpeg" in error_msg or "decoder" in error_msg or "not found" in error_msg:
-                    raise RuntimeError(
-                        "No MP3 decoder found. FFmpeg is required for MP3 support.\n\n"
-                        "Install FFmpeg:\n"
-                        "• Windows: winget install ffmpeg\n"
-                        "• Linux: sudo apt install ffmpeg\n"
-                        "• macOS: brew install ffmpeg"
-                    )
+                    if ffmpeg_path:
+                        # FFmpeg was found but pydub still failed
+                        raise RuntimeError(
+                            f"FFmpeg was found at '{ffmpeg_path}' but MP3 decoding still failed.\n"
+                            f"This may indicate a corrupted FFmpeg installation or an incompatible file format.\n\n"
+                            f"Error: {e}\n\n"
+                            f"Try reinstalling FFmpeg:\n"
+                            "• Windows: winget install ffmpeg\n"
+                            "• Linux: sudo apt install ffmpeg\n"
+                            "• macOS: brew install ffmpeg"
+                        )
+                    else:
+                        # FFmpeg was not found
+                        raise RuntimeError(
+                            "No MP3 decoder found. FFmpeg is required for MP3 support.\n\n"
+                            "Note: While Qt Multimedia may have built-in FFmpeg for playback, "
+                            "waveform generation requires a separate FFmpeg installation.\n\n"
+                            "Install FFmpeg:\n"
+                            "• Windows: winget install ffmpeg\n"
+                            "• Linux: sudo apt install ffmpeg\n"
+                            "• macOS: brew install ffmpeg"
+                        )
                 else:
                     raise RuntimeError(f"Failed to decode audio file: {e}")
         
         raise RuntimeError(
             "Audio format not supported. WAV files work without pydub; MP3/other formats require pydub and FFmpeg.\n\n"
+            "Note: While Qt Multimedia may have built-in FFmpeg for playback, "
+            "waveform generation requires a separate FFmpeg installation.\n\n"
             "Install FFmpeg:\n"
             "• Windows: winget install ffmpeg\n"
             "• Linux: sudo apt install ffmpeg\n"
