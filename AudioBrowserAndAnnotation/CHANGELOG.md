@@ -19,6 +19,15 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Completes QML Migration Issue #2
 
 ### Fixed
+- **FFmpeg Error Messages with Installation Instructions** - Enhanced error messages to include platform-specific FFmpeg installation commands
+  - **AudioBrowserOrig**: Updated error messages in `decode_audio_samples()` function and `WaveformView._on_worker_error()`
+    - FFmpeg-related errors now include installation instructions for Windows, Linux, and macOS
+    - Display message in waveform widget now shows installation commands directly
+    - Error messages match the format used in `test_ffmpeg_detection.py`
+  - **AudioBrowser-QML**: Updated error messages in `WaveformWorker._decode_audio_samples()`
+    - FFmpeg-related errors now include installation instructions for all platforms
+    - Consistent messaging with AudioBrowserOrig version
+  - Installation instructions provided: `winget install ffmpeg` (Windows), `sudo apt install ffmpeg` (Linux), `brew install ffmpeg` (macOS)
 - **Waveform Generation Error Handling** - Fixed misleading FFmpeg error messages in both AudioBrowserOrig and AudioBrowser-QML
   - **AudioBrowserOrig**: Added proper exception handling to `decode_audio_samples()` function
     - WAV file decoding now has dedicated error handling with clear error messages
