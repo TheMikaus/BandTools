@@ -18,12 +18,25 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
     try:
         __import__(mod_name)
         return True
-    except ImportError:
+    except ImportError as e:
+        # Log the initial import error for diagnostics
+        print(f"WARNING: Failed to import {mod_name}: {e}", file=sys.stderr)
         print(f"Installing {pip_name}...")
         import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
-        __import__(mod_name)
-        return True
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
+        except subprocess.CalledProcessError as install_error:
+            error_msg = f"Failed to install {pip_name}: {install_error}"
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            raise
+        
+        try:
+            __import__(mod_name)
+            return True
+        except ImportError as post_install_error:
+            error_msg = f"Successfully installed {pip_name} but still cannot import {mod_name}: {post_install_error}"
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            raise
 
 # Install required dependencies
 _ensure_import("PyQt6.QtCore", "PyQt6")

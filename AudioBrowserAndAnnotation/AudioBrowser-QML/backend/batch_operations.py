@@ -28,9 +28,14 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> tuple[bool, st
     try:
         __import__(mod_name)
         return True, ""
-    except ImportError:
+    except ImportError as e:
+        # Log the initial import error for diagnostics
+        print(f"WARNING: Failed to import {mod_name}: {e}", file=sys.stderr)
+        
         if getattr(sys, "frozen", False):
-            return False, f"{mod_name} is not available in this frozen build"
+            error_msg = f"{mod_name} is not available in this frozen build"
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            return False, error_msg
         
         pkg = pip_name or mod_name
         
@@ -46,13 +51,16 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> tuple[bool, st
                 continue
         else:
             error_msg = f"Failed to install {pkg}. Attempted installations:\n" + "\n".join(f"  - {err}" for err in install_errors)
+            print(f"ERROR: {error_msg}", file=sys.stderr)
             return False, error_msg
         
         try:
             __import__(mod_name)
             return True, ""
         except ImportError as e:
-            return False, f"Successfully installed {pkg} but still cannot import {mod_name}: {e}"
+            error_msg = f"Successfully installed {pkg} but still cannot import {mod_name}: {e}"
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            return False, error_msg
 
 
 # Try to import optional dependencies for audio conversion with auto-install
