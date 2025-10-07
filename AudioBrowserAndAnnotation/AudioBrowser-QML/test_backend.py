@@ -48,6 +48,13 @@ def test_imports():
         print(f"  ✗ Models import failed: {e}")
         return False
     
+    try:
+        from backend.batch_operations import BatchOperations
+        print("  ✓ BatchOperations imported")
+    except Exception as e:
+        print(f"  ✗ BatchOperations import failed: {e}")
+        return False
+    
     return True
 
 
@@ -63,7 +70,8 @@ def test_syntax():
         'backend/color_manager.py',
         'backend/audio_engine.py',
         'backend/file_manager.py',
-        'backend/models.py'
+        'backend/models.py',
+        'backend/batch_operations.py'
     ]
     
     all_valid = True
@@ -92,6 +100,9 @@ def test_qml_files():
         'qml/tabs/LibraryTab.qml',
         'qml/tabs/AnnotationsTab.qml',
         'qml/tabs/ClipsTab.qml',
+        'qml/dialogs/BatchRenameDialog.qml',
+        'qml/dialogs/BatchConvertDialog.qml',
+        'qml/dialogs/ProgressDialog.qml',
     ]
     
     all_exist = True
