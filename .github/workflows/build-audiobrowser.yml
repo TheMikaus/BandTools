@@ -27,7 +27,7 @@ on:
         type: boolean
 
 jobs:
-  build-windows:
+  build-audiobrowser-orig-windows:
     runs-on: windows-latest
     
     steps:
@@ -44,7 +44,7 @@ jobs:
     - name: Get version information
       id: version
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         echo "Getting version information..."
         $version = python version.py
         if ($LASTEXITCODE -ne 0) { 
@@ -70,7 +70,7 @@ jobs:
     
     - name: Generate application icon
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         echo "Generating application icons..."
         try {
           python make_icon.py
@@ -93,7 +93,7 @@ jobs:
     
     - name: Verify build prerequisites
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         echo "Verifying build prerequisites..."
         
         $required_files = @("audio_browser.py", "audio_browser.spec", "version.py", "make_icon.py")
@@ -113,20 +113,20 @@ jobs:
     
     - name: Clean previous builds
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         if (Test-Path "build") { Remove-Item -Recurse -Force build }
         if (Test-Path "dist") { Remove-Item -Recurse -Force dist }
       shell: powershell
     
     - name: Build executable with PyInstaller
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         python -m PyInstaller audio_browser.spec
       shell: powershell
     
     - name: Verify build
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         if (-not (Test-Path "dist/AudioAnnotationBrowser.exe")) {
           echo "ERROR: AudioAnnotationBrowser.exe not found!"
           exit 1
@@ -138,39 +138,48 @@ jobs:
     
     - name: Create Windows archive
       run: |
-        cd AudioBrowserAndAnnotation
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
         $version = "${{ steps.version.outputs.version_string }}"
-        $archiveName = "AudioAnnotationBrowser-$version-windows.zip"
-        $docsArchiveName = "AudioAnnotationBrowser-$version-docs.zip"
+        $archiveName = "AudioAnnotationBrowser-Orig-$version-windows.zip"
         
-        # Create the executable archive using PowerShell
-        Compress-Archive -Path "dist/AudioAnnotationBrowser.exe" -DestinationPath $archiveName -Force
+        # Create a temporary directory for packaging
+        $tempDir = "package_temp"
+        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+        
+        # Copy executable
+        Copy-Item "dist/AudioAnnotationBrowser.exe" -Destination $tempDir
+        
+        # Copy README
+        if (Test-Path "README_ORIG.md") {
+          Copy-Item "README_ORIG.md" -Destination "$tempDir/README.md"
+        }
+        
+        # Copy docs directory
+        if (Test-Path "docs") {
+          Copy-Item "docs" -Destination $tempDir -Recurse
+        }
+        
+        # Create the archive with all files
+        Compress-Archive -Path "$tempDir/*" -DestinationPath $archiveName -Force
         
         echo "Created archive: $archiveName"
         $archiveInfo = Get-Item $archiveName
         echo "Archive size: $($archiveInfo.Length) bytes"
         
-        # Create documentation archive
-        if (Test-Path "docs") {
-          Compress-Archive -Path "docs/*" -DestinationPath $docsArchiveName -Force
-          echo "Created docs archive: $docsArchiveName"
-          $docsArchiveInfo = Get-Item $docsArchiveName
-          echo "Docs archive size: $($docsArchiveInfo.Length) bytes"
-        }
+        # Clean up temp directory
+        Remove-Item -Recurse -Force $tempDir
         
         # Set output for later steps
         echo "archive_name=$archiveName" >> $env:GITHUB_OUTPUT
-        echo "archive_path=AudioBrowserAndAnnotation/$archiveName" >> $env:GITHUB_OUTPUT
-        echo "docs_archive_name=$docsArchiveName" >> $env:GITHUB_OUTPUT
-        echo "docs_archive_path=AudioBrowserAndAnnotation/$docsArchiveName" >> $env:GITHUB_OUTPUT
+        echo "archive_path=AudioBrowserAndAnnotation/AudioBrowserOrig/$archiveName" >> $env:GITHUB_OUTPUT
       id: archive
       shell: powershell
     
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: AudioFolderPlayer-${{ steps.version.outputs.version_string }}-windows
-        path: AudioBrowserAndAnnotation/dist/AudioAnnotationBrowser.exe
+        name: AudioAnnotationBrowser-Orig-${{ steps.version.outputs.version_string }}-windows
+        path: ${{ steps.archive.outputs.archive_path }}
         retention-days: 30
     
     - name: Create Release (if requested or on main branch)
@@ -185,8 +194,8 @@ jobs:
           Automated build of AudioBrowser application.
           
           ## Downloads
-          - **Windows**: ${{ steps.archive.outputs.archive_name }}
-          - **Documentation**: ${{ steps.archive.outputs.docs_archive_name }} (User guides, technical docs, test plans)
+          - **AudioBrowser Original (PyQt6 Widgets)**: ${{ steps.archive.outputs.archive_name }}
+            - Includes README.md and complete documentation
           
           ## Version Information
           - Version: ${{ steps.version.outputs.version_string }}
@@ -196,11 +205,187 @@ jobs:
           ## Installation
           1. Download the appropriate archive for your platform
           2. Extract the archive
-          3. Run `AudioFolderPlayer.exe`
+          3. Run `AudioAnnotationBrowser.exe`
           
           No additional installation required - this is a standalone executable.
+          
+          Documentation is included in the archive.
         files: |
           ${{ steps.archive.outputs.archive_path }}
-          ${{ steps.archive.outputs.docs_archive_path }}
+        draft: false
+        prerelease: false
+
+  build-audiobrowser-qml-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version calculation
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Get version information
+      id: version
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowserOrig
+        echo "Getting version information..."
+        $version = python version.py
+        if ($LASTEXITCODE -ne 0) { 
+          echo "ERROR: Failed to get version information"
+          exit 1 
+        }
+        echo "Version output: $version"
+        $versionString = python -c "import version; print(version.VERSION_STRING)"
+        if ($LASTEXITCODE -ne 0) { 
+          echo "ERROR: Failed to extract version string"
+          exit 1 
+        }
+        echo "version_string=$versionString" >> $env:GITHUB_OUTPUT
+        echo "Version string: $versionString"
+      shell: powershell
+    
+    - name: Install dependencies
+      run: |
+        echo "Installing Python dependencies..."
+        python -m pip install --upgrade pip
+        pip install PyInstaller PyQt6
+        echo "Dependencies installed successfully"
+    
+    - name: Verify build prerequisites
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowser-QML
+        echo "Verifying build prerequisites..."
+        
+        $required_files = @("main.py", "audiobrowser_qml.spec")
+        foreach ($file in $required_files) {
+          if (Test-Path $file) {
+            echo "✅ Found: $file"
+          } else {
+            echo "❌ Missing: $file"
+            exit 1
+          }
+        }
+        
+        $required_dirs = @("backend", "qml", "docs")
+        foreach ($dir in $required_dirs) {
+          if (Test-Path $dir) {
+            echo "✅ Found directory: $dir"
+          } else {
+            echo "❌ Missing directory: $dir"
+            exit 1
+          }
+        }
+        
+        echo "All required files and directories present"
+        echo "Current directory contents:"
+        Get-ChildItem . -Name | Sort-Object
+      shell: powershell
+    
+    - name: Clean previous builds
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowser-QML
+        if (Test-Path "build") { Remove-Item -Recurse -Force build }
+        if (Test-Path "dist") { Remove-Item -Recurse -Force dist }
+      shell: powershell
+    
+    - name: Build executable with PyInstaller
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowser-QML
+        python -m PyInstaller audiobrowser_qml.spec
+      shell: powershell
+    
+    - name: Verify build
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowser-QML
+        if (-not (Test-Path "dist/AudioBrowser-QML.exe")) {
+          echo "ERROR: AudioBrowser-QML.exe not found!"
+          exit 1
+        }
+        $fileInfo = Get-Item "dist/AudioBrowser-QML.exe"
+        echo "Build successful! Executable size: $($fileInfo.Length) bytes"
+        echo "Full path: $($fileInfo.FullName)"
+      shell: powershell
+    
+    - name: Create Windows archive
+      run: |
+        cd AudioBrowserAndAnnotation/AudioBrowser-QML
+        $version = "${{ steps.version.outputs.version_string }}"
+        $archiveName = "AudioBrowser-QML-$version-windows.zip"
+        
+        # Create a temporary directory for packaging
+        $tempDir = "package_temp"
+        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+        
+        # Copy executable
+        Copy-Item "dist/AudioBrowser-QML.exe" -Destination $tempDir
+        
+        # Copy README
+        if (Test-Path "README.md") {
+          Copy-Item "README.md" -Destination $tempDir
+        }
+        
+        # Copy docs directory
+        if (Test-Path "docs") {
+          Copy-Item "docs" -Destination $tempDir -Recurse
+        }
+        
+        # Create the archive with all files
+        Compress-Archive -Path "$tempDir/*" -DestinationPath $archiveName -Force
+        
+        echo "Created archive: $archiveName"
+        $archiveInfo = Get-Item $archiveName
+        echo "Archive size: $($archiveInfo.Length) bytes"
+        
+        # Clean up temp directory
+        Remove-Item -Recurse -Force $tempDir
+        
+        # Set output for later steps
+        echo "archive_name=$archiveName" >> $env:GITHUB_OUTPUT
+        echo "archive_path=AudioBrowserAndAnnotation/AudioBrowser-QML/$archiveName" >> $env:GITHUB_OUTPUT
+      id: archive
+      shell: powershell
+    
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AudioBrowser-QML-${{ steps.version.outputs.version_string }}-windows
+        path: ${{ steps.archive.outputs.archive_path }}
+        retention-days: 30
+    
+    - name: Create Release (if requested or on main branch)
+      if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: audiobrowser-qml-v${{ steps.version.outputs.version_string }}
+        name: AudioBrowser QML v${{ steps.version.outputs.version_string }}
+        body: |
+          # AudioBrowser QML v${{ steps.version.outputs.version_string }}
+          
+          Automated build of AudioBrowser QML application (Qt Quick/QML version).
+          
+          ## Downloads
+          - **AudioBrowser QML (Qt Quick/QML)**: ${{ steps.archive.outputs.archive_name }}
+            - Includes README.md and complete documentation
+          
+          ## Version Information
+          - Version: ${{ steps.version.outputs.version_string }}
+          - Build: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          
+          ## Installation
+          1. Download the archive
+          2. Extract the archive
+          3. Run `AudioBrowser-QML.exe`
+          
+          No additional installation required - this is a standalone executable.
+          
+          Documentation is included in the archive.
+        files: |
+          ${{ steps.archive.outputs.archive_path }}
         draft: false
         prerelease: false
