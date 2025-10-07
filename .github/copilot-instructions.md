@@ -114,10 +114,22 @@ def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
 ApplicationName/
 ├── main_application.py      # Primary application file
 ├── README.md               # Feature documentation  
+├── CHANGELOG.md            # Version history
 ├── BUILD.md               # Build instructions (where applicable)
 ├── build_exe.bat/.sh      # Build scripts
+├── docs/                  # Documentation folder (REQUIRED)
+│   ├── INDEX.md           # Documentation index
+│   ├── user_guides/       # End-user documentation
+│   ├── technical/         # Developer/technical docs
+│   └── test_plans/        # QA and testing docs
 └── additional_files       # Icons, specs, etc.
 ```
+
+**Documentation Organization Standards:**
+- All applications MUST have a `docs/` folder with subfolders for `user_guides/`, `technical/`, and `test_plans/`
+- Each `docs/` folder should contain an `INDEX.md` that lists all documentation
+- Documentation should follow the same structure across all applications in the repository
+- Use `.gitkeep` files to preserve empty documentation folders
 
 ### JSON Storage Patterns
 - Use `.json` files for configuration and data
@@ -151,6 +163,16 @@ ApplicationName/
 
 ## Best Practices for Copilot
 
+### When Working on Any Task
+**ALWAYS ensure the following before completing any task:**
+1. **Code compiles and runs** - Verify syntax and test execution
+2. **Documentation is organized** - Keep documents in their respective folders:
+   - `docs/user_guides/` - End-user documentation and how-to guides
+   - `docs/technical/` - Developer documentation and implementation details
+   - `docs/test_plans/` - Testing documentation and QA procedures
+3. **All imports are auto-installed** - Ensure dependencies use auto-install patterns
+4. **Application runs without crashing** - Test basic functionality before completing
+
 ### When Adding Features
 1. Maintain the single-file architecture unless refactoring is explicitly requested
 2. Follow existing auto-installation patterns for new dependencies  
@@ -158,6 +180,7 @@ ApplicationName/
 4. Implement proper threading for audio/UI operations
 5. Add comprehensive docstrings for complex functions
 6. **Update version system: Update CHANGELOG.md with feature additions and changes**
+7. **Create documentation**: Add user guide, technical doc, and test plan as appropriate
 
 ### When Fixing Issues
 1. Preserve existing functionality while making minimal changes
