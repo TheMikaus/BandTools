@@ -13,6 +13,8 @@ Item {
     property string currentDirectory: ""
     property string sortField: "filename"
     property bool sortAscending: true
+    property bool filterBestTakes: false
+    property bool filterPartialTakes: false
     
     // Folder picker dialog
     FolderDialog {
@@ -137,6 +139,34 @@ Item {
                         batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
                     }
                 }
+                
+                // Separator
+                Rectangle {
+                    width: 1
+                    Layout.fillHeight: true
+                    Layout.margins: 4
+                    color: Theme.borderColor
+                }
+                
+                // Filter: Best Takes
+                StyledButton {
+                    text: filterBestTakes ? "★ Best Takes ✓" : "★ Best Takes"
+                    info: filterBestTakes
+                    onClicked: {
+                        filterBestTakes = !filterBestTakes
+                        updateFileList()
+                    }
+                }
+                
+                // Filter: Partial Takes
+                StyledButton {
+                    text: filterPartialTakes ? "◐ Partial Takes ✓" : "◐ Partial Takes"
+                    info: filterPartialTakes
+                    onClicked: {
+                        filterPartialTakes = !filterPartialTakes
+                        updateFileList()
+                    }
+                }
             }
         }
         
@@ -201,6 +231,23 @@ Item {
                         anchors.leftMargin: Theme.spacingNormal
                         anchors.rightMargin: Theme.spacingNormal
                         spacing: Theme.spacingNormal
+                        
+                        // Indicators column header
+                        Rectangle {
+                            Layout.preferredWidth: 60
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                text: "Take"
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: Theme.textColor
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
                         
                         // Name column header
                         Rectangle {
@@ -337,6 +384,38 @@ Item {
                             anchors.rightMargin: Theme.spacingNormal
                             spacing: Theme.spacingNormal
                             
+                            // Take indicators
+                            RowLayout {
+                                Layout.preferredWidth: 60
+                                spacing: 4
+                                
+                                BestTakeIndicator {
+                                    marked: model.isBestTake || false
+                                    onClicked: {
+                                        if (model.isBestTake) {
+                                            fileManager.unmarkAsBestTake(model.filepath)
+                                        } else {
+                                            fileManager.markAsBestTake(model.filepath)
+                                        }
+                                        // Refresh the file list to update indicators
+                                        fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
+                                    }
+                                }
+                                
+                                PartialTakeIndicator {
+                                    marked: model.isPartialTake || false
+                                    onClicked: {
+                                        if (model.isPartialTake) {
+                                            fileManager.unmarkAsPartialTake(model.filepath)
+                                        } else {
+                                            fileManager.markAsPartialTake(model.filepath)
+                                        }
+                                        // Refresh the file list to update indicators
+                                        fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
+                                    }
+                                }
+                            }
+                            
                             Label {
                                 text: model.filename
                                 font.pixelSize: Theme.fontSizeNormal
@@ -429,6 +508,39 @@ Item {
     // Prompt user to select a directory
     function promptForDirectory() {
         noDirectoryDialog.open()
+    }
+    
+    // Update file list with filters applied
+    function updateFileList() {
+        var currentDir = fileManager.getCurrentDirectory()
+        if (!currentDir || currentDir.length === 0) {
+            return
+        }
+        
+        // If no filters, refresh normally
+        if (!filterBestTakes && !filterPartialTakes) {
+            fileManager.discoverAudioFiles(currentDir)
+            return
+        }
+        
+        // Get all files
+        var allFiles = fileManager.getDiscoveredFiles()
+        var filteredFiles = []
+        
+        // Apply filters
+        for (var i = 0; i < allFiles.length; i++) {
+            var filePath = allFiles[i]
+            var isBest = fileManager.isBestTake(filePath)
+            var isPartial = fileManager.isPartialTake(filePath)
+            
+            // Include file if it matches any active filter
+            if ((filterBestTakes && isBest) || (filterPartialTakes && isPartial)) {
+                filteredFiles.push(filePath)
+            }
+        }
+        
+        // Update model with filtered files
+        fileListModel.setFiles(filteredFiles)
     }
     
     // Helper function to format file size
