@@ -35,6 +35,14 @@ Developer and technical documentation:
 - [SESSION_SUMMARY.md](technical/SESSION_SUMMARY.md) - Session summaries
 - [VERIFICATION_SUMMARY.md](technical/VERIFICATION_SUMMARY.md) - Verification results
 
+### Implementation Summaries
+
+Feature implementation summaries and completion reports:
+
+- [BEST_PARTIAL_TAKE_INDICATORS.md](BEST_PARTIAL_TAKE_INDICATORS.md) - Best/Partial take indicators feature
+- [ISSUE_2_COMPLETION_SUMMARY.md](ISSUE_2_COMPLETION_SUMMARY.md) - Issue 2 completion summary
+- [PRACTICE_STATISTICS_IMPLEMENTATION.md](PRACTICE_STATISTICS_IMPLEMENTATION.md) - Practice statistics feature (Issue 3)
+
 ### Phase Reports (`phase_reports/`)
 
 Development phase reports and progress tracking:
@@ -76,5 +84,5 @@ All documentation is written in Markdown format with relative links for easy nav
 
 ---
 
-**Last Updated**: December 2024  
+**Last Updated**: January 2025  
 **Related**: See [Main README](../README.md) for application overview
