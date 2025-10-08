@@ -17,13 +17,29 @@ QML FileContextMenu: Binding loop detected for property "audioEngine"
 QML FileContextMenu: Binding loop detected for property "annotationManager"
 QML FileContextMenu: Binding loop detected for property "clipManager"
 QML FileContextMenu: Binding loop detected for property "fileManager"
+QML BatchRenameDialog: Binding loop detected for property "batchOperations"
+QML BatchRenameDialog: Binding loop detected for property "fileManager"
+QML BatchConvertDialog: Binding loop detected for property "batchOperations"
+QML ProgressDialog: Binding loop detected for property "batchOperations"
+QML PracticeStatisticsDialog: Binding loop detected for property "practiceStatistics"
+QML PracticeStatisticsDialog: Binding loop detected for property "fileManager"
+QML PracticeGoalsDialog: Binding loop detected for property "practiceGoals"
+QML PracticeGoalsDialog: Binding loop detected for property "practiceStatistics"
+QML PracticeGoalsDialog: Binding loop detected for property "fileManager"
+QML SetlistBuilderDialog: Binding loop detected for property "setlistManager"
+QML SetlistBuilderDialog: Binding loop detected for property "fileManager"
+QML ExportAnnotationsDialog: Binding loop detected for property "annotationManager"
+QML ExportAnnotationsDialog: Binding loop detected for property "fileManager"
+QML FingerprintsTab: Binding loop detected for property "fingerprintEngine"
+QML FingerprintsTab: Binding loop detected for property "fileManager"
+QML FingerprintsTab: Binding loop detected for property "fileListModel"
 ```
 
 **Root Cause**: Components were defining properties with the same names as context properties, and then trying to assign the context property to the local property (e.g., `clipManager: clipManager`). This creates a binding loop because QML tries to bind the property to itself.
 
 **Solution**: Removed redundant property assignments in `main.qml` and `LibraryTab.qml`:
 
-- **main.qml**: Removed property assignments from ClipsTab and FolderNotesTab
+- **main.qml**: Removed property assignments from ClipsTab, FolderNotesTab, and all dialogs
   ```qml
   // Before:
   ClipsTab {
@@ -35,6 +51,18 @@ QML FileContextMenu: Binding loop detected for property "fileManager"
   // After:
   ClipsTab {
       id: clipsTab
+  }
+  
+  // Before:
+  BatchRenameDialog {
+      id: batchRenameDialog
+      batchOperations: batchOperations  // Binding loop!
+      fileManager: fileManager  // Binding loop!
+  }
+  
+  // After:
+  BatchRenameDialog {
+      id: batchRenameDialog
   }
   ```
 
@@ -55,6 +83,19 @@ QML FileContextMenu: Binding loop detected for property "fileManager"
   }
   ```
 
+The following components were fixed:
+- ClipsTab
+- FolderNotesTab
+- FileContextMenu
+- BatchRenameDialog
+- BatchConvertDialog
+- ProgressDialog
+- PracticeStatisticsDialog
+- PracticeGoalsDialog
+- SetlistBuilderDialog
+- ExportAnnotationsDialog (kept currentFile binding)
+- FingerprintsTab
+
 Since these objects are exposed as context properties in `main.py`, they are globally accessible to all QML components and don't need to be passed down.
 
 ### 2. QColor Assignment Errors
@@ -64,14 +105,48 @@ Since these objects are exposed as context properties in `main.py`, they are glo
 Unable to assign [undefined] to QColor (at LibraryTab.qml:480)
 Unable to assign [undefined] to QColor (at FolderNotesTab.qml:199)
 Unable to assign [undefined] to QColor (at FolderNotesTab.qml:242)
+Unable to assign [undefined] to QColor (at BatchRenameDialog.qml:141)
+Unable to assign [undefined] to QColor (at BatchConvertDialog.qml:167)
+Unable to assign [undefined] to QColor (at ProgressDialog.qml:150)
+Unable to assign [undefined] to QColor (at PracticeGoalsDialog.qml:236)
+Unable to assign [undefined] to QColor (at SetlistBuilderDialog.qml:182)
+... and many more
 ```
 
-**Root Cause**: Components were using `Theme.foregroundColor` which doesn't exist in the Theme singleton. The correct property name is `Theme.textColor`.
+**Root Cause**: Components were using Theme properties that didn't exist in the Theme singleton:
+- `Theme.foregroundColor` (doesn't exist, should be `Theme.textColor`)
+- `Theme.backgroundWhite` (didn't exist)
+- `Theme.primary` (didn't exist, accentPrimary existed)
+- `Theme.success` (didn't exist, accentSuccess existed)
+- `Theme.danger` (didn't exist, accentDanger existed)
+- `Theme.warning` (didn't exist, accentWarning existed)
+- `Theme.info` (didn't exist, accentInfo existed)
+- `Theme.textPrimary` (didn't exist, textColor existed)
+- `Theme.backgroundDark` (didn't exist)
+- `Theme.primaryDark` (didn't exist)
+- `Theme.highlightColor` (didn't exist)
 
-**Solution**: Replaced all instances of `Theme.foregroundColor` with `Theme.textColor`:
+**Solution**: 
+1. Replaced all instances of `Theme.foregroundColor` with `Theme.textColor`:
+   - `qml/tabs/LibraryTab.qml` (line 476)
+   - `qml/tabs/FolderNotesTab.qml` (lines 199, 242)
 
-- `qml/tabs/LibraryTab.qml` (line 476)
-- `qml/tabs/FolderNotesTab.qml` (lines 199, 242)
+2. Added convenience aliases to `qml/styles/Theme.qml`:
+   ```qml
+   // === Convenience Aliases for Common Usage ===
+   readonly property color backgroundWhite: backgroundLight
+   readonly property color backgroundDark: backgroundColor
+   readonly property color textPrimary: textColor
+   readonly property color primary: accentPrimary
+   readonly property color success: accentSuccess
+   readonly property color danger: accentDanger
+   readonly property color warning: accentWarning
+   readonly property color info: accentInfo
+   readonly property color primaryDark: Qt.darker(accentPrimary, 1.2)
+   readonly property color highlightColor: accentPrimary
+   ```
+
+This approach maintains backward compatibility while allowing dialogs to use more intuitive property names.
 
 ### 3. FileDialog FileMode Error
 
@@ -151,6 +226,15 @@ This ensures that on first startup (or if settings are lost), the user is immedi
 
 1. **qml/main.qml**
    - Removed binding loop-causing property assignments from ClipsTab and FolderNotesTab
+   - Removed binding loop-causing property assignments from all dialogs:
+     - BatchRenameDialog
+     - BatchConvertDialog
+     - ProgressDialog
+     - PracticeStatisticsDialog
+     - PracticeGoalsDialog
+     - SetlistBuilderDialog
+     - ExportAnnotationsDialog (kept currentFile binding)
+   - Removed binding loop-causing property assignments from FingerprintsTab
 
 2. **qml/tabs/LibraryTab.qml**
    - Removed binding loop-causing property assignments from FileContextMenu
@@ -160,19 +244,29 @@ This ensures that on first startup (or if settings are lost), the user is immedi
 3. **qml/tabs/FolderNotesTab.qml**
    - Fixed `Theme.foregroundColor` → `Theme.textColor` (2 locations)
 
-4. **qml/dialogs/FolderDialog.qml**
+4. **qml/styles/Theme.qml**
+   - Added convenience property aliases for common color names:
+     - `backgroundWhite`, `backgroundDark`, `textPrimary`
+     - `primary`, `success`, `danger`, `warning`, `info`
+     - `primaryDark`, `highlightColor`
+
+5. **qml/dialogs/FolderDialog.qml**
    - Replaced unsupported `FileDialog.OpenDirectory` with Qt6-compatible approach
    - Updated to extract parent directory from selected file
 
-5. **backend/settings_manager.py**
+6. **backend/settings_manager.py**
    - Added `_migrate_legacy_settings()` method
    - Called migration method in `__init__`
 
 ## Testing
 
-Created `test_binding_fixes.py` to verify all fixes:
-- ✓ No binding loops in main.qml components
+Created `test_binding_fixes.py` and `test_binding_loop_fixes.py` to verify all fixes:
+- ✓ No binding loops in main.qml components (ClipsTab, FolderNotesTab)
+- ✓ No binding loops in all dialogs (BatchRenameDialog, BatchConvertDialog, ProgressDialog, etc.)
+- ✓ No binding loops in FingerprintsTab
 - ✓ All Theme.foregroundColor references replaced
+- ✓ All Theme color aliases properly defined (backgroundWhite, primary, success, etc.)
+- ✓ ExportAnnotationsDialog properly retains currentFile binding
 - ✓ Legacy settings migration implemented
 - ✓ Startup folder prompt implemented
 - ✓ FolderDialog properly configured for Qt6
