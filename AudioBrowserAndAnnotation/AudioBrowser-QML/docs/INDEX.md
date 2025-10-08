@@ -16,13 +16,16 @@ End-user documentation and how-to guides:
 
 - [ANNOTATION_GUIDE.md](user_guides/ANNOTATION_GUIDE.md) - Guide to using annotations
 - [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
-- [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - **NEW**: Folder navigation and hierarchical browsing guide
+- [CLOUD_SYNC_SETUP.md](user_guides/CLOUD_SYNC_SETUP.md) - **NEW**: Multi-cloud sync overview and setup
+- [DROPBOX_SYNC_SETUP.md](user_guides/DROPBOX_SYNC_SETUP.md) - **NEW**: Dropbox sync setup guide
+- [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - Folder navigation and hierarchical browsing guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
 - [SPECTROGRAM_USER_GUIDE.md](user_guides/SPECTROGRAM_USER_GUIDE.md) - Spectrogram feature guide (Issue 7)
 - [WAVEFORM_GUIDE.md](user_guides/WAVEFORM_GUIDE.md) - Waveform display features
+- [WEBDAV_SYNC_SETUP.md](user_guides/WEBDAV_SYNC_SETUP.md) - **NEW**: WebDAV/Nextcloud sync setup guide
 
 ### Technical Documentation (`technical/`)
 
