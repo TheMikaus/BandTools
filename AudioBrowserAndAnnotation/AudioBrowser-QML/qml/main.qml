@@ -73,6 +73,17 @@ ApplicationWindow {
         }
         
         Menu {
+            title: "&Edit"
+            
+            MenuItem {
+                text: "Preferences..."
+                onTriggered: {
+                    preferencesDialog.open()
+                }
+            }
+        }
+        
+        Menu {
             title: "&Help"
             
             MenuItem {
@@ -311,6 +322,11 @@ ApplicationWindow {
         // About Dialog
         AboutDialog {
             id: aboutDialog
+        }
+        
+        // Preferences Dialog
+        PreferencesDialog {
+            id: preferencesDialog
         }
         
         // Status bar
