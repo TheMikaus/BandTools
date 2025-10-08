@@ -188,6 +188,13 @@ ApplicationWindow {
             title: "&Help"
             
             MenuItem {
+                text: "Documentation Browser..."
+                onTriggered: {
+                    documentationBrowserDialog.open()
+                }
+            }
+            
+            MenuItem {
                 text: "Keyboard Shortcuts"
                 onTriggered: {
                     keyboardShortcutsDialog.open()
@@ -488,6 +495,12 @@ ApplicationWindow {
             id: keyboardShortcutsDialog
         }
         
+        // Documentation Browser Dialog
+        DocumentationBrowserDialog {
+            id: documentationBrowserDialog
+            documentationManager: documentationManager
+        }
+        
         // Auto-Generation Settings Dialog
         AutoGenerationSettingsDialog {
             id: autoGenDialog
@@ -737,6 +750,12 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+Shift+R"
         onActivated: mainWindow.resetToDefaultLayout()
+    }
+    
+    // Documentation browser shortcut
+    Shortcut {
+        sequence: "Ctrl+Shift+H"
+        onActivated: documentationBrowserDialog.open()
     }
     
     // Batch operations signal connections
