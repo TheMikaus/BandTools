@@ -104,7 +104,7 @@ This document provides a comprehensive comparison of features between the origin
 | Color-coded annotations | ✅ | ✅ | ✅ Complete |
 | Drag markers | ✅ | ✅ | ✅ Complete |
 | Multi-user support | ✅ | ✅ | ✅ Complete |
-| Merged view (all users) | ✅ | 🚧 | 🚧 Partial |
+| Merged view (all users) | ✅ | ✅ | ✅ Complete (Phase 11) |
 | Export to text file | ✅ | ✅ | ✅ Complete (Phase 8) |
 | Folder notes | ✅ | ✅ | ✅ Complete (Phase 7) |
 | Keyboard shortcuts (Ctrl+A) | ✅ | ✅ | ✅ Complete |
@@ -397,8 +397,8 @@ These are the large feature areas not yet implemented in QML:
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| ✅ Complete | ~53 features | 83% |
-| 🚧 Partial | ~2 features | 3% |
+| ✅ Complete | ~54 features | 84% |
+| 🚧 Partial | ~1 feature | 2% |
 | ❌ Not Implemented | ~9 features | 14% |
 
 ### By Priority for Next Phases
@@ -450,7 +450,7 @@ These are the large feature areas not yet implemented in QML:
 ## Conclusion
 
 ### Current State
-The AudioBrowser-QML implementation has achieved **~88% feature parity** with the original, covering all core functionality plus major advanced features:
+The AudioBrowser-QML implementation has achieved **~89% feature parity** with the original, covering all core functionality plus major advanced features:
 - ✅ Audio playback
 - ✅ File management (including Recent Folders)
 - ✅ Annotations

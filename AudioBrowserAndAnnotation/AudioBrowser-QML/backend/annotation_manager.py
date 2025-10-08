@@ -272,6 +272,48 @@ class AnnotationManager(QObject):
         
         return len(self._annotations.get(self._current_file, []))
     
+    @pyqtSlot(result=list)
+    def getAllUsers(self) -> List[str]:
+        """
+        Get a list of all users who have created annotations for the current file.
+        
+        Returns:
+            List of unique usernames
+        """
+        if not self._current_file:
+            return []
+        
+        annotations = self._annotations.get(self._current_file, [])
+        users = set()
+        for annotation in annotations:
+            user = annotation.get("user", "default_user")
+            users.add(user)
+        
+        return sorted(list(users))
+    
+    @pyqtSlot(str, result=list)
+    def getAnnotationsForUser(self, username: str) -> List[Dict[str, Any]]:
+        """
+        Get annotations for a specific user.
+        
+        Args:
+            username: Username to filter by, or empty string for all users
+            
+        Returns:
+            List of annotation dictionaries
+        """
+        if not self._current_file:
+            return []
+        
+        annotations = self._annotations.get(self._current_file, [])
+        
+        # If username is empty, return all annotations
+        if not username:
+            return annotations
+        
+        # Filter by user
+        return [a for a in annotations if a.get("user", "default_user") == username]
+    
     @pyqtSlot(int, result=int)
     def findAnnotationAtTime(self, timestamp_ms: int, tolerance_ms: int = 500) -> int:
         """

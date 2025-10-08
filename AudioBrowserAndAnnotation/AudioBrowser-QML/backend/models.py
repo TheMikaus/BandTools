@@ -388,15 +388,17 @@ class AnnotationsModel(QAbstractTableModel):
     COL_TIMESTAMP = 0
     COL_CATEGORY = 1
     COL_TEXT = 2
-    COL_IMPORTANCE = 3
-    COL_COUNT = 4
+    COL_USER = 3
+    COL_IMPORTANCE = 4
+    COL_COUNT = 5
     
     # Custom roles
     TimestampRole = Qt.ItemDataRole.UserRole + 1
     CategoryRole = Qt.ItemDataRole.UserRole + 2
     TextRole = Qt.ItemDataRole.UserRole + 3
-    ImportanceRole = Qt.ItemDataRole.UserRole + 4
-    ColorRole = Qt.ItemDataRole.UserRole + 5
+    UserRole = Qt.ItemDataRole.UserRole + 4
+    ImportanceRole = Qt.ItemDataRole.UserRole + 5
+    ColorRole = Qt.ItemDataRole.UserRole + 6
     
     # Signals
     annotationsChanged = pyqtSignal()
@@ -405,7 +407,7 @@ class AnnotationsModel(QAbstractTableModel):
         """Initialize the annotations model."""
         super().__init__(parent)
         self._annotations: List[Dict[str, Any]] = []
-        self._headers = ["Time", "Category", "Text", "Important"]
+        self._headers = ["Time", "Category", "Text", "User", "Important"]
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """Return the number of annotations."""
@@ -434,6 +436,8 @@ class AnnotationsModel(QAbstractTableModel):
                 return annotation.get("category", "")
             elif col == self.COL_TEXT:
                 return annotation.get("text", "")
+            elif col == self.COL_USER:
+                return annotation.get("user", "default_user")
             elif col == self.COL_IMPORTANCE:
                 return "✓" if annotation.get("important", False) else ""
         
@@ -443,6 +447,8 @@ class AnnotationsModel(QAbstractTableModel):
             return annotation.get("category", "")
         elif role == self.TextRole:
             return annotation.get("text", "")
+        elif role == self.UserRole:
+            return annotation.get("user", "default_user")
         elif role == self.ImportanceRole:
             return annotation.get("important", False)
         elif role == self.ColorRole:
@@ -465,6 +471,7 @@ class AnnotationsModel(QAbstractTableModel):
             self.TimestampRole: b"timestamp",
             self.CategoryRole: b"category",
             self.TextRole: b"text",
+            self.UserRole: b"user",
             self.ImportanceRole: b"important",
             self.ColorRole: b"color",
         }

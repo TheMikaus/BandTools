@@ -249,6 +249,40 @@ Item {
                         }
                     }
                     
+                    Label {
+                        text: "User:"
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                    }
+                    
+                    ComboBox {
+                        id: userFilter
+                        Layout.preferredWidth: 120
+                        
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            radius: Theme.radiusSmall
+                        }
+                        
+                        contentItem: Text {
+                            text: userFilter.displayText
+                            color: Theme.textColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8
+                        }
+                        
+                        onCurrentTextChanged: {
+                            refreshAnnotations()
+                        }
+                        
+                        Component.onCompleted: {
+                            updateUserFilter()
+                        }
+                    }
+                    
                     CheckBox {
                         id: showImportantOnly
                         text: "Important only"
@@ -411,6 +445,7 @@ Item {
             if (path !== "") {
                 waveformDisplay.setFilePath(path)
                 annotationManager.setCurrentFile(path)
+                updateUserFilter()  // Update user list when file changes
                 refreshAnnotations()
                 
                 // Set BPM for tempo markers
@@ -427,6 +462,7 @@ Item {
         
         function onAnnotationsChanged(path) {
             if (path === audioEngine.getCurrentFile()) {
+                updateUserFilter()  // Update user list when annotations change
                 refreshAnnotations()
             }
         }
@@ -482,23 +518,42 @@ Item {
     function refreshAnnotations() {
         var annotations = annotationManager.getAnnotations()
         
+        // Apply user filter first (if not "All Users")
+        if (userFilter.currentText !== "All Users" && userFilter.currentText !== "") {
+            annotations = annotationManager.getAnnotationsForUser(userFilter.currentText)
+        }
+        
         // Apply filters
         if (showImportantOnly.checked) {
-            annotations = annotationManager.getImportantAnnotations()
+            // Filter important from current set
+            annotations = annotations.filter(function(a) { return a.important })
         }
         
         if (categoryFilter.currentText !== "All") {
-            annotations = annotationManager.filterByCategory(categoryFilter.currentText)
+            // Filter by category from current set
+            annotations = annotations.filter(function(a) { return a.category === categoryFilter.currentText })
         }
         
         annotationsModel.setAnnotations(annotations)
         waveformDisplay.update()  // Force waveform to redraw markers
     }
     
+    function updateUserFilter() {
+        // Get list of users from annotations
+        var users = annotationManager.getAllUsers()
+        var userList = ["All Users"]
+        for (var i = 0; i < users.length; i++) {
+            userList.push(users[i])
+        }
+        userFilter.model = userList
+        userFilter.currentIndex = 0
+    }
+    
     // Initialize
     Component.onCompleted: {
         if (audioEngine.getCurrentFile() !== "") {
             annotationManager.setCurrentFile(audioEngine.getCurrentFile())
+            updateUserFilter()
             refreshAnnotations()
         }
     }
