@@ -52,6 +52,7 @@ Feature implementation summaries and completion reports:
 - [QML_COMPILATION_FIX.md](QML_COMPILATION_FIX.md) - QML compilation error fixes
 - [technical/SETLIST_BUILDER_IMPLEMENTATION.md](technical/SETLIST_BUILDER_IMPLEMENTATION.md) - Setlist builder feature (Issue 5)
 - [../ISSUE_7_IMPLEMENTATION_SUMMARY.md](../ISSUE_7_IMPLEMENTATION_SUMMARY.md) - Spectrogram overlay feature (Issue 7)
+- [DOCUMENTATION_BROWSER_IMPLEMENTATION.md](DOCUMENTATION_BROWSER_IMPLEMENTATION.md) - Documentation browser feature (Issue 15) - **NEW Phase 12**
 
 ### Test Plans (`test_plans/`)
 
@@ -87,6 +88,12 @@ Development phase reports and progress tracking:
 - [PHASE_7_PLAN.md](phase_reports/PHASE_7_PLAN.md) - Phase 7 plan
 - [PHASE_7_SESSION_COMPLETE.md](phase_reports/PHASE_7_SESSION_COMPLETE.md) - Session completion
 - [PHASE_7_SUMMARY.md](phase_reports/PHASE_7_SUMMARY.md) - Phase 7 summary
+
+**Phase 11:**
+- [PHASE_11_COMPLETION_SUMMARY.md](PHASE_11_COMPLETION_SUMMARY.md) - Phase 11 completion (merged annotations, auto-switch)
+
+**Phase 12:**
+- [PHASE_12_COMPLETION_SUMMARY.md](PHASE_12_COMPLETION_SUMMARY.md) - Phase 12 completion (documentation browser) - **NEW**
 
 ## Navigation
 
