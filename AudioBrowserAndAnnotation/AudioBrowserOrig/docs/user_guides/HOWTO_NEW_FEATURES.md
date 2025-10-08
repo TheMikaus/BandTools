@@ -5,6 +5,7 @@ This guide explains how to use the recently added features in AudioBrowser.
 ## Table of Contents
 1. [Dark Mode Theme](#dark-mode-theme)
 2. [Export Best Takes Package](#export-best-takes-package)
+3. [Stereo Waveform View](#stereo-waveform-view)
 
 ---
 
@@ -233,6 +234,78 @@ If you need to import the annotations back:
 
 **Q: The ZIP file is very large**
 - A: Audio files (especially WAV) are large. Consider converting to MP3 first if file size is a concern.
+
+---
+
+---
+
+## Stereo Waveform View
+
+AudioBrowser now automatically displays stereo audio files in stereo waveform mode, showing left and right channels separately for better visualization and editing of stereo content.
+
+### How It Works
+
+**Automatic Mode Switching**
+- When you load a stereo audio file (2 channels), the waveform view automatically switches to stereo mode
+- When you load a mono audio file (1 channel), the waveform view automatically switches to mono mode
+- You can manually toggle between modes using the **Mono/Stereo** button above the waveform
+
+### Waveform Display Modes
+
+**Stereo View** (for stereo files)
+- Waveform split into two sections: top half for left channel, bottom half for right channel
+- Each channel displayed in a different color for easy identification
+- Left channel: Blue/cyan color
+- Right channel: Pink/magenta color
+- Ideal for:
+  - Identifying panning differences
+  - Visualizing stereo effects
+  - Detecting channel imbalances
+  - Editing multi-tracked recordings
+
+**Mono View** (default for mono files)
+- Single waveform centered on the horizontal axis
+- Shows combined audio signal
+- Ideal for:
+  - Simple recordings
+  - Voice-only tracks
+  - Mono instruments
+  - Quick overview of audio content
+
+### Channel Muting
+
+**Selective Channel Playback**
+- Available only for stereo files
+- Check/uncheck **Left Channel** or **Right Channel** checkboxes above the waveform
+- Muting a channel:
+  - Creates a temporary audio file with that channel silenced
+  - Maintains current playback position when toggling
+  - Updates "Now Playing" text to show muting status (e.g., "Playing: song.mp3 (Left Muted)")
+- Use cases:
+  - Isolate individual instruments in stereo recordings
+  - Practice with one part muted
+  - Check balance and panning
+  - Identify problematic channels
+
+**Seamless Playback Continuation**
+- When you toggle channel muting during playback:
+  - Audio continues playing from the same position
+  - New channel configuration takes effect immediately
+  - No interruption in your workflow
+
+### Manual Toggle
+
+If you prefer a different view mode:
+
+1. Click the **Mono** or **Stereo** button above the waveform
+2. The button text indicates the current mode
+3. The button is only enabled for stereo files (disabled for mono files)
+
+### Tips
+
+- Stereo view provides more detail but takes slightly more processing time
+- Channel-muted files are cached in `.audiobrowser_temp` folder for quick switching
+- Temporary files are automatically cleaned up when you close the application
 
 ---
 
