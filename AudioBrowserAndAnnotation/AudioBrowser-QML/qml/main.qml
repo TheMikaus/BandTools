@@ -141,6 +141,18 @@ ApplicationWindow {
             title: "&View"
             
             MenuItem {
+                text: "Toggle Now Playing Panel"
+                checkable: true
+                checked: !nowPlayingPanel.collapsed
+                onTriggered: {
+                    nowPlayingPanel.collapsed = !nowPlayingPanel.collapsed
+                    settingsManager.setNowPlayingCollapsed(nowPlayingPanel.collapsed)
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
                 text: "Save Layout"
                 onTriggered: {
                     mainWindow.saveWindowGeometry()
@@ -426,6 +438,23 @@ ApplicationWindow {
             
             FingerprintsTab {
                 id: fingerprintsTab
+            }
+        }
+        
+        // Now Playing Panel
+        NowPlayingPanel {
+            id: nowPlayingPanel
+            
+            onAnnotationRequested: function(text) {
+                // Add annotation at current playback position
+                if (audioEngine.getCurrentFile()) {
+                    var timestamp = audioEngine.getPosition()
+                    annotationManager.addAnnotation(timestamp, text, "General", false)
+                    // Switch to annotations tab if auto-switch is enabled
+                    if (settingsManager.getAutoSwitchAnnotations()) {
+                        tabBar.currentIndex = 1
+                    }
+                }
             }
         }
         
