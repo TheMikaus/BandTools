@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import "../components"
+import "../dialogs"
 import "../styles"
 
 /**
@@ -245,6 +246,18 @@ Item {
         }
     }
     
+    // ========== Progress Dialog ==========
+    
+    FingerprintProgressDialog {
+        id: progressDialog
+        
+        onCancelRequested: {
+            if (fingerprintEngine) {
+                fingerprintEngine.cancelGeneration()
+            }
+        }
+    }
+    
     // ========== Connections ==========
     
     Connections {
@@ -254,11 +267,19 @@ Item {
             isGenerating = true
             statusMessage = "Generating fingerprints..."
             progressBar.value = 0
+            
+            // Show progress dialog
+            if (fileListModel) {
+                progressDialog.startProgress(fileListModel.rowCount())
+            }
         }
         
         function onFingerprintGenerationProgress(current, total, status) {
             progressBar.value = (current / total) * 100
             statusMessage = "Progress: " + current + "/" + total + " - " + status
+            
+            // Update progress dialog
+            progressDialog.updateProgress(current, total, status)
         }
         
         function onFingerprintGenerationFinished(success, message) {
@@ -270,6 +291,9 @@ Item {
             } else {
                 statusMessage = "✗ " + message
             }
+            
+            // Close progress dialog
+            progressDialog.finishProgress(success, message)
         }
     }
 }
