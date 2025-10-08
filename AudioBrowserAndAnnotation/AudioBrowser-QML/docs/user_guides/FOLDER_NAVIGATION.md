@@ -32,11 +32,13 @@ The Library tab now uses a split view layout:
 2. **Navigate Folders**:
    - Click on any folder in the left panel to view its audio files
    - The right panel will update to show files in the selected folder
+   - Folder notes for the selected folder are automatically loaded
 
 3. **View Files**:
    - Files from the selected folder are displayed in the right panel
    - Each file shows: Take indicators, BPM, Filename, Duration, Size
-   - Double-click a file to play it
+   - Click a file to load it (ready to view in Annotations tab)
+   - Double-click a file to load and play it
 
 ## Toolbar Organization
 
@@ -124,6 +126,7 @@ Both formats are automatically detected and loaded. The application will:
 3. **Folder Navigation**:
    - The folder tree only shows folders that contain audio files
    - Empty folders are automatically hidden
+   - Documentation folders (named "docs") are filtered out
 
 4. **Performance**:
    - Large directory trees are scanned efficiently
@@ -137,6 +140,7 @@ Both formats are automatically detected and loaded. The application will:
 If you don't see subfolders in the tree:
 - Make sure the subfolders contain audio files (.wav, .mp3)
 - Check that folder names don't start with a dot (hidden folders are skipped)
+- Note: Folders named "docs" are automatically filtered from the view
 
 ### Metadata Not Loading
 

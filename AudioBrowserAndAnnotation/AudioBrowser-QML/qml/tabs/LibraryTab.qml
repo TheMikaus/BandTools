@@ -679,6 +679,9 @@ Item {
                                     contextMenu.filePath = model.filepath
                                     contextMenu.fileName = model.filename
                                     contextMenu.popup()
+                                } else {
+                                    // Load file on single left-click so it's ready to view in Annotations tab
+                                    audioEngine.loadFile(model.filepath)
                                 }
                             }
                             
