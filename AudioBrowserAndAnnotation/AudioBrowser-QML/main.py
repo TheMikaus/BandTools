@@ -90,6 +90,7 @@ from backend.practice_goals import PracticeGoals
 from backend.setlist_manager import SetlistManager
 from backend.tempo_manager import TempoManager
 from backend.fingerprint_engine import FingerprintEngine
+from backend.backup_manager import BackupManager
 
 
 class ApplicationViewModel(QObject):
@@ -156,6 +157,9 @@ def main():
     # Create fingerprint engine
     fingerprint_engine = FingerprintEngine()
     
+    # Create backup manager
+    backup_manager = BackupManager()
+    
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
     annotations_model = AnnotationsModel()
@@ -181,6 +185,7 @@ def main():
     engine.rootContext().setContextProperty("practiceGoals", practice_goals)
     engine.rootContext().setContextProperty("setlistManager", setlist_manager)
     engine.rootContext().setContextProperty("fingerprintEngine", fingerprint_engine)
+    engine.rootContext().setContextProperty("backupManager", backup_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
@@ -231,6 +236,18 @@ def main():
     
     # Connect fingerprint engine to file manager
     file_manager.currentDirectoryChanged.connect(fingerprint_engine.setCurrentDirectory)
+    
+    # Connect backup manager to file manager (update current folder and root path)
+    file_manager.currentDirectoryChanged.connect(backup_manager.setCurrentFolder)
+    def update_backup_root(directory):
+        if directory:
+            # Set root path for backup discovery (use parent if deep in hierarchy)
+            root = Path(directory)
+            # Try to find a reasonable root (go up a few levels if deep)
+            while len(root.parts) > 3 and root.parent != root:
+                root = root.parent
+            backup_manager.setRootPath(str(root))
+    file_manager.currentDirectoryChanged.connect(update_backup_root)
     
     # Set up audio loader for fingerprint engine
     def load_audio_for_fingerprinting(filepath: str):
