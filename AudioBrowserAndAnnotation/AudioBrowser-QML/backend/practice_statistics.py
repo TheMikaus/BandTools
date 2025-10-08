@@ -291,11 +291,12 @@ class PracticeStatistics(QObject):
             else:
                 # Fall back to folder modification time
                 return datetime.fromtimestamp(folder.stat().st_mtime)
-        except:
+        except (ValueError, OSError) as e:
             # Fall back to folder modification time
             try:
                 return datetime.fromtimestamp(folder.stat().st_mtime)
-            except:
+            except (OSError, Exception) as e2:
+                # Last resort: use current time
                 return datetime.now()
     
     def _load_takes_metadata(self, folder: Path) -> Dict[str, Any]:
@@ -355,7 +356,7 @@ class PracticeStatistics(QObject):
                     date_range_text = first_date
                 else:
                     date_range_text = f"{first_date} to {last_date}"
-            except:
+            except (KeyError, ValueError, TypeError) as e:
                 date_range_text = "Invalid date range"
         
         consistency_text = summary.get("consistency_text", "Not enough data")
@@ -379,7 +380,7 @@ class PracticeStatistics(QObject):
                         last_practiced_str = "Yesterday"
                     else:
                         last_practiced_str = f"{days_ago} days ago"
-                except:
+                except (ValueError, TypeError, AttributeError) as e:
                     last_practiced_str = "Unknown"
             else:
                 last_practiced_str = "Never"
@@ -432,7 +433,7 @@ class PracticeStatistics(QObject):
             if session.get("date"):
                 try:
                     date_str = datetime.fromisoformat(session["date"]).strftime("%Y-%m-%d")
-                except:
+                except (ValueError, TypeError) as e:
                     date_str = "Invalid"
             
             folder = session.get("folder", "Unknown")

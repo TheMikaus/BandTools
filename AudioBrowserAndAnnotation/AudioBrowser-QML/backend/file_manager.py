@@ -581,8 +581,8 @@ class FileManager(QObject):
             try:
                 ctime = datetime.datetime.fromtimestamp(stat.st_ctime)
                 props.append(f"Created: {ctime.strftime('%Y-%m-%d %H:%M:%S')}")
-            except:
-                pass
+            except (OSError, ValueError, TypeError) as e:
+                pass  # Creation time not available on some platforms
             
             return "\n".join(props)
             
