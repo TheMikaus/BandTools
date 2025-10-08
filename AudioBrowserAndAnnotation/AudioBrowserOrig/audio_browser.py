@@ -5209,15 +5209,15 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup, .backups, and .waveforms folders, and apply text filter."""
+        """Filter out .backup, .backups, .waveforms, and .audiobrowser_temp folders, and apply text filter."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
         
-        # Hide directories that start with .backup or are named .waveforms
+        # Hide directories that start with .backup or are named .waveforms or .audiobrowser_temp
         if file_info.isDir():
             folder_name = file_info.fileName()
-            if folder_name.startswith('.backup') or folder_name == '.waveforms':
+            if folder_name.startswith('.backup') or folder_name == '.waveforms' or folder_name == '.audiobrowser_temp':
                 return False
             # Always show directories when text filter is active (to show matching files within)
             if self._text_filter:
@@ -9128,8 +9128,8 @@ class AudioBrowser(QMainWindow):
         if channel_count < 2:
             return path  # File is not stereo, return original
             
-        # Create temporary directory for channel-muted files
-        temp_dir = Path.home() / ".audiobrowser_temp"
+        # Create temporary directory for channel-muted files in the practice folder
+        temp_dir = self.root_path / ".audiobrowser_temp"
         temp_dir.mkdir(exist_ok=True)
         
         # Generate filename for channel-muted version
@@ -9204,8 +9204,8 @@ class AudioBrowser(QMainWindow):
         if channel_count < 2:
             return path  # File is not stereo, return original
             
-        # Create temporary directory for channel-muted files
-        temp_dir = Path.home() / ".audiobrowser_temp"
+        # Create temporary directory for channel-muted files in the practice folder
+        temp_dir = self.root_path / ".audiobrowser_temp"
         temp_dir.mkdir(exist_ok=True)
         
         # Generate filename for channel-muted version
@@ -9266,7 +9266,7 @@ class AudioBrowser(QMainWindow):
     def _cleanup_temp_channel_files(self):
         """Clean up temporary channel-muted audio files."""
         try:
-            temp_dir = Path.home() / ".audiobrowser_temp"
+            temp_dir = self.root_path / ".audiobrowser_temp"
             if temp_dir.exists():
                 # Remove old temp files (older than 1 hour)
                 import time
