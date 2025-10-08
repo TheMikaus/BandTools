@@ -4,6 +4,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **AudioBrowserOrig: Temp Folder Location and Visibility** - Fixed `.audiobrowser_temp` folder location and visibility
+  - Moved `.audiobrowser_temp` folder from user home directory to band practice folder root
+  - Hidden `.audiobrowser_temp` folder from file browser (like `.backup` and `.waveforms`)
+  - Updated three locations: `_get_channel_muted_file_cached()`, `_get_channel_muted_file()`, and `_cleanup_temp_channel_files()`
+  - Updated folder filter in `filterAcceptsRow()` to hide `.audiobrowser_temp`
+  - Temp folder now properly scoped to each band practice session
+
 ### Added
 - **QML Application: Best/Partial Take Indicators** - Added visual indicators for marking and filtering audio takes
   - Created `BestTakeIndicator.qml` component with gold star icon
