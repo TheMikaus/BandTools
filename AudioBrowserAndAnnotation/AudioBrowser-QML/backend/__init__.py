@@ -10,3 +10,4 @@ __version__ = "0.1.0"
 
 # Export main backend classes
 from .fingerprint_engine import FingerprintEngine
+from .backup_manager import BackupManager
