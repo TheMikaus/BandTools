@@ -14,7 +14,7 @@ Welcome to the AudioBrowser documentation! This folder contains comprehensive do
 Documentation for end users, including how-to guides, feature explanations, and visual guides.
 
 **Key Documents:**
-- **[HOWTO_NEW_FEATURES.md](user_guides/HOWTO_NEW_FEATURES.md)** - Step-by-step guides for major features (Dark Mode, Export Best Takes)
+- **[HOWTO_NEW_FEATURES.md](user_guides/HOWTO_NEW_FEATURES.md)** - Step-by-step guides for major features (Dark Mode, Export Best Takes, Stereo Waveform View)
 - **[UI_IMPROVEMENTS.md](user_guides/UI_IMPROVEMENTS.md)** - Guide to UI enhancements (Recent Folders, Preferences Dialog)
 - **[PRACTICE_GOALS_GUIDE.md](user_guides/PRACTICE_GOALS_GUIDE.md)** - Complete guide to setting and tracking practice goals
 - **[PRACTICE_STATISTICS.md](user_guides/PRACTICE_STATISTICS.md)** - How to use practice analytics and tracking
@@ -78,6 +78,7 @@ Comprehensive test documentation for quality assurance and validation.
 - **[TEST_PLAN_PRACTICE_GOALS.md](test_plans/TEST_PLAN_PRACTICE_GOALS.md)** - Test plan for practice goals (40 test cases)
 - **[TEST_PLAN_SETLIST_BUILDER.md](test_plans/TEST_PLAN_SETLIST_BUILDER.md)** - Test plan for setlist builder (43 test cases)
 - **[TEST_PLAN_SPECTRAL_ANALYSIS.md](test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md)** - Test plan for spectral analysis (35 test cases)
+- **[TEST_PLAN_STEREO_WAVEFORM.md](test_plans/TEST_PLAN_STEREO_WAVEFORM.md)** - Test plan for stereo waveform view and channel muting (15 test cases)
 - **[TEST_PLAN_SYNC_IMPROVEMENTS.md](test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md)** - Test plan for sync improvements (38 test cases)
 - **[TEST_PLAN_TEMPO_METRONOME.md](test_plans/TEST_PLAN_TEMPO_METRONOME.md)** - Test plan for tempo and metronome
 - **[TEST_PLAN_WORKSPACE_PROGRESS.md](test_plans/TEST_PLAN_WORKSPACE_PROGRESS.md)** - Test plan for workspace layouts

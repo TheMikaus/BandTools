@@ -9696,6 +9696,10 @@ class AudioBrowser(QMainWindow):
             # File doesn't have stereo data but we're in stereo mode, switch to mono
             self.stereo_mono_toggle.setChecked(False)
             self._on_stereo_toggle_clicked(False)
+        elif has_stereo and not self.waveform.get_stereo_mode():
+            # File has stereo data but we're in mono mode, switch to stereo
+            self.stereo_mono_toggle.setChecked(True)
+            self._on_stereo_toggle_clicked(True)
     
     def _on_spectrogram_toggle_changed(self, state):
         """Handle spectrogram toggle checkbox."""
