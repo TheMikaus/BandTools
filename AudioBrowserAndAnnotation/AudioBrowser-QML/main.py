@@ -127,7 +127,7 @@ def main():
     app.setOrganizationName("BandTools")
     app.setOrganizationDomain("github.com/TheMikaus/BandTools")
     app.setApplicationName("AudioBrowser-QML")
-    app.setApplicationVersion("0.7.0")  # Phase 7 in progress (55% complete)
+    app.setApplicationVersion("0.11.0")  # Phase 11 complete (90% feature parity)
     
     # Register custom QML types
     qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")

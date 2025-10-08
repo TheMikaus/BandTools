@@ -28,6 +28,7 @@ SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generation/fingerprints"
 SETTINGS_KEY_PARALLEL_WORKERS = "preferences/parallel_workers"
 SETTINGS_KEY_DEFAULT_ZOOM = "preferences/default_zoom"
 SETTINGS_KEY_WAVEFORM_QUALITY = "preferences/waveform_quality"
+SETTINGS_KEY_AUTO_SWITCH_ANNOTATIONS = "preferences/auto_switch_annotations"
 
 
 class SettingsManager(QObject):
@@ -265,6 +266,21 @@ class SettingsManager(QObject):
     def setWaveformQuality(self, quality: str):
         """Set waveform rendering quality ('low', 'medium', 'high')."""
         self.settings.setValue(SETTINGS_KEY_WAVEFORM_QUALITY, quality)
+    
+    # Auto-switch to Annotations setting
+    @pyqtSlot(result=bool)
+    def getAutoSwitchAnnotations(self) -> bool:
+        """Get whether to auto-switch to Annotations tab when selecting a file."""
+        auto_switch = self.settings.value(SETTINGS_KEY_AUTO_SWITCH_ANNOTATIONS, True)
+        # Handle string values from QSettings
+        if isinstance(auto_switch, str):
+            return auto_switch.lower() in ('true', '1', 'yes')
+        return bool(auto_switch)
+    
+    @pyqtSlot(bool)
+    def setAutoSwitchAnnotations(self, enabled: bool):
+        """Set whether to auto-switch to Annotations tab when selecting a file."""
+        self.settings.setValue(SETTINGS_KEY_AUTO_SWITCH_ANNOTATIONS, enabled)
     
     # Generic setting accessors (for dialogs)
     @pyqtSlot(str, "QVariant", result="QVariant")
