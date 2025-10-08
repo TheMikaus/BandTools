@@ -157,6 +157,22 @@ ApplicationWindow {
                     preferencesDialog.open()
                 }
             }
+            
+            MenuItem {
+                text: "Auto-Generation Settings..."
+                onTriggered: {
+                    autoGenDialog.open()
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
+                text: "Restore from Backup..."
+                onTriggered: {
+                    backupDialog.open()
+                }
+            }
         }
         
         Menu {
@@ -417,6 +433,20 @@ ApplicationWindow {
         // Keyboard Shortcuts Dialog
         KeyboardShortcutsDialog {
             id: keyboardShortcutsDialog
+        }
+        
+        // Auto-Generation Settings Dialog
+        AutoGenerationSettingsDialog {
+            id: autoGenDialog
+            settingsManager: settingsManager
+        }
+        
+        // Backup Selection Dialog
+        BackupSelectionDialog {
+            id: backupDialog
+            backupManager: backupManager
+            currentFolder: fileManager.currentDirectory
+            rootPath: fileManager.currentDirectory
         }
         
         // Status bar

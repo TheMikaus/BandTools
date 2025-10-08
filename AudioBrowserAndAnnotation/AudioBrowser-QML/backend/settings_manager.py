@@ -228,6 +228,17 @@ class SettingsManager(QObject):
         """Set whether fingerprints are auto-generated."""
         self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(enabled))
     
+    # Generic setting accessors (for dialogs)
+    @pyqtSlot(str, "QVariant", result="QVariant")
+    def getSetting(self, key: str, default_value=None):
+        """Get a generic setting value."""
+        return self.settings.value(key, default_value)
+    
+    @pyqtSlot(str, "QVariant")
+    def setSetting(self, key: str, value):
+        """Set a generic setting value."""
+        self.settings.setValue(key, value)
+    
     # Private helper methods
     def _migrate_legacy_settings(self):
         """
