@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Window
 import "components"
 import "styles"
 import "tabs"
@@ -15,6 +16,173 @@ ApplicationWindow {
     
     // Use theme for background color
     color: Theme.backgroundColor
+    
+    // Save window geometry on close
+    onClosing: {
+        saveWindowGeometry()
+    }
+    
+    // Restore window geometry on startup
+    Component.onCompleted: {
+        restoreWindowGeometry()
+    }
+    
+    // Functions for workspace layout management
+    function saveWindowGeometry() {
+        // Save window position and size
+        settingsManager.setGeometry(JSON.stringify({
+            x: mainWindow.x,
+            y: mainWindow.y,
+            width: mainWindow.width,
+            height: mainWindow.height
+        }))
+        console.log("Window geometry saved")
+    }
+    
+    function restoreWindowGeometry() {
+        try {
+            var geometryStr = settingsManager.getGeometry()
+            if (geometryStr) {
+                var geometry = JSON.parse(geometryStr)
+                if (geometry.width && geometry.height) {
+                    mainWindow.width = geometry.width
+                    mainWindow.height = geometry.height
+                }
+                if (geometry.x !== undefined && geometry.y !== undefined) {
+                    mainWindow.x = geometry.x
+                    mainWindow.y = geometry.y
+                }
+                console.log("Window geometry restored")
+            }
+        } catch (e) {
+            console.log("Could not restore window geometry:", e)
+        }
+    }
+    
+    function resetToDefaultLayout() {
+        mainWindow.width = 1200
+        mainWindow.height = 800
+        // Center window on screen
+        var screen = mainWindow.screen
+        if (screen) {
+            mainWindow.x = (screen.width - mainWindow.width) / 2
+            mainWindow.y = (screen.height - mainWindow.height) / 2
+        }
+        saveWindowGeometry()
+        console.log("Layout reset to defaults")
+    }
+    
+    // Menu Bar
+    menuBar: MenuBar {
+        Menu {
+            title: "&File"
+            
+            MenuItem {
+                text: "Open Folder..."
+                onTriggered: {
+                    libraryTab.openFolderDialog()
+                }
+            }
+            
+            Menu {
+                id: recentFoldersMenu
+                title: "Recent Folders"
+                
+                // Dynamically populated
+                Instantiator {
+                    model: settingsManager.getRecentFolders()
+                    delegate: MenuItem {
+                        text: modelData
+                        onTriggered: {
+                            fileManager.setCurrentDirectory(modelData)
+                            libraryTab.setDirectoryFromCode(modelData)
+                        }
+                    }
+                    onObjectAdded: function(index, object) {
+                        recentFoldersMenu.insertItem(index, object)
+                    }
+                    onObjectRemoved: function(index, object) {
+                        recentFoldersMenu.removeItem(object)
+                    }
+                }
+                
+                MenuSeparator {
+                    visible: settingsManager.getRecentFolders().length > 0
+                }
+                
+                MenuItem {
+                    text: "Clear Recent Folders"
+                    enabled: settingsManager.getRecentFolders().length > 0
+                    onTriggered: {
+                        settingsManager.clearRecentFolders()
+                        recentFoldersMenu.update()
+                    }
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
+                text: "Exit"
+                onTriggered: Qt.quit()
+            }
+        }
+        
+        Menu {
+            title: "&View"
+            
+            MenuItem {
+                text: "Save Layout"
+                onTriggered: {
+                    mainWindow.saveWindowGeometry()
+                    // Show confirmation
+                    console.log("Layout saved")
+                }
+            }
+            
+            MenuItem {
+                text: "Reset Layout to Default"
+                onTriggered: {
+                    mainWindow.resetToDefaultLayout()
+                }
+            }
+        }
+        
+        Menu {
+            title: "&Edit"
+            
+            MenuItem {
+                text: "Preferences..."
+                onTriggered: {
+                    preferencesDialog.open()
+                }
+            }
+        }
+        
+        Menu {
+            title: "&Help"
+            
+            MenuItem {
+                text: "Keyboard Shortcuts"
+                onTriggered: {
+                    keyboardShortcutsDialog.open()
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
+                text: "About"
+                onTriggered: {
+                    aboutDialog.open()
+                }
+            }
+        }
+        
+        background: Rectangle {
+            color: Theme.backgroundLight
+        }
+    }
     
     // Main content area with tabs
     ColumnLayout {
@@ -236,6 +404,21 @@ ApplicationWindow {
             currentFile: audioEngine.currentFile
         }
         
+        // About Dialog
+        AboutDialog {
+            id: aboutDialog
+        }
+        
+        // Preferences Dialog
+        PreferencesDialog {
+            id: preferencesDialog
+        }
+        
+        // Keyboard Shortcuts Dialog
+        KeyboardShortcutsDialog {
+            id: keyboardShortcutsDialog
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true
@@ -396,6 +579,77 @@ ApplicationWindow {
                 clipsTab.setClipEndMarker()
             }
         }
+    }
+    
+    // Additional keyboard shortcuts for feature parity (Issue #12)
+    
+    // Dialog shortcuts
+    Shortcut {
+        sequence: "Ctrl+Shift+T"
+        onActivated: setlistBuilderDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        onActivated: practiceStatisticsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+G"
+        onActivated: practiceGoalsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+,"
+        onActivated: preferencesDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+/"
+        onActivated: keyboardShortcutsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "F1"
+        onActivated: keyboardShortcutsDialog.open()
+    }
+    
+    // File operations
+    Shortcut {
+        sequence: "Ctrl+O"
+        onActivated: libraryTab.openFolderDialog()
+    }
+    
+    Shortcut {
+        sequence: "F5"
+        onActivated: {
+            var dir = fileManager.getCurrentDirectory()
+            if (dir.length > 0) {
+                fileManager.discoverAudioFiles(dir)
+            }
+        }
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Q"
+        onActivated: Qt.quit()
+    }
+    
+    // Tab switching with Ctrl+5 for Fingerprints tab
+    Shortcut {
+        sequence: "Ctrl+5"
+        onActivated: tabBar.currentIndex = 4
+    }
+    
+    // Workspace layout shortcuts
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        onActivated: mainWindow.saveWindowGeometry()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+R"
+        onActivated: mainWindow.resetToDefaultLayout()
     }
     
     // Batch operations signal connections

@@ -217,6 +217,12 @@ def main():
     # Save directory changes to settings
     file_manager.currentDirectoryChanged.connect(settings_manager.setRootDir)
     
+    # Add to recent folders when directory changes
+    def add_to_recent_folders(directory):
+        if directory:
+            settings_manager.addRecentFolder(directory, 10)
+    file_manager.currentDirectoryChanged.connect(add_to_recent_folders)
+    
     # Connect annotation manager to annotations model
     def update_annotations_model(file_path):
         annotations = annotation_manager.getAnnotations()
