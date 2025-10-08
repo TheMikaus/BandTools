@@ -335,6 +335,11 @@ Item {
                                     // Load files from this folder
                                     console.log("Selected folder:", model.path)
                                     fileManager.discoverAudioFiles(model.path)
+                                    
+                                    // Load folder notes for this folder
+                                    if (folderNotesManager) {
+                                        folderNotesManager.loadNotesForFolder(model.path)
+                                    }
                                 }
                             }
                         }
@@ -674,6 +679,9 @@ Item {
                                     contextMenu.filePath = model.filepath
                                     contextMenu.fileName = model.filename
                                     contextMenu.popup()
+                                } else {
+                                    // Load file on single left-click so it's ready to view in Annotations tab
+                                    audioEngine.loadFile(model.filepath)
                                 }
                             }
                             

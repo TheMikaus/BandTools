@@ -156,9 +156,9 @@ class FileManager(QObject):
                                 })
                                 has_audio_files = True
                     
-                    # Get subdirectories (skip hidden ones)
+                    # Get subdirectories (skip hidden ones and docs folders)
                     for item in dir_path.iterdir():
-                        if item.is_dir() and not item.name.startswith('.'):
+                        if item.is_dir() and not item.name.startswith('.') and item.name != 'docs':
                             subdirectories.append(item)
                     
                     # Recursively scan subdirectories
@@ -424,9 +424,9 @@ class FileManager(QObject):
                             'isRoot': dir_path == root_path
                         })
                     
-                    # Scan subdirectories (skip hidden ones)
+                    # Scan subdirectories (skip hidden ones and docs folders)
                     for item in dir_path.iterdir():
-                        if item.is_dir() and not item.name.startswith('.'):
+                        if item.is_dir() and not item.name.startswith('.') and item.name != 'docs':
                             scan_directory(item)
                             
                 except (OSError, PermissionError):
