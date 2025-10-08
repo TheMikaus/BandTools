@@ -173,6 +173,9 @@ def main():
     undo_manager.setAnnotationManager(annotation_manager)
     undo_manager.setCapacity(settings_manager.getUndoLimit())
     
+    # Connect annotation manager to undo manager (for recording operations)
+    annotation_manager.setUndoManager(undo_manager)
+    
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
     annotations_model = AnnotationsModel()

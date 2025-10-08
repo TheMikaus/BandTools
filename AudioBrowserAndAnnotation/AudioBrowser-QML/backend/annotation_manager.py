@@ -46,6 +46,7 @@ class AnnotationManager(QObject):
         self._annotations: Dict[str, List[Dict[str, Any]]] = {}  # filepath -> annotations
         self._categories = ["timing", "energy", "harmony", "dynamics", "notes"]
         self._next_uid = 1  # Counter for generating unique IDs
+        self._undo_manager = None  # Will be set by main app
         
     # ========== QML-accessible methods ==========
     
@@ -84,6 +85,10 @@ class AnnotationManager(QObject):
     def getCurrentUser(self) -> str:
         """Get the current username."""
         return self._current_user
+    
+    def setUndoManager(self, undo_manager):
+        """Set the undo manager for recording undoable operations."""
+        self._undo_manager = undo_manager
     
     @pyqtSlot(int, str, str, bool, str)
     def addAnnotation(self, timestamp_ms: int, text: str, category: str = "",
@@ -132,6 +137,10 @@ class AnnotationManager(QObject):
         # Save to disk
         self._save_annotations(self._current_file)
         
+        # Record in undo manager
+        if self._undo_manager:
+            self._undo_manager.record_annotation_add(self._current_file, annotation)
+        
         # Emit signals
         self.annotationAdded.emit(self._current_file, annotation)
         self.annotationsChanged.emit(self._current_file)
@@ -170,6 +179,37 @@ class AnnotationManager(QObject):
         
         # Update annotation
         annotation = annotations[index]
+        
+        # Record old values for undo (only if values changed)
+        uid = annotation.get("uid", -1)
+        if self._undo_manager and uid >= 0:
+            if annotation["timestamp_ms"] != timestamp_ms:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "timestamp_ms", 
+                    annotation["timestamp_ms"], timestamp_ms
+                )
+            if annotation["text"] != text.strip():
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "text",
+                    annotation["text"], text.strip()
+                )
+            if annotation["category"] != category:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "category",
+                    annotation["category"], category
+                )
+            if annotation["important"] != important:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "important",
+                    annotation["important"], important
+                )
+            if annotation["color"] != color:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "color",
+                    annotation["color"], color
+                )
+        
+        # Apply updates
         annotation["timestamp_ms"] = timestamp_ms
         annotation["text"] = text.strip()
         annotation["category"] = category
@@ -208,11 +248,18 @@ class AnnotationManager(QObject):
             self.errorOccurred.emit(f"Invalid annotation index: {index}")
             return
         
+        # Save annotation before deleting (for undo)
+        deleted_annotation = annotations[index].copy()
+        
         # Delete annotation
         del annotations[index]
         
         # Save to disk
         self._save_annotations(self._current_file)
+        
+        # Record in undo manager
+        if self._undo_manager:
+            self._undo_manager.record_annotation_delete(self._current_file, deleted_annotation)
         
         # Emit signals
         self.annotationDeleted.emit(self._current_file, index)
