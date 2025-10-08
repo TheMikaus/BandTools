@@ -301,10 +301,11 @@ These features were intentionally removed or simplified in the QML version:
 - **QML**: Not yet implemented
 - **Rationale**: May be added later if needed, but not critical for initial release
 
-### 3. Auto-Switch Checkbox (Toolbar)
-- **Original**: Checkbox to auto-switch to first file in folder
-- **QML**: Not implemented
-- **Rationale**: Simplified workflow, may add if users request
+### 3. Auto-Switch Checkbox (Toolbar) ✅ Implemented
+- **Original**: Checkbox to auto-switch to Annotations tab when selecting a file
+- **QML**: ✅ Implemented (Phase 11)
+- **Location**: Toolbar checkbox "Auto-switch to Annotations"
+- **Behavior**: When enabled, double-clicking a file switches to Annotations tab automatically
 
 ### 4. Maximum Zoom Level
 - **Original**: Zoom up to 16×
@@ -450,7 +451,7 @@ These are the large feature areas not yet implemented in QML:
 ## Conclusion
 
 ### Current State
-The AudioBrowser-QML implementation has achieved **~89% feature parity** with the original, covering all core functionality plus major advanced features:
+The AudioBrowser-QML implementation has achieved **~90% feature parity** with the original, covering all core functionality plus major advanced features:
 - ✅ Audio playback
 - ✅ File management (including Recent Folders)
 - ✅ Annotations

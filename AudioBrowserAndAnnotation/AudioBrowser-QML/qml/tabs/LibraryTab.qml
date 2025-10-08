@@ -700,6 +700,11 @@ Item {
                                 console.log("Double-clicked file:", model.filepath)
                                 audioEngine.loadFile(model.filepath)
                                 audioEngine.play()
+                                
+                                // Auto-switch to Annotations tab if enabled
+                                if (autoSwitchCheckbox.checked) {
+                                    tabBar.currentIndex = 1  // Switch to Annotations tab
+                                }
                             }
                         }
                     }

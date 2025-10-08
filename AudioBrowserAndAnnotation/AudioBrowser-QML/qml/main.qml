@@ -243,6 +243,50 @@ ApplicationWindow {
                 
                 Item { width: Theme.spacingSmall }
                 
+                // Auto-switch checkbox
+                CheckBox {
+                    id: autoSwitchCheckbox
+                    text: "Auto-switch to Annotations"
+                    checked: settingsManager.getAutoSwitchAnnotations()
+                    
+                    indicator: Rectangle {
+                        implicitWidth: 16
+                        implicitHeight: 16
+                        x: autoSwitchCheckbox.leftPadding
+                        y: parent.height / 2 - height / 2
+                        radius: 2
+                        border.color: Theme.borderColor
+                        border.width: 1
+                        color: autoSwitchCheckbox.checked ? Theme.accentPrimary : Theme.backgroundColor
+                        
+                        Label {
+                            visible: autoSwitchCheckbox.checked
+                            anchors.centerIn: parent
+                            text: "✓"
+                            color: "white"
+                            font.pixelSize: 12
+                        }
+                    }
+                    
+                    contentItem: Text {
+                        text: autoSwitchCheckbox.text
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textColor
+                        leftPadding: autoSwitchCheckbox.indicator.width + 6
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    onCheckedChanged: {
+                        settingsManager.setAutoSwitchAnnotations(checked)
+                    }
+                    
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Automatically switch to Annotations tab when selecting a file"
+                    ToolTip.delay: 500
+                }
+                
+                Item { width: Theme.spacingSmall }
+                
                 // Theme toggle
                 StyledButton {
                     text: "Theme"
