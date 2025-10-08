@@ -335,6 +335,11 @@ Item {
                                     // Load files from this folder
                                     console.log("Selected folder:", model.path)
                                     fileManager.discoverAudioFiles(model.path)
+                                    
+                                    // Load folder notes for this folder
+                                    if (folderNotesManager) {
+                                        folderNotesManager.loadNotesForFolder(model.path)
+                                    }
                                 }
                             }
                         }
