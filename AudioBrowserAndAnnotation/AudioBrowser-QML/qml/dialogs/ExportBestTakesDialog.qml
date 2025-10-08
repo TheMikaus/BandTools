@@ -72,10 +72,9 @@ Dialog {
         console.log("Convert to MP3:", convertToMP3)
         console.log("Include metadata:", includeMetadata)
         
-        // TODO: Implement actual export via batch operations or new export manager
-        // For now, we'll show a progress dialog
+        // Start export via export manager
         progressDialog.open()
-        progressDialog.performExport(bestTakes, destinationPath, exportFormat, convertToMP3, includeMetadata)
+        progressDialog.startExport(bestTakes, destinationPath, exportFormat, convertToMP3, includeMetadata)
     }
     
     ScrollView {
@@ -391,7 +390,7 @@ Dialog {
         }
     }
     
-    // Progress dialog (placeholder - actual implementation would use a proper worker)
+    // Progress dialog
     Dialog {
         id: progressDialog
         title: "Exporting Best Takes"
@@ -412,16 +411,43 @@ Dialog {
         
         property int currentFile: 0
         property int totalFiles: 0
+        property bool exportComplete: false
         
-        function performExport(files, dest, format, convert, metadata) {
+        function startExport(files, dest, format, convert, metadata) {
             totalFiles = files.length
             currentFile = 0
             progressBar.value = 0
+            exportComplete = false
             statusLabel.text = "Preparing export..."
             
-            // TODO: Implement actual export via worker thread
-            // For now, just simulate progress
-            exportTimer.start()
+            // Start export via exportManager
+            exportManager.startExport(files, dest, format, convert, metadata)
+        }
+        
+        // Connect to export manager signals
+        Connections {
+            target: exportManager
+            
+            function onExportProgress(message) {
+                statusLabel.text = message
+            }
+            
+            function onExportFileProgress(current, total) {
+                progressDialog.currentFile = current
+                progressDialog.totalFiles = total
+                var progress = (current / total) * 100
+                progressBar.value = progress
+                progressLabel.text = current + " / " + total + " files"
+            }
+            
+            function onExportFinished(success, message) {
+                progressDialog.exportComplete = true
+                statusLabel.text = message
+                progressBar.value = 100
+                
+                // Close dialog after 2 seconds
+                closeTimer.start()
+            }
         }
         
         ColumnLayout {
@@ -469,12 +495,16 @@ Dialog {
             }
             
             Button {
-                text: "Cancel"
+                text: progressDialog.exportComplete ? "Close" : "Cancel"
                 Layout.alignment: Qt.AlignRight
                 
                 onClicked: {
-                    exportTimer.stop()
-                    progressDialog.close()
+                    if (progressDialog.exportComplete) {
+                        progressDialog.close()
+                    } else {
+                        exportManager.cancelExport()
+                        progressDialog.close()
+                    }
                 }
                 
                 contentItem: Text {
@@ -494,35 +524,10 @@ Dialog {
             }
         }
         
-        // Simulate export progress (TODO: replace with real worker)
-        Timer {
-            id: exportTimer
-            interval: 200
-            repeat: true
-            
-            onTriggered: {
-                progressDialog.currentFile++
-                var progress = (progressDialog.currentFile / progressDialog.totalFiles) * 100
-                progressBar.value = progress
-                progressLabel.text = progressDialog.currentFile + " / " + progressDialog.totalFiles + " files"
-                statusLabel.text = "Exporting file " + progressDialog.currentFile + "..."
-                
-                if (progressDialog.currentFile >= progressDialog.totalFiles) {
-                    exportTimer.stop()
-                    statusLabel.text = "Export complete!"
-                    progressBar.value = 100
-                    
-                    // Close dialog after 1 second
-                    Qt.callLater(function() {
-                        closeTimer.start()
-                    })
-                }
-            }
-        }
-        
+        // Auto-close timer after export complete
         Timer {
             id: closeTimer
-            interval: 1000
+            interval: 2000
             repeat: false
             onTriggered: progressDialog.close()
         }
