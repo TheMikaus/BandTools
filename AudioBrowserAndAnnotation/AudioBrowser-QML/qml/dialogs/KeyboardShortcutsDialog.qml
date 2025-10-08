@@ -250,6 +250,40 @@ Dialog {
                 }
             }
             
+            // Workspace Layout Section
+            GroupBox {
+                Layout.fillWidth: true
+                title: "Workspace Layout"
+                
+                background: Rectangle {
+                    color: Theme.backgroundLight
+                    border.color: Theme.borderColor
+                    border.width: 1
+                    radius: Theme.radiusSmall
+                }
+                
+                label: Label {
+                    text: parent.title
+                    font.bold: true
+                    font.pixelSize: Theme.fontSizeLarge
+                    color: Theme.textColor
+                    leftPadding: Theme.spacingSmall
+                }
+                
+                GridLayout {
+                    width: parent.width
+                    columns: 2
+                    rowSpacing: Theme.spacingSmall
+                    columnSpacing: Theme.spacingLarge
+                    
+                    Label { text: "Ctrl+Shift+L"; font.pixelSize: Theme.fontSizeNormal; color: Theme.accentColor; font.bold: true }
+                    Label { text: "Save current layout"; font.pixelSize: Theme.fontSizeNormal; color: Theme.textColor }
+                    
+                    Label { text: "Ctrl+Shift+R"; font.pixelSize: Theme.fontSizeNormal; color: Theme.accentColor; font.bold: true }
+                    Label { text: "Reset layout to default"; font.pixelSize: Theme.fontSizeNormal; color: Theme.textColor }
+                }
+            }
+            
             // Appearance Section
             GroupBox {
                 Layout.fillWidth: true

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Window
 import "components"
 import "styles"
 import "tabs"
@@ -15,6 +16,61 @@ ApplicationWindow {
     
     // Use theme for background color
     color: Theme.backgroundColor
+    
+    // Save window geometry on close
+    onClosing: {
+        saveWindowGeometry()
+    }
+    
+    // Restore window geometry on startup
+    Component.onCompleted: {
+        restoreWindowGeometry()
+    }
+    
+    // Functions for workspace layout management
+    function saveWindowGeometry() {
+        // Save window position and size
+        settingsManager.setGeometry(JSON.stringify({
+            x: mainWindow.x,
+            y: mainWindow.y,
+            width: mainWindow.width,
+            height: mainWindow.height
+        }))
+        console.log("Window geometry saved")
+    }
+    
+    function restoreWindowGeometry() {
+        try {
+            var geometryStr = settingsManager.getGeometry()
+            if (geometryStr) {
+                var geometry = JSON.parse(geometryStr)
+                if (geometry.width && geometry.height) {
+                    mainWindow.width = geometry.width
+                    mainWindow.height = geometry.height
+                }
+                if (geometry.x !== undefined && geometry.y !== undefined) {
+                    mainWindow.x = geometry.x
+                    mainWindow.y = geometry.y
+                }
+                console.log("Window geometry restored")
+            }
+        } catch (e) {
+            console.log("Could not restore window geometry:", e)
+        }
+    }
+    
+    function resetToDefaultLayout() {
+        mainWindow.width = 1200
+        mainWindow.height = 800
+        // Center window on screen
+        var screen = mainWindow.screen
+        if (screen) {
+            mainWindow.x = (screen.width - mainWindow.width) / 2
+            mainWindow.y = (screen.height - mainWindow.height) / 2
+        }
+        saveWindowGeometry()
+        console.log("Layout reset to defaults")
+    }
     
     // Menu Bar
     menuBar: MenuBar {
@@ -69,6 +125,26 @@ ApplicationWindow {
             MenuItem {
                 text: "Exit"
                 onTriggered: Qt.quit()
+            }
+        }
+        
+        Menu {
+            title: "&View"
+            
+            MenuItem {
+                text: "Save Layout"
+                onTriggered: {
+                    mainWindow.saveWindowGeometry()
+                    // Show confirmation
+                    console.log("Layout saved")
+                }
+            }
+            
+            MenuItem {
+                text: "Reset Layout to Default"
+                onTriggered: {
+                    mainWindow.resetToDefaultLayout()
+                }
             }
         }
         
@@ -563,6 +639,17 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+5"
         onActivated: tabBar.currentIndex = 4
+    }
+    
+    // Workspace layout shortcuts
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        onActivated: mainWindow.saveWindowGeometry()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+R"
+        onActivated: mainWindow.resetToDefaultLayout()
     }
     
     // Batch operations signal connections
