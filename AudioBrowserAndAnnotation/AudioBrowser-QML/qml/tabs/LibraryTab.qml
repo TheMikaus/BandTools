@@ -16,6 +16,16 @@ Item {
     property bool filterBestTakes: false
     property bool filterPartialTakes: false
     
+    // Functions accessible from outside
+    function openFolderDialog() {
+        folderDialog.open()
+    }
+    
+    function setDirectoryFromCode(path) {
+        directoryField.text = path
+        populateFolderTree(path)
+    }
+    
     // Folder picker dialog
     FolderDialog {
         id: folderDialog
@@ -23,6 +33,7 @@ Item {
         onFolderSelected: function(folder) {
             console.log("Folder selected:", folder)
             fileManager.setCurrentDirectory(folder)
+            settingsManager.addRecentFolder(folder, 10)
             directoryField.text = folder
             // Populate folder tree with new root directory
             populateFolderTree(folder)

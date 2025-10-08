@@ -16,6 +16,78 @@ ApplicationWindow {
     // Use theme for background color
     color: Theme.backgroundColor
     
+    // Menu Bar
+    menuBar: MenuBar {
+        Menu {
+            title: "&File"
+            
+            MenuItem {
+                text: "Open Folder..."
+                onTriggered: {
+                    libraryTab.openFolderDialog()
+                }
+            }
+            
+            Menu {
+                id: recentFoldersMenu
+                title: "Recent Folders"
+                
+                // Dynamically populated
+                Instantiator {
+                    model: settingsManager.getRecentFolders()
+                    delegate: MenuItem {
+                        text: modelData
+                        onTriggered: {
+                            fileManager.setCurrentDirectory(modelData)
+                            libraryTab.setDirectoryFromCode(modelData)
+                        }
+                    }
+                    onObjectAdded: function(index, object) {
+                        recentFoldersMenu.insertItem(index, object)
+                    }
+                    onObjectRemoved: function(index, object) {
+                        recentFoldersMenu.removeItem(object)
+                    }
+                }
+                
+                MenuSeparator {
+                    visible: settingsManager.getRecentFolders().length > 0
+                }
+                
+                MenuItem {
+                    text: "Clear Recent Folders"
+                    enabled: settingsManager.getRecentFolders().length > 0
+                    onTriggered: {
+                        settingsManager.clearRecentFolders()
+                        recentFoldersMenu.update()
+                    }
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
+                text: "Exit"
+                onTriggered: Qt.quit()
+            }
+        }
+        
+        Menu {
+            title: "&Help"
+            
+            MenuItem {
+                text: "About"
+                onTriggered: {
+                    aboutDialog.open()
+                }
+            }
+        }
+        
+        background: Rectangle {
+            color: Theme.backgroundLight
+        }
+    }
+    
     // Main content area with tabs
     ColumnLayout {
         anchors.fill: parent
@@ -234,6 +306,11 @@ ApplicationWindow {
         ExportAnnotationsDialog {
             id: exportAnnotationsDialog
             currentFile: audioEngine.currentFile
+        }
+        
+        // About Dialog
+        AboutDialog {
+            id: aboutDialog
         }
         
         // Status bar
