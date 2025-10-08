@@ -91,6 +91,7 @@ from backend.setlist_manager import SetlistManager
 from backend.tempo_manager import TempoManager
 from backend.fingerprint_engine import FingerprintEngine
 from backend.backup_manager import BackupManager
+from backend.export_manager import ExportManager
 
 
 class ApplicationViewModel(QObject):
@@ -159,6 +160,7 @@ def main():
     
     # Create backup manager
     backup_manager = BackupManager()
+    export_manager = ExportManager()
     
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
@@ -186,6 +188,7 @@ def main():
     engine.rootContext().setContextProperty("setlistManager", setlist_manager)
     engine.rootContext().setContextProperty("fingerprintEngine", fingerprint_engine)
     engine.rootContext().setContextProperty("backupManager", backup_manager)
+    engine.rootContext().setContextProperty("exportManager", export_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)

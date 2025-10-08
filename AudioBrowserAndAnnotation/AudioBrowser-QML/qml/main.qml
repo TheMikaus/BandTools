@@ -123,6 +123,15 @@ ApplicationWindow {
             MenuSeparator {}
             
             MenuItem {
+                text: "Export Best Takes Package..."
+                onTriggered: {
+                    exportBestTakesDialog.open()
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
                 text: "Exit"
                 onTriggered: Qt.quit()
             }
@@ -447,6 +456,10 @@ ApplicationWindow {
             backupManager: backupManager
             currentFolder: fileManager.currentDirectory
             rootPath: fileManager.currentDirectory
+        }
+        
+        ExportBestTakesDialog {
+            id: exportBestTakesDialog
         }
         
         // Status bar

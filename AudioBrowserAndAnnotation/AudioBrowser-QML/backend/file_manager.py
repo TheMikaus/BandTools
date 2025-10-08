@@ -1024,6 +1024,16 @@ class FileManager(QObject):
         """
         return list(self._best_takes)
     
+    @pyqtSlot(result=int)
+    def getBestTakesCount(self) -> int:
+        """
+        Get count of files marked as best takes.
+        
+        Returns:
+            Number of files marked as best takes
+        """
+        return len(self._best_takes)
+    
     @pyqtSlot(result=list)
     def getPartialTakes(self) -> List[str]:
         """

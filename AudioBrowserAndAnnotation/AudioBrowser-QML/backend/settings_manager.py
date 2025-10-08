@@ -25,6 +25,9 @@ SETTINGS_KEY_SHOW_ALL = "annotations/show_all_sets"
 SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "annotations/show_all_folder_notes"
 SETTINGS_KEY_AUTO_GEN_WAVEFORMS = "auto_generation/waveforms"
 SETTINGS_KEY_AUTO_GEN_FINGERPRINTS = "auto_generation/fingerprints"
+SETTINGS_KEY_PARALLEL_WORKERS = "preferences/parallel_workers"
+SETTINGS_KEY_DEFAULT_ZOOM = "preferences/default_zoom"
+SETTINGS_KEY_WAVEFORM_QUALITY = "preferences/waveform_quality"
 
 
 class SettingsManager(QObject):
@@ -227,6 +230,41 @@ class SettingsManager(QObject):
     def setAutoFingerprints(self, enabled: bool):
         """Set whether fingerprints are auto-generated."""
         self.settings.setValue(SETTINGS_KEY_AUTO_GEN_FINGERPRINTS, int(enabled))
+    
+    # Parallel workers setting
+    @pyqtSlot(result=int)
+    def getParallelWorkers(self) -> int:
+        """Get number of parallel workers (0 = auto)."""
+        workers_raw = self.settings.value(SETTINGS_KEY_PARALLEL_WORKERS, 4)
+        return int(workers_raw) if workers_raw is not None else 4
+    
+    @pyqtSlot(int)
+    def setParallelWorkers(self, workers: int):
+        """Set number of parallel workers (0 = auto)."""
+        self.settings.setValue(SETTINGS_KEY_PARALLEL_WORKERS, int(workers))
+    
+    # Default zoom level setting
+    @pyqtSlot(result=int)
+    def getDefaultZoom(self) -> int:
+        """Get default zoom level (1-10)."""
+        zoom_raw = self.settings.value(SETTINGS_KEY_DEFAULT_ZOOM, 1)
+        return int(zoom_raw) if zoom_raw is not None else 1
+    
+    @pyqtSlot(int)
+    def setDefaultZoom(self, zoom: int):
+        """Set default zoom level (1-10)."""
+        self.settings.setValue(SETTINGS_KEY_DEFAULT_ZOOM, int(zoom))
+    
+    # Waveform quality setting
+    @pyqtSlot(result=str)
+    def getWaveformQuality(self) -> str:
+        """Get waveform rendering quality ('low', 'medium', 'high')."""
+        return self.settings.value(SETTINGS_KEY_WAVEFORM_QUALITY, "medium", type=str)
+    
+    @pyqtSlot(str)
+    def setWaveformQuality(self, quality: str):
+        """Set waveform rendering quality ('low', 'medium', 'high')."""
+        self.settings.setValue(SETTINGS_KEY_WAVEFORM_QUALITY, quality)
     
     # Generic setting accessors (for dialogs)
     @pyqtSlot(str, "QVariant", result="QVariant")

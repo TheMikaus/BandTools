@@ -55,11 +55,11 @@ Dialog {
     
     function loadSettings() {
         tempUndoLimit = settingsManager.getUndoLimit()
-        tempParallelWorkers = 4  // TODO: Add to SettingsManager
+        tempParallelWorkers = settingsManager.getParallelWorkers()
         tempAutoWaveforms = settingsManager.getAutoWaveforms()
         tempAutoFingerprints = settingsManager.getAutoFingerprints()
-        tempDefaultZoomLevel = 1  // TODO: Add to SettingsManager
-        tempWaveformQuality = "medium"  // TODO: Add to SettingsManager
+        tempDefaultZoomLevel = settingsManager.getDefaultZoom()
+        tempWaveformQuality = settingsManager.getWaveformQuality()
         
         // Update UI controls
         undoLimitSlider.value = tempUndoLimit
@@ -72,12 +72,13 @@ Dialog {
     
     function applySettings() {
         settingsManager.setUndoLimit(tempUndoLimit)
-        // TODO: Add parallel workers to settings manager
+        settingsManager.setParallelWorkers(tempParallelWorkers)
         settingsManager.setAutoWaveforms(tempAutoWaveforms)
         settingsManager.setAutoFingerprints(tempAutoFingerprints)
-        // TODO: Add default zoom and waveform quality to settings manager
+        settingsManager.setDefaultZoom(tempDefaultZoomLevel)
+        settingsManager.setWaveformQuality(tempWaveformQuality)
         
-        console.log("Settings applied:", tempUndoLimit, tempAutoWaveforms, tempAutoFingerprints)
+        console.log("Settings applied:", tempUndoLimit, tempParallelWorkers, tempAutoWaveforms, tempAutoFingerprints, tempDefaultZoomLevel, tempWaveformQuality)
     }
     
     function restoreDefaults() {
