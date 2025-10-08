@@ -222,6 +222,21 @@ class GDriveSync(QObject):
         self.current_user: str = os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'
     
     @pyqtSlot(result=bool)
+    def isAvailable(self) -> bool:
+        """Check if Google Drive API libraries are available."""
+        return GDRIVE_AVAILABLE
+    
+    @pyqtSlot(result=bool)
+    def isAuthenticated(self) -> bool:
+        """Check if currently authenticated with Google Drive."""
+        return self.service is not None
+    
+    @pyqtSlot(result=str)
+    def getCurrentUser(self) -> str:
+        """Get current username for sync operations."""
+        return self.current_user
+    
+    @pyqtSlot(result=bool)
     def authenticate(self) -> bool:
         """
         Authenticate with Google Drive API.
@@ -434,22 +449,30 @@ class GDriveSync(QObject):
             logger.error(f"Error listing remote files: {e}")
             return []
     
+    @pyqtSlot(str, str, result=bool)
     def upload_file(self, local_path: Path, remote_name: Optional[str] = None) -> bool:
         """
         Upload a file to remote folder.
         
         Args:
-            local_path: Path to local file
+            local_path: Path to local file (can be string from QML)
             remote_name: Optional different name for remote file
             
         Returns:
             True if successful
         """
+        # Convert string path from QML to Path
+        if isinstance(local_path, str):
+            local_path = Path(local_path)
+            
         if not self.service or not self.remote_folder_id:
+            self.syncError.emit("Not authenticated or no folder selected")
             return False
         
         if not local_path.exists():
-            logger.error(f"Local file not found: {local_path}")
+            error_msg = f"Local file not found: {local_path}"
+            logger.error(error_msg)
+            self.syncError.emit(error_msg)
             return False
         
         try:
@@ -477,6 +500,7 @@ class GDriveSync(QObject):
             if files:
                 # Update existing file
                 file_id = files[0]['id']
+                self.syncProgress.emit(f"Updating: {remote_name}")
                 self.service.files().update(
                     fileId=file_id,
                     media_body=media
@@ -488,6 +512,7 @@ class GDriveSync(QObject):
                     'name': remote_name,
                     'parents': [self.remote_folder_id]
                 }
+                self.syncProgress.emit(f"Uploading: {remote_name}")
                 self.service.files().create(
                     body=file_metadata,
                     media_body=media,
@@ -498,7 +523,9 @@ class GDriveSync(QObject):
             return True
             
         except Exception as e:
-            logger.error(f"Error uploading file {local_path}: {e}")
+            error_msg = f"Error uploading file {local_path}: {e}"
+            logger.error(error_msg)
+            self.syncError.emit(error_msg)
             return False
     
     def download_file(self, remote_name: str, local_path: Path) -> bool:
@@ -630,6 +657,75 @@ class GDriveSync(QObject):
         
         # All other files can be modified
         return True
+    
+    @pyqtSlot(str, bool, result=bool)
+    def performSync(self, local_directory: str, upload: bool = True) -> bool:
+        """
+        Perform a sync operation (QML-friendly).
+        
+        Args:
+            local_directory: Path to local directory to sync (string from QML)
+            upload: True to upload local changes, False to download remote changes
+            
+        Returns:
+            True if sync initiated successfully
+        """
+        if not self.isAuthenticated():
+            self.syncError.emit("Not authenticated with Google Drive")
+            return False
+        
+        if not self.remote_folder_id:
+            self.syncError.emit("No remote folder selected")
+            return False
+        
+        try:
+            local_dir = Path(local_directory)
+            if not local_dir.exists():
+                self.syncError.emit(f"Local directory not found: {local_directory}")
+                return False
+            
+            self.syncProgress.emit("Analyzing files...")
+            
+            # Get remote files
+            remote_files = self.list_remote_files()
+            
+            # Compare local and remote
+            local_only, remote_only, both = compare_files(local_dir, remote_files)
+            
+            # Perform sync based on direction
+            success_count = 0
+            total_count = 0
+            
+            if upload:
+                # Upload local files
+                files_to_sync = list(local_only) + list(both)
+                total_count = len(files_to_sync)
+                
+                for i, filename in enumerate(files_to_sync):
+                    if self.upload_file(local_dir / filename):
+                        success_count += 1
+                    self.syncProgress.emit(f"Uploading: {i+1}/{total_count}")
+                
+                self.syncCompleted.emit(True, f"Uploaded {success_count}/{total_count} files", success_count)
+            else:
+                # Download remote files
+                files_to_sync = list(remote_only) + list(both)
+                total_count = len(files_to_sync)
+                
+                for i, filename in enumerate(files_to_sync):
+                    if self.download_file(filename, local_dir / filename):
+                        success_count += 1
+                    self.syncProgress.emit(f"Downloading: {i+1}/{total_count}")
+                
+                self.syncCompleted.emit(True, f"Downloaded {success_count}/{total_count} files", success_count)
+            
+            return True
+            
+        except Exception as e:
+            error_msg = f"Sync failed: {e}"
+            logger.error(error_msg)
+            self.syncError.emit(error_msg)
+            return False
 
 
 def load_local_version(version_path: Path) -> SyncVersion:

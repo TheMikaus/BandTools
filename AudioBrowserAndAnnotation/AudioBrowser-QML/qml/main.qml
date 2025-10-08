@@ -232,6 +232,13 @@ ApplicationWindow {
                     backupDialog.open()
                 }
             }
+            
+            MenuItem {
+                text: "Google Drive Sync..."
+                onTriggered: {
+                    syncDialog.open()
+                }
+            }
         }
         
         Menu {
@@ -584,6 +591,11 @@ ApplicationWindow {
         
         ExportBestTakesDialog {
             id: exportBestTakesDialog
+        }
+        
+        // Google Drive Sync Dialog
+        SyncDialog {
+            id: syncDialog
         }
         
         // Status bar
