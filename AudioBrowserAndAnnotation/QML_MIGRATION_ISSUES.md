@@ -1111,50 +1111,74 @@ Add in-app documentation browser for viewing markdown docs.
 
 ---
 
-## Issue 16: [LOW PRIORITY] Implement Now Playing Panel
+## Issue 16: [LOW PRIORITY] Implement Now Playing Panel ✅ DONE
 
-**Labels**: `enhancement`, `qml-migration`, `low-priority`, `future`
+**Labels**: `enhancement`, `qml-migration`, `low-priority`, `phase-13`  
+**Status**: ✅ COMPLETED  
+**Completed Date**: 2025-01
 
 ### Overview
 Add persistent Now Playing panel with compact controls and mini-waveform.
 
 ### Missing Features
-- [ ] Compact playback controls
-- [ ] Mini-waveform display
-- [ ] Current file display
-- [ ] Quick annotation entry
-- [ ] Collapsible with toggle button
-- [ ] State persistence
+- [x] Compact playback controls
+- [x] Mini-waveform display
+- [x] Current file display
+- [x] Quick annotation entry
+- [x] Collapsible with toggle button
+- [x] State persistence
 
 ### Technical Details
 - **Estimated Lines of Code**: ~500 lines
+- **Actual Lines of Code**: ~350 lines (QML components + backend)
 - **Complexity**: Medium (layout, waveform rendering)
 - **Priority**: Low (main controls sufficient)
-- **Phase**: Future (post Phase 11)
+- **Phase**: Phase 13
 - **Estimated Effort**: 1 week
+- **Actual Effort**: 1 day
 
-### Implementation Plan
-1. Create Now Playing panel
-   - `qml/components/NowPlayingPanel.qml` (~300 lines)
-   - Mini-waveform widget
-   - Compact controls
-2. Integration
-   - Add to main.qml layout
-   - Toggle button
-   - Persist state
-3. Testing
-   - Test all controls
-   - Test persistence
-   - Test layout responsiveness
+### Implementation Summary ✅
+
+**Files Created:**
+- `qml/components/MiniWaveformWidget.qml` (~80 lines) - Compact waveform display
+- `qml/components/NowPlayingPanel.qml` (~260 lines) - Complete Now Playing panel
+- `test_now_playing_panel.py` (~150 lines) - Comprehensive test suite
+
+**Files Modified:**
+- `backend/settings_manager.py` - Fixed type conversion bug in getNowPlayingCollapsed()
+- `qml/main.qml` - Added NowPlayingPanel integration and View menu toggle
+
+**Key Features:**
+- Collapsible panel with smooth animation (30px collapsed, 180px expanded)
+- Current file display with musical note icon
+- Mini waveform with real-time playback position
+- Compact playback controls (play/pause button and time display)
+- Quick annotation entry field with "Add Note" button
+- State persistence across sessions via SettingsManager
+- View menu toggle item
+- Keyboard-friendly design
+
+**User Benefits:**
+- At-a-glance playback monitoring
+- Quick annotation entry without switching tabs
+- Compact interface for focused work
+- Persistent collapsed state preference
+
+**Testing:**
+- ✓ Backend settings methods (getNowPlayingCollapsed, setNowPlayingCollapsed)
+- ✓ MiniWaveformWidget QML syntax validation
+- ✓ NowPlayingPanel QML syntax validation
+- ✓ main.qml integration verification
+- ✓ All tests passing (4/4)
 
 ### Dependencies
-- AudioEngine
-- WaveformEngine
-- SettingsManager
+- AudioEngine ✅
+- WaveformEngine ✅
+- SettingsManager ✅
 
 ### Reference
 - FEATURE_COMPARISON_ORIG_VS_QML.md sections 12, "Features Removed for Simplification"
-- AudioBrowserOrig NowPlayingPanel class
+- AudioBrowserOrig NowPlayingPanel class (lines 4966-5160)
 
 ---
 

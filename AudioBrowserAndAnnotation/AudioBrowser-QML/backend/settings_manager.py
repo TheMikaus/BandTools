@@ -78,8 +78,16 @@ class SettingsManager(QObject):
     @pyqtSlot(result=bool)
     def getNowPlayingCollapsed(self) -> bool:
         """Get whether Now Playing panel is collapsed."""
-        collapsed_raw = self.settings.value(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, 0)
-        return bool(int(collapsed_raw))
+        collapsed_raw = self.settings.value(SETTINGS_KEY_NOW_PLAYING_COLLAPSED, False)
+        # Handle various types that QSettings might return
+        if isinstance(collapsed_raw, bool):
+            return collapsed_raw
+        elif isinstance(collapsed_raw, str):
+            return collapsed_raw.lower() in ('true', '1', 'yes')
+        elif isinstance(collapsed_raw, int):
+            return bool(collapsed_raw)
+        else:
+            return False
     
     @pyqtSlot(bool)
     def setNowPlayingCollapsed(self, collapsed: bool):

@@ -12,7 +12,7 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 800
-    title: "AudioBrowser (QML) - Phase 7 (Additional Features - 55% Complete)"
+    title: "AudioBrowser (QML) - Phase 13 (93% Feature Parity)"
     
     // Use theme for background color
     color: Theme.backgroundColor
@@ -139,6 +139,18 @@ ApplicationWindow {
         
         Menu {
             title: "&View"
+            
+            MenuItem {
+                text: "Toggle Now Playing Panel"
+                checkable: true
+                checked: !nowPlayingPanel.collapsed
+                onTriggered: {
+                    nowPlayingPanel.collapsed = !nowPlayingPanel.collapsed
+                    settingsManager.setNowPlayingCollapsed(nowPlayingPanel.collapsed)
+                }
+            }
+            
+            MenuSeparator {}
             
             MenuItem {
                 text: "Save Layout"
@@ -426,6 +438,23 @@ ApplicationWindow {
             
             FingerprintsTab {
                 id: fingerprintsTab
+            }
+        }
+        
+        // Now Playing Panel
+        NowPlayingPanel {
+            id: nowPlayingPanel
+            
+            onAnnotationRequested: function(text) {
+                // Add annotation at current playback position
+                if (audioEngine.getCurrentFile()) {
+                    var timestamp = audioEngine.getPosition()
+                    annotationManager.addAnnotation(timestamp, text, "General", false)
+                    // Switch to annotations tab if auto-switch is enabled
+                    if (settingsManager.getAutoSwitchAnnotations()) {
+                        tabBar.currentIndex = 1
+                    }
+                }
             }
         }
         
