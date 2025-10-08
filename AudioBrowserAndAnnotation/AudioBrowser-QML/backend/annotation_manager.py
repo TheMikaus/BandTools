@@ -45,6 +45,8 @@ class AnnotationManager(QObject):
         self._current_user: str = "default_user"
         self._annotations: Dict[str, List[Dict[str, Any]]] = {}  # filepath -> annotations
         self._categories = ["timing", "energy", "harmony", "dynamics", "notes"]
+        self._next_uid = 1  # Counter for generating unique IDs
+        self._undo_manager = None  # Will be set by main app
         
     # ========== QML-accessible methods ==========
     
@@ -84,6 +86,10 @@ class AnnotationManager(QObject):
         """Get the current username."""
         return self._current_user
     
+    def setUndoManager(self, undo_manager):
+        """Set the undo manager for recording undoable operations."""
+        self._undo_manager = undo_manager
+    
     @pyqtSlot(int, str, str, bool, str)
     def addAnnotation(self, timestamp_ms: int, text: str, category: str = "",
                      important: bool = False, color: str = "#3498db") -> None:
@@ -106,6 +112,7 @@ class AnnotationManager(QObject):
             return
         
         annotation = {
+            "uid": self._next_uid,
             "timestamp_ms": timestamp_ms,
             "text": text.strip(),
             "category": category,
@@ -115,6 +122,7 @@ class AnnotationManager(QObject):
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
+        self._next_uid += 1
         
         # Ensure file has annotation list
         if self._current_file not in self._annotations:
@@ -128,6 +136,10 @@ class AnnotationManager(QObject):
         
         # Save to disk
         self._save_annotations(self._current_file)
+        
+        # Record in undo manager
+        if self._undo_manager:
+            self._undo_manager.record_annotation_add(self._current_file, annotation)
         
         # Emit signals
         self.annotationAdded.emit(self._current_file, annotation)
@@ -167,6 +179,37 @@ class AnnotationManager(QObject):
         
         # Update annotation
         annotation = annotations[index]
+        
+        # Record old values for undo (only if values changed)
+        uid = annotation.get("uid", -1)
+        if self._undo_manager and uid >= 0:
+            if annotation["timestamp_ms"] != timestamp_ms:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "timestamp_ms", 
+                    annotation["timestamp_ms"], timestamp_ms
+                )
+            if annotation["text"] != text.strip():
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "text",
+                    annotation["text"], text.strip()
+                )
+            if annotation["category"] != category:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "category",
+                    annotation["category"], category
+                )
+            if annotation["important"] != important:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "important",
+                    annotation["important"], important
+                )
+            if annotation["color"] != color:
+                self._undo_manager.record_annotation_edit(
+                    self._current_file, uid, "color",
+                    annotation["color"], color
+                )
+        
+        # Apply updates
         annotation["timestamp_ms"] = timestamp_ms
         annotation["text"] = text.strip()
         annotation["category"] = category
@@ -205,15 +248,93 @@ class AnnotationManager(QObject):
             self.errorOccurred.emit(f"Invalid annotation index: {index}")
             return
         
+        # Save annotation before deleting (for undo)
+        deleted_annotation = annotations[index].copy()
+        
         # Delete annotation
         del annotations[index]
         
         # Save to disk
         self._save_annotations(self._current_file)
         
+        # Record in undo manager
+        if self._undo_manager:
+            self._undo_manager.record_annotation_delete(self._current_file, deleted_annotation)
+        
         # Emit signals
         self.annotationDeleted.emit(self._current_file, index)
         self.annotationsChanged.emit(self._current_file)
+    
+    def deleteAnnotationByUid(self, file_path: str, uid: int) -> bool:
+        """
+        Delete an annotation by UID (for undo system).
+        
+        Args:
+            file_path: Path to the audio file
+            uid: Unique identifier of the annotation
+            
+        Returns:
+            True if annotation was found and deleted
+        """
+        if file_path not in self._annotations:
+            return False
+        
+        annotations = self._annotations[file_path]
+        for i, annotation in enumerate(annotations):
+            if annotation.get('uid') == uid:
+                del annotations[i]
+                self._save_annotations(file_path)
+                self.annotationsChanged.emit(file_path)
+                return True
+        return False
+    
+    def addAnnotationDirect(self, file_path: str, annotation: Dict[str, Any]) -> None:
+        """
+        Add an annotation directly (for undo system).
+        This bypasses the normal addAnnotation flow and uses a pre-built annotation dict.
+        
+        Args:
+            file_path: Path to the audio file
+            annotation: Complete annotation dictionary
+        """
+        if file_path not in self._annotations:
+            self._annotations[file_path] = []
+        
+        self._annotations[file_path].append(annotation.copy())
+        self._annotations[file_path].sort(key=lambda a: a.get("timestamp_ms", 0))
+        self._save_annotations(file_path)
+        self.annotationsChanged.emit(file_path)
+    
+    def updateAnnotationField(self, file_path: str, uid: int, field: str, value: Any) -> bool:
+        """
+        Update a single field of an annotation (for undo system).
+        
+        Args:
+            file_path: Path to the audio file
+            uid: Unique identifier of the annotation
+            field: Field name to update
+            value: New value for the field
+            
+        Returns:
+            True if annotation was found and updated
+        """
+        if file_path not in self._annotations:
+            return False
+        
+        annotations = self._annotations[file_path]
+        for annotation in annotations:
+            if annotation.get('uid') == uid:
+                annotation[field] = value
+                annotation["updated_at"] = datetime.now().isoformat()
+                
+                # Re-sort if timestamp changed
+                if field == "timestamp_ms":
+                    annotations.sort(key=lambda a: a.get("timestamp_ms", 0))
+                
+                self._save_annotations(file_path)
+                self.annotationsChanged.emit(file_path)
+                return True
+        return False
     
     @pyqtSlot()
     def clearAnnotations(self) -> None:
@@ -465,6 +586,16 @@ class AnnotationManager(QObject):
                     
                     self._annotations[file_path] = all_annotations
                     
+                # Add UIDs to any annotations that don't have them
+                for annotation in self._annotations[file_path]:
+                    if 'uid' not in annotation:
+                        annotation['uid'] = self._next_uid
+                        self._next_uid += 1
+                    else:
+                        # Track max UID to avoid conflicts
+                        if annotation['uid'] >= self._next_uid:
+                            self._next_uid = annotation['uid'] + 1
+                
                 # Sort by timestamp
                 self._annotations[file_path].sort(key=lambda a: a.get("timestamp_ms", 0))
                 

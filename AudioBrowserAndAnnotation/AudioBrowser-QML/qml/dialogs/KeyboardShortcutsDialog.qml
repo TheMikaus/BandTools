@@ -127,6 +127,40 @@ Dialog {
                 }
             }
             
+            // Edit Operations Section
+            GroupBox {
+                Layout.fillWidth: true
+                title: "Edit Operations"
+                
+                background: Rectangle {
+                    color: Theme.backgroundLight
+                    border.color: Theme.borderColor
+                    border.width: 1
+                    radius: Theme.radiusSmall
+                }
+                
+                label: Label {
+                    text: parent.title
+                    font.bold: true
+                    font.pixelSize: Theme.fontSizeLarge
+                    color: Theme.textColor
+                    leftPadding: Theme.spacingSmall
+                }
+                
+                GridLayout {
+                    width: parent.width
+                    columns: 2
+                    rowSpacing: Theme.spacingSmall
+                    columnSpacing: Theme.spacingLarge
+                    
+                    Label { text: "Ctrl+Z"; font.pixelSize: Theme.fontSizeNormal; color: Theme.accentColor; font.bold: true }
+                    Label { text: "Undo last action"; font.pixelSize: Theme.fontSizeNormal; color: Theme.textColor }
+                    
+                    Label { text: "Ctrl+Y / Ctrl+Shift+Z"; font.pixelSize: Theme.fontSizeNormal; color: Theme.accentColor; font.bold: true }
+                    Label { text: "Redo last undone action"; font.pixelSize: Theme.fontSizeNormal; color: Theme.textColor }
+                }
+            }
+            
             // Navigation Section
             GroupBox {
                 Layout.fillWidth: true

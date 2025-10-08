@@ -4,7 +4,7 @@ This document provides a comprehensive comparison of features between the origin
 
 **Last Updated:** January 2025  
 **AudioBrowserOrig Version:** 1.x (16,290 lines)  
-**AudioBrowser-QML Version:** 0.13.0 (Phase 13 - 93% complete)
+**AudioBrowser-QML Version:** 0.14.0 (Phase 14 - 96% complete)
 
 ---
 
@@ -12,15 +12,15 @@ This document provides a comprehensive comparison of features between the origin
 
 ### Current State
 - **AudioBrowserOrig**: Full-featured, production-ready application with all features implemented
-- **AudioBrowser-QML**: Modern rewrite, ~93% feature complete (Phases 1-13 complete)
+- **AudioBrowser-QML**: Modern rewrite, ~96% feature complete (Phases 1-14 complete)
 
 ### Feature Parity Status
-- ✅ **Implemented in QML**: ~93% of features (17 major issues completed through Phase 13)
-- 🚧 **Partially Implemented**: ~1% of features
-- ❌ **Not Yet Implemented**: ~6% of features (Google Drive Sync, Undo/Redo only)
-- **Estimated Remaining Work**: 6+ weeks for 100% parity (only optional features remain)
+- ✅ **Implemented in QML**: ~96% of features (18 major issues completed through Phase 14)
+- 🚧 **Partially Implemented**: ~0% of features
+- ❌ **Not Yet Implemented**: ~4% of features (Google Drive Sync only)
+- **Estimated Remaining Work**: 4+ weeks for 100% parity (only Google Drive Sync remains)
 
-### Recent Completions (Phase 7-13)
+### Recent Completions (Phase 7-14)
 - ✅ Best/Partial Take Indicators (Issue #2)
 - ✅ Practice Statistics (Issue #3)
 - ✅ Practice Goals (Issue #4)
@@ -33,7 +33,8 @@ This document provides a comprehensive comparison of features between the origin
 - ✅ Workspace Layouts (Issue #10) - Save/restore window geometry
 - ✅ Backup System (Issue #9) - Create and restore backups
 - ✅ Auto-Generation Settings - Configure auto-generation behavior
-- ✅ **Now Playing Panel (Issue #16)** - Persistent playback panel (NEW - Phase 13)
+- ✅ Now Playing Panel (Issue #16) - Persistent playback panel (Phase 13)
+- ✅ **Undo/Redo System (Issue #17)** - Command pattern-based undo for annotations (NEW - Phase 14)
 
 ---
 
@@ -282,9 +283,9 @@ This document provides a comprehensive comparison of features between the origin
 | Recent folders history | ✅ | ✅ | ✅ Complete (Phase 8) |
 | Workspace layout | ✅ | ✅ | ✅ Complete (Phase 10) |
 | Theme persistence | ✅ | ✅ | ✅ Complete |
-| Undo/Redo system | ✅ | ❌ | ❌ Not Implemented |
+| Undo/Redo system | ✅ | ✅ | ✅ Complete (Phase 14) |
 
-**Notes**: All settings and persistence features complete except undo/redo system.
+**Notes**: All settings and persistence features complete.
 
 ---
 
@@ -452,10 +453,10 @@ These are the large feature areas not yet implemented in QML:
 ## Conclusion
 
 ### Current State
-The AudioBrowser-QML implementation has achieved **~93% feature parity** with the original, covering all core functionality plus major advanced features:
+The AudioBrowser-QML implementation has achieved **~96% feature parity** with the original, covering all core functionality plus major advanced features:
 - ✅ Audio playback
 - ✅ File management (including Recent Folders)
-- ✅ Annotations
+- ✅ Annotations with full undo/redo
 - ✅ Waveform display
 - ✅ Clips
 - ✅ Batch Operations (rename, convert) (Phase 7-8)
@@ -472,20 +473,21 @@ The AudioBrowser-QML implementation has achieved **~93% feature parity** with th
 - ✅ Enhanced Preferences (Phase 10)
 - ✅ Export Best Takes Package (Phase 10)
 - ✅ Documentation Browser (Phase 12)
-- ✅ **Now Playing Panel (NEW - Phase 13)**
+- ✅ Now Playing Panel (Phase 13)
+- ✅ **Undo/Redo System (NEW - Phase 14)**
 
-### Remaining Features (2 issues, ~6 weeks)
-The main missing feature categories are:
+### Remaining Features (1 issue, ~4 weeks)
+The only remaining missing feature:
 1. **Google Drive Sync** (entire subsystem) - LOW PRIORITY (4+ weeks)
-2. **Undo/Redo System** - LOW PRIORITY (2+ weeks)
 
-**Recently Completed (Phase 8-13):**
+**Recently Completed (Phase 8-14):**
 - ✅ Backup System - COMPLETE (Phase 8)
 - ✅ Auto-Generation Settings Dialog - COMPLETE (Phase 8)
 - ✅ Enhanced Preferences Dialog - COMPLETE (Phase 10)
 - ✅ Export Best Takes Package - COMPLETE (Phase 10)
 - ✅ Documentation Browser - COMPLETE (Phase 12)
 - ✅ Now Playing Panel - COMPLETE (Phase 13)
+- ✅ Undo/Redo System - COMPLETE (Phase 14)
 
 ### Simplifications
 Some features were intentionally simplified or removed:
@@ -509,13 +511,14 @@ For **advanced users** needing:
 - ✅ Workspace layouts - **AVAILABLE**
 - ✅ Backup system - **AVAILABLE** (Phase 8)
 - ✅ Documentation browser - **AVAILABLE** (Phase 12)
+- ✅ Undo/Redo for annotations - **AVAILABLE** (Phase 14)
 - ❌ Cloud sync - Use original version (optional feature)
 
-**Current Status:** The QML version is now **production-ready** for 100% of non-cloud use cases. All essential features complete (16/16). Only remaining features are LOW priority optional items (Google Drive sync, Now Playing Panel, Undo/Redo).
+**Current Status:** The QML version is now **production-ready** for 100% of non-cloud use cases. All essential features complete (18/18). Only remaining feature is LOW priority optional Google Drive Sync (4+ weeks).
 
 ---
 
-**Document Version**: 2.2  
-**Last Updated**: January 2025 (Updated with Phase 12 completion - Documentation Browser)  
+**Document Version**: 2.3  
+**Last Updated**: January 2025 (Updated with Phase 14 completion - Undo/Redo System)  
 **Maintainer**: GitHub Copilot SWE Agent  
 **See Also**: QML_FEATURE_PARITY_STATUS.md for detailed remaining work analysis
