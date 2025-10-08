@@ -173,6 +173,44 @@ ApplicationWindow {
             title: "&Edit"
             
             MenuItem {
+                text: "Undo"
+                enabled: undoManager ? undoManager.canUndo() : false
+                onTriggered: {
+                    if (undoManager) {
+                        undoManager.undo()
+                    }
+                }
+                Shortcut {
+                    sequence: StandardKey.Undo
+                    onActivated: {
+                        if (undoManager && undoManager.canUndo()) {
+                            undoManager.undo()
+                        }
+                    }
+                }
+            }
+            
+            MenuItem {
+                text: "Redo"
+                enabled: undoManager ? undoManager.canRedo() : false
+                onTriggered: {
+                    if (undoManager) {
+                        undoManager.redo()
+                    }
+                }
+                Shortcut {
+                    sequence: StandardKey.Redo
+                    onActivated: {
+                        if (undoManager && undoManager.canRedo()) {
+                            undoManager.redo()
+                        }
+                    }
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
                 text: "Preferences..."
                 onTriggered: {
                     preferencesDialog.open()

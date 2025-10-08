@@ -93,6 +93,7 @@ from backend.fingerprint_engine import FingerprintEngine
 from backend.backup_manager import BackupManager
 from backend.export_manager import ExportManager
 from backend.documentation_manager import DocumentationManager
+from backend.undo_manager import UndoManager
 
 
 class ApplicationViewModel(QObject):
@@ -128,7 +129,7 @@ def main():
     app.setOrganizationName("BandTools")
     app.setOrganizationDomain("github.com/TheMikaus/BandTools")
     app.setApplicationName("AudioBrowser-QML")
-    app.setApplicationVersion("0.13.0")  # Phase 13 complete (93% feature parity)
+    app.setApplicationVersion("0.14.0")  # Phase 14 in progress - Undo/Redo System
     
     # Register custom QML types
     qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")
@@ -166,6 +167,12 @@ def main():
     # Create documentation manager
     documentation_manager = DocumentationManager()
     
+    # Create undo manager
+    undo_manager = UndoManager()
+    undo_manager.setFileManager(file_manager)
+    undo_manager.setAnnotationManager(annotation_manager)
+    undo_manager.setCapacity(settings_manager.getUndoLimit())
+    
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
     annotations_model = AnnotationsModel()
@@ -194,6 +201,7 @@ def main():
     engine.rootContext().setContextProperty("backupManager", backup_manager)
     engine.rootContext().setContextProperty("exportManager", export_manager)
     engine.rootContext().setContextProperty("documentationManager", documentation_manager)
+    engine.rootContext().setContextProperty("undoManager", undo_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)
