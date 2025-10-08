@@ -66,6 +66,18 @@ QtObject {
     readonly property color textSecondary: currentTheme === "dark" ? darkTextSecondary : lightTextSecondary
     readonly property color textMuted: currentTheme === "dark" ? darkTextMuted : lightTextMuted
     
+    // === Convenience Aliases for Common Usage ===
+    readonly property color backgroundWhite: backgroundLight  // Alias for brightest background
+    readonly property color backgroundDark: backgroundColor   // Alias for darkest background
+    readonly property color textPrimary: textColor            // Alias for primary text
+    readonly property color primary: accentPrimary            // Alias for primary accent
+    readonly property color success: accentSuccess            // Alias for success color
+    readonly property color danger: accentDanger              // Alias for danger color
+    readonly property color warning: accentWarning            // Alias for warning color
+    readonly property color info: accentInfo                  // Alias for info color
+    readonly property color primaryDark: Qt.darker(accentPrimary, 1.2)  // Darker primary
+    readonly property color highlightColor: accentPrimary     // Alias for highlight
+    
     // === Typography ===
     readonly property int fontSizeSmall: 11
     readonly property int fontSizeNormal: 12

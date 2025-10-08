@@ -182,17 +182,12 @@ ApplicationWindow {
             
             FingerprintsTab {
                 id: fingerprintsTab
-                fingerprintEngine: fingerprintEngine
-                fileManager: fileManager
-                fileListModel: fileListModel
             }
         }
         
         // Batch operations dialogs
         BatchRenameDialog {
             id: batchRenameDialog
-            batchOperations: batchOperations
-            fileManager: fileManager
             
             onRenameCompleted: {
                 // Refresh file list after rename
@@ -206,7 +201,6 @@ ApplicationWindow {
         
         BatchConvertDialog {
             id: batchConvertDialog
-            batchOperations: batchOperations
             
             onConversionCompleted: {
                 // Refresh file list after conversion
@@ -219,37 +213,27 @@ ApplicationWindow {
         
         ProgressDialog {
             id: progressDialog
-            batchOperations: batchOperations
         }
         
         // Practice Statistics Dialog
         PracticeStatisticsDialog {
             id: practiceStatisticsDialog
-            practiceStatistics: practiceStatistics
-            fileManager: fileManager
         }
         
         // Practice Goals Dialog
         PracticeGoalsDialog {
             id: practiceGoalsDialog
-            practiceGoals: practiceGoals
-            practiceStatistics: practiceStatistics
-            fileManager: fileManager
         }
         
         // Setlist Builder Dialog
         SetlistBuilderDialog {
             id: setlistBuilderDialog
-            setlistManager: setlistManager
-            fileManager: fileManager
         }
         
         // Export Annotations Dialog
         ExportAnnotationsDialog {
             id: exportAnnotationsDialog
             currentFile: audioEngine.currentFile
-            annotationManager: annotationManager
-            fileManager: fileManager
         }
         
         // Status bar
