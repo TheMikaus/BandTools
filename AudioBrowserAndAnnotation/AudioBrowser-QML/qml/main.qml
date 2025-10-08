@@ -87,6 +87,15 @@ ApplicationWindow {
             title: "&Help"
             
             MenuItem {
+                text: "Keyboard Shortcuts"
+                onTriggered: {
+                    keyboardShortcutsDialog.open()
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
                 text: "About"
                 onTriggered: {
                     aboutDialog.open()
@@ -329,6 +338,11 @@ ApplicationWindow {
             id: preferencesDialog
         }
         
+        // Keyboard Shortcuts Dialog
+        KeyboardShortcutsDialog {
+            id: keyboardShortcutsDialog
+        }
+        
         // Status bar
         Rectangle {
             Layout.fillWidth: true
@@ -489,6 +503,66 @@ ApplicationWindow {
                 clipsTab.setClipEndMarker()
             }
         }
+    }
+    
+    // Additional keyboard shortcuts for feature parity (Issue #12)
+    
+    // Dialog shortcuts
+    Shortcut {
+        sequence: "Ctrl+Shift+T"
+        onActivated: setlistBuilderDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        onActivated: practiceStatisticsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Shift+G"
+        onActivated: practiceGoalsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+,"
+        onActivated: preferencesDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+/"
+        onActivated: keyboardShortcutsDialog.open()
+    }
+    
+    Shortcut {
+        sequence: "F1"
+        onActivated: keyboardShortcutsDialog.open()
+    }
+    
+    // File operations
+    Shortcut {
+        sequence: "Ctrl+O"
+        onActivated: libraryTab.openFolderDialog()
+    }
+    
+    Shortcut {
+        sequence: "F5"
+        onActivated: {
+            var dir = fileManager.getCurrentDirectory()
+            if (dir.length > 0) {
+                fileManager.discoverAudioFiles(dir)
+            }
+        }
+    }
+    
+    Shortcut {
+        sequence: "Ctrl+Q"
+        onActivated: Qt.quit()
+    }
+    
+    // Tab switching with Ctrl+5 for Fingerprints tab
+    Shortcut {
+        sequence: "Ctrl+5"
+        onActivated: tabBar.currentIndex = 4
     }
     
     // Batch operations signal connections
