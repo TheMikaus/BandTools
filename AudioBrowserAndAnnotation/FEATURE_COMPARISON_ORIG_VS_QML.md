@@ -234,7 +234,7 @@ This document provides a comprehensive comparison of features between the origin
 | Light mode theme | ✅ | ✅ | ✅ Complete |
 | Theme switching | ✅ | ✅ | ✅ Complete |
 | Recent folders | ✅ | ✅ | ✅ Complete |
-| Preferences dialog | ✅ | 🚧 | 🚧 Basic settings only |
+| Preferences dialog | ✅ | ✅ | ✅ Complete (Phase 10+) |
 | Workspace layouts (save/restore) | ✅ | ✅ | ✅ Complete |
 | Status bar progress indicators | ✅ | ✅ | ✅ Complete |
 | Now Playing panel | ✅ | ✅ | ✅ Complete (Phase 13) |
@@ -279,12 +279,12 @@ This document provides a comprehensive comparison of features between the origin
 | QSettings for preferences | ✅ | ✅ | ✅ Complete |
 | JSON files for metadata | ✅ | ✅ | ✅ Complete |
 | Window geometry persistence | ✅ | ✅ | ✅ Complete |
-| Recent folders history | ✅ | ❌ | ❌ Not Implemented |
-| Workspace layout | ✅ | ❌ | ❌ Not Implemented |
+| Recent folders history | ✅ | ✅ | ✅ Complete (Phase 8) |
+| Workspace layout | ✅ | ✅ | ✅ Complete (Phase 10) |
 | Theme persistence | ✅ | ✅ | ✅ Complete |
 | Undo/Redo system | ✅ | ❌ | ❌ Not Implemented |
 
-**Notes**: Basic settings work, but undo/redo system not implemented.
+**Notes**: All settings and persistence features complete except undo/redo system.
 
 ---
 

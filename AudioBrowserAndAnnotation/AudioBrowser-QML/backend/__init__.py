@@ -6,7 +6,7 @@ Backend modules handle business logic, data management, and system integration w
 QML handles the UI presentation.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.13.0"  # Phase 13 complete (93% feature parity)
 
 # Export main backend classes
 from .fingerprint_engine import FingerprintEngine
