@@ -249,6 +249,133 @@ class FileListModel(QAbstractListModel):
         self.filesChanged.emit()
 
 
+class FolderTreeModel(QAbstractListModel):
+    """
+    List model for folder tree.
+    
+    Exposes a hierarchical folder structure to QML with folders
+    that can be expanded to show subfolders and their audio files.
+    """
+    
+    # Custom roles for QML access
+    PathRole = Qt.ItemDataRole.UserRole + 1
+    NameRole = Qt.ItemDataRole.UserRole + 2
+    ParentRole = Qt.ItemDataRole.UserRole + 3
+    HasAudioRole = Qt.ItemDataRole.UserRole + 4
+    AudioCountRole = Qt.ItemDataRole.UserRole + 5
+    IsRootRole = Qt.ItemDataRole.UserRole + 6
+    LevelRole = Qt.ItemDataRole.UserRole + 7
+    
+    # Signals
+    foldersChanged = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        """Initialize the folder tree model."""
+        super().__init__(parent)
+        self._folders: List[Dict[str, Any]] = []
+    
+    def rowCount(self, parent=QModelIndex()) -> int:
+        """Return the number of folders in the model."""
+        if parent.isValid():
+            return 0
+        return len(self._folders)
+    
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+        """Return data for the specified role at the given index."""
+        if not index.isValid() or not (0 <= index.row() < len(self._folders)):
+            return None
+        
+        folder_data = self._folders[index.row()]
+        
+        if role == Qt.ItemDataRole.DisplayRole or role == self.NameRole:
+            return folder_data.get("name", "")
+        elif role == self.PathRole:
+            return folder_data.get("path", "")
+        elif role == self.ParentRole:
+            return folder_data.get("parent", "")
+        elif role == self.HasAudioRole:
+            return folder_data.get("hasAudio", False)
+        elif role == self.AudioCountRole:
+            return folder_data.get("audioCount", 0)
+        elif role == self.IsRootRole:
+            return folder_data.get("isRoot", False)
+        elif role == self.LevelRole:
+            return folder_data.get("level", 0)
+        
+        return None
+    
+    def roleNames(self) -> Dict[int, bytes]:
+        """Return the role names for QML access."""
+        return {
+            Qt.ItemDataRole.DisplayRole: b"display",
+            self.PathRole: b"path",
+            self.NameRole: b"name",
+            self.ParentRole: b"parent",
+            self.HasAudioRole: b"hasAudio",
+            self.AudioCountRole: b"audioCount",
+            self.IsRootRole: b"isRoot",
+            self.LevelRole: b"level",
+        }
+    
+    @pyqtSlot(list)
+    def setFolders(self, folders: List[Dict[str, Any]]) -> None:
+        """
+        Set the list of folders in the model.
+        
+        Args:
+            folders: List of folder dictionaries
+        """
+        self.beginResetModel()
+        
+        self._folders = []
+        for folder in folders:
+            # Calculate level based on path depth relative to root
+            path_str = folder.get('path', '')
+            parent_str = folder.get('parent', '')
+            
+            level = 0
+            if not folder.get('isRoot', False):
+                # Count path separators to determine level
+                if parent_str:
+                    level = path_str.count('/') - parent_str.count('/')
+                else:
+                    level = 1
+            
+            folder_info = {
+                "path": path_str,
+                "name": folder.get("name", ""),
+                "parent": parent_str,
+                "hasAudio": folder.get("hasAudio", False),
+                "audioCount": folder.get("audioCount", 0),
+                "isRoot": folder.get("isRoot", False),
+                "level": level,
+            }
+            self._folders.append(folder_info)
+        
+        self.endResetModel()
+        self.foldersChanged.emit()
+    
+    @pyqtSlot()
+    def clear(self) -> None:
+        """Clear all folders from the model."""
+        self.beginResetModel()
+        self._folders.clear()
+        self.endResetModel()
+        self.foldersChanged.emit()
+    
+    @pyqtSlot(result=int)
+    def count(self) -> int:
+        """Get the number of folders in the model."""
+        return len(self._folders)
+    
+    @pyqtSlot(int, result=str)
+    def getFolderPath(self, row: int) -> str:
+        """Get the folder path at the specified row."""
+        if 0 <= row < len(self._folders):
+            return self._folders[row].get("path", "")
+        return ""
+
+
 class AnnotationsModel(QAbstractTableModel):
     """
     Table model for annotations.

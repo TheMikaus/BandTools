@@ -16,6 +16,7 @@ End-user documentation and how-to guides:
 
 - [ANNOTATION_GUIDE.md](user_guides/ANNOTATION_GUIDE.md) - Guide to using annotations
 - [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
+- [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - **NEW**: Folder navigation and hierarchical browsing guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
@@ -31,7 +32,8 @@ Developer and technical documentation:
 - [PROJECT_STRUCTURE.md](technical/PROJECT_STRUCTURE.md) - Project organization
 - [TESTING_GUIDE.md](technical/TESTING_GUIDE.md) - Testing procedures
 - [IMPLEMENTATION_SUMMARY.md](technical/IMPLEMENTATION_SUMMARY.md) - Implementation details
-- [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - **NEW**: Error logging improvements for _ensure_import function
+- [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - Error logging improvements for _ensure_import function
+- [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - **NEW**: UI improvements for toolbar and folder navigation
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix

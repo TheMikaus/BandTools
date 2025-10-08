@@ -103,7 +103,7 @@ class FileManager(QObject):
                 self.errorOccurred.emit(f"Invalid directory: {scan_path}")
                 return
             
-            # Discover audio files
+            # Discover audio files (non-recursive - only immediate directory)
             files = []
             for ext in self._audio_extensions:
                 files.extend(scan_path.glob(f"*{ext}"))
@@ -119,6 +119,67 @@ class FileManager(QObject):
             
         except Exception as e:
             self.errorOccurred.emit(f"Error discovering files: {e}")
+    
+    @pyqtSlot(str, result=list)
+    def discoverAudioFilesRecursive(self, directory: str) -> list:
+        """
+        Recursively discover audio files in the directory and all subdirectories.
+        Returns a list of dictionaries with 'path' and 'folder' keys.
+        
+        Args:
+            directory: Root directory to scan
+            
+        Returns:
+            List of dicts with file information including which subfolder they're in
+        """
+        try:
+            scan_path = Path(directory)
+            if not scan_path.exists() or not scan_path.is_dir():
+                return []
+            
+            files_info = []
+            
+            def scan_directory(dir_path: Path, relative_folder: str = ""):
+                """Recursively scan directory for audio files."""
+                try:
+                    has_audio_files = False
+                    subdirectories = []
+                    
+                    # Get files in this directory
+                    for ext in self._audio_extensions:
+                        for file_path in dir_path.glob(f"*{ext}"):
+                            if file_path.is_file():
+                                files_info.append({
+                                    'path': str(file_path),
+                                    'folder': relative_folder,
+                                    'name': file_path.name
+                                })
+                                has_audio_files = True
+                    
+                    # Get subdirectories (skip hidden ones)
+                    for item in dir_path.iterdir():
+                        if item.is_dir() and not item.name.startswith('.'):
+                            subdirectories.append(item)
+                    
+                    # Recursively scan subdirectories
+                    for subdir in subdirectories:
+                        new_relative = subdir.name if not relative_folder else f"{relative_folder}/{subdir.name}"
+                        scan_directory(subdir, new_relative)
+                        
+                except (OSError, PermissionError):
+                    pass  # Skip directories we can't read
+            
+            # Start scanning from root
+            scan_directory(scan_path, "")
+            
+            # Sort by folder then name
+            files_info.sort(key=lambda x: (x['folder'], x['name'].lower()))
+            
+            return files_info
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error discovering files recursively: {e}")
+            return []
     
     @pyqtSlot(str, result=bool)
     def isAudioFile(self, file_path: str) -> bool:
@@ -319,6 +380,68 @@ class FileManager(QObject):
             
         except Exception as e:
             self.errorOccurred.emit(f"Error getting subdirectories: {e}")
+            return []
+    
+    @pyqtSlot(str, result=list)
+    def getDirectoriesWithAudioFiles(self, root_directory: str) -> list:
+        """
+        Get all directories (root and subdirectories) that contain audio files.
+        Returns a list of dictionaries with directory information.
+        
+        Args:
+            root_directory: Root directory to scan
+            
+        Returns:
+            List of dicts with 'path', 'name', 'parent', 'hasAudio', 'audioCount' keys
+        """
+        try:
+            root_path = Path(root_directory)
+            if not root_path.exists() or not root_path.is_dir():
+                return []
+            
+            directories_info = []
+            
+            def count_audio_files(dir_path: Path) -> int:
+                """Count audio files in a directory (non-recursive)."""
+                count = 0
+                for ext in self._audio_extensions:
+                    count += len(list(dir_path.glob(f"*{ext}")))
+                return count
+            
+            def scan_directory(dir_path: Path):
+                """Recursively scan directory structure."""
+                try:
+                    audio_count = count_audio_files(dir_path)
+                    
+                    # Add this directory if it has audio files
+                    if audio_count > 0 or dir_path == root_path:  # Always include root
+                        directories_info.append({
+                            'path': str(dir_path),
+                            'name': dir_path.name if dir_path != root_path else root_path.name,
+                            'parent': str(dir_path.parent) if dir_path != root_path else "",
+                            'hasAudio': audio_count > 0,
+                            'audioCount': audio_count,
+                            'isRoot': dir_path == root_path
+                        })
+                    
+                    # Scan subdirectories (skip hidden ones)
+                    for item in dir_path.iterdir():
+                        if item.is_dir() and not item.name.startswith('.'):
+                            scan_directory(item)
+                            
+                except (OSError, PermissionError):
+                    pass  # Skip directories we can't read
+            
+            # Start scanning from root
+            scan_directory(root_path)
+            
+            # Sort by path to maintain hierarchy
+            directories_info.sort(key=lambda x: x['path'])
+            
+            return directories_info
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error getting directories with audio: {e}")
             return []
     
     # ========== File filtering methods ==========
@@ -663,7 +786,7 @@ class FileManager(QObject):
     
     def _load_takes_metadata(self, directory: Path) -> Dict[str, Any]:
         """
-        Load takes metadata from .takes_metadata.json file.
+        Load takes metadata from .takes_metadata.json file or legacy .audio_notes_*.json files.
         
         Args:
             directory: Directory to check for metadata
@@ -671,16 +794,44 @@ class FileManager(QObject):
         Returns:
             Dictionary with 'best_takes' and 'partial_takes' lists
         """
+        result = {"best_takes": [], "partial_takes": []}
+        
         try:
             import json
+            
+            # Try new format first
             takes_file = self._get_takes_file(directory)
             if takes_file.exists():
                 with open(takes_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if data:
+                        return data
+            
+            # Fall back to legacy format: .audio_notes_*.json files
+            # These files contain per-file annotations with best_take and partial_take flags
+            for notes_file in directory.glob(".audio_notes_*.json"):
+                try:
+                    with open(notes_file, 'r', encoding='utf-8') as f:
+                        notes_data = json.load(f)
+                        
+                        # The old format stores data per filename
+                        # Each entry can have 'best_take' and 'partial_take' boolean flags
+                        for filename, file_data in notes_data.items():
+                            if isinstance(file_data, dict):
+                                if file_data.get('best_take', False):
+                                    if filename not in result['best_takes']:
+                                        result['best_takes'].append(filename)
+                                if file_data.get('partial_take', False):
+                                    if filename not in result['partial_takes']:
+                                        result['partial_takes'].append(filename)
+                except Exception as e:
+                    print(f"Warning: Could not load legacy notes file {notes_file}: {e}")
+                    continue
+                    
         except Exception as e:
             print(f"Warning: Could not load takes metadata: {e}")
         
-        return {"best_takes": [], "partial_takes": []}
+        return result
     
     def _save_takes_metadata(self, directory: Path, metadata: Dict[str, Any]) -> None:
         """
