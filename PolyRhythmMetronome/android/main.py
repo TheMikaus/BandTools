@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
 PolyRhythmMetronome - Android Version
-A simplified touch-optimized metronome for Android devices (Kindle Fire HD 10)
+A touch-optimized metronome for Android devices (Kindle Fire HD 10)
 
-Simplified features for mobile:
-- Single layer per ear (vs. multi-layer in desktop)
+Features:
+- Multiple layers per ear (like desktop version)
 - Touch-optimized large buttons and sliders
-- Simplified sound options: Tone only (no WAV/Drum)
+- Sound options: Tone and Drum synthesis
 - BPM control with preset buttons and slider
 - Save/Load rhythm patterns
 - Visual feedback with color flashing
+- Landscape and portrait orientation support
 """
 
 import sys
@@ -50,6 +51,7 @@ try:
     from kivy.app import App
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.gridlayout import GridLayout
+    from kivy.uix.scrollview import ScrollView
     from kivy.uix.button import Button
     from kivy.uix.label import Label
     from kivy.uix.slider import Slider
@@ -57,12 +59,11 @@ try:
     from kivy.uix.spinner import Spinner
     from kivy.uix.popup import Popup
     from kivy.uix.textinput import TextInput
-    from kivy.uix.filechooser import FileChooserListView
     from kivy.clock import Clock
-    from kivy.core.audio import SoundLoader
     from kivy.graphics import Color, Rectangle
-    from kivy.properties import NumericProperty, StringProperty, BooleanProperty
+    from kivy.properties import NumericProperty, StringProperty, BooleanProperty, ListProperty
     from kivy.utils import platform
+    from kivy.core.window import Window
 except ImportError as e:
     print(f"Error importing Kivy: {e}")
     print("Please install Kivy: pip install kivy")
@@ -86,6 +87,12 @@ BPM_PRESETS = [60, 80, 100, 120, 140, 160, 180, 200]
 
 # Subdivision options (notes per beat)
 SUBDIV_OPTIONS = ["1", "2", "4", "8", "16"]
+
+# Drum sound options
+DRUM_CHOICES = ["kick", "snare", "hihat", "crash", "tom", "ride"]
+
+# Sound mode options
+SOUND_MODES = ["tone", "drum"]
 
 # ---------------- Audio Generation ---------------- #
 
@@ -118,34 +125,143 @@ class ToneGenerator:
         self.cache[key] = audio_data
         return audio_data
 
+
+class DrumSynth:
+    """Synthesize drum sounds"""
+    
+    def __init__(self, sample_rate=SAMPLE_RATE):
+        self.sample_rate = sample_rate
+        self.cache = {}
+    
+    def get(self, drum_name):
+        """Get drum sound by name"""
+        key = (drum_name or "").lower()
+        if key in self.cache:
+            return self.cache[key]
+        
+        method = getattr(self, f"_make_{key}", None)
+        data = method() if method else self._make_snare()
+        self.cache[key] = data
+        return data
+    
+    def _make_kick(self):
+        """Generate kick drum sound"""
+        sr = self.sample_rate
+        dur = 0.25
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        # Frequency sweep from 120Hz to 50Hz
+        f0, f1 = 120.0, 50.0
+        k = np.log(f1 / f0) / dur
+        phase = 2 * np.pi * (f0 * (np.expm1(k * t) / k))
+        
+        tone = np.sin(phase).astype(np.float32)
+        env = np.exp(-t / 0.15).astype(np.float32)
+        click = np.exp(-t / 0.01)
+        
+        return (0.9 * tone * env + 0.05 * click).astype(np.float32)
+    
+    def _make_snare(self):
+        """Generate snare drum sound"""
+        sr = self.sample_rate
+        dur = 0.3
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
+        env_n = np.exp(-t / 0.12).astype(np.float32)
+        body = np.sin(2 * np.pi * 190 * t).astype(np.float32) * np.exp(-t / 0.1)
+        
+        return (0.8 * noise * env_n + 0.25 * body).astype(np.float32)
+    
+    def _make_hihat(self):
+        """Generate hi-hat sound"""
+        sr = self.sample_rate
+        dur = 0.08
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
+        env = np.exp(-t / 0.03).astype(np.float32)
+        
+        return (noise * env).astype(np.float32)
+    
+    def _make_crash(self):
+        """Generate crash cymbal sound"""
+        sr = self.sample_rate
+        dur = 1.2
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
+        env = np.exp(-t / 0.6).astype(np.float32)
+        
+        return (0.6 * noise * env).astype(np.float32)
+    
+    def _make_tom(self):
+        """Generate tom drum sound"""
+        sr = self.sample_rate
+        dur = 0.4
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        tone = np.sin(2 * np.pi * 160.0 * t).astype(np.float32)
+        env = np.exp(-t / 0.25).astype(np.float32)
+        
+        return (tone * env).astype(np.float32)
+    
+    def _make_ride(self):
+        """Generate ride cymbal sound"""
+        sr = self.sample_rate
+        dur = 0.9
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        ping = np.sin(2 * np.pi * 900 * t).astype(np.float32) * np.exp(-t / 0.4)
+        noise = np.random.uniform(-1, 1, size=n).astype(np.float32) * np.exp(-t / 0.8) * 0.2
+        
+        return (0.8 * ping + noise).astype(np.float32)
+
 # ---------------- Rhythm State (Data Model) ---------------- #
 
 def new_uid():
     """Generate unique ID for layers"""
     return uuid.uuid4().hex
 
+
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", uid=None):
+    """Create a layer dictionary"""
+    return {
+        "uid": uid or new_uid(),
+        "subdiv": int(subdiv),
+        "freq": float(freq),
+        "vol": float(vol),
+        "mute": bool(mute),
+        "mode": mode,
+        "drum": drum,
+        "color": color
+    }
+
+
 class RhythmState:
-    """Stores the current rhythm configuration"""
+    """Stores the current rhythm configuration with multiple layers per ear"""
     
     def __init__(self):
         self.bpm = 120.0
         self.beats_per_measure = 4
         self.accent_factor = DEFAULT_ACCENT_FACTOR
+        self.flash_enabled = False
         
-        # Simplified: single layer per ear
-        self.left_subdiv = 4  # Quarter notes
-        self.left_freq = 880.0  # Hz
-        self.left_vol = 1.0
-        self.left_mute = False
-        self.left_color = "#3B82F6"  # Blue
-        
-        self.right_subdiv = 4
-        self.right_freq = 440.0  # Hz
-        self.right_vol = 1.0
-        self.right_mute = False
-        self.right_color = "#EF4444"  # Red
+        # Multiple layers per ear (like desktop)
+        self.left = []  # List of layer dictionaries
+        self.right = []  # List of layer dictionaries
         
         self._lock = threading.RLock()
+        
+        # Start with one default layer per ear
+        self.left.append(make_layer(subdiv=4, freq=880.0, vol=1.0, color="#3B82F6"))
+        self.right.append(make_layer(subdiv=4, freq=440.0, vol=1.0, color="#EF4444"))
     
     def to_dict(self):
         """Serialize to dictionary for saving"""
@@ -154,20 +270,9 @@ class RhythmState:
                 "bpm": self.bpm,
                 "beats_per_measure": self.beats_per_measure,
                 "accent_factor": self.accent_factor,
-                "left": {
-                    "subdiv": self.left_subdiv,
-                    "freq": self.left_freq,
-                    "vol": self.left_vol,
-                    "mute": self.left_mute,
-                    "color": self.left_color
-                },
-                "right": {
-                    "subdiv": self.right_subdiv,
-                    "freq": self.right_freq,
-                    "vol": self.right_vol,
-                    "mute": self.right_mute,
-                    "color": self.right_color
-                }
+                "flash_enabled": self.flash_enabled,
+                "left": self.left,
+                "right": self.right
             }
     
     def from_dict(self, data):
@@ -176,56 +281,51 @@ class RhythmState:
             self.bpm = float(data.get("bpm", 120.0))
             self.beats_per_measure = int(data.get("beats_per_measure", 4))
             self.accent_factor = float(data.get("accent_factor", DEFAULT_ACCENT_FACTOR))
+            self.flash_enabled = bool(data.get("flash_enabled", False))
             
-            left = data.get("left", {})
-            self.left_subdiv = int(left.get("subdiv", 4))
-            self.left_freq = float(left.get("freq", 880.0))
-            self.left_vol = float(left.get("vol", 1.0))
-            self.left_mute = bool(left.get("mute", False))
-            self.left_color = left.get("color", "#3B82F6")
+            def normalize(x):
+                x = dict(x)
+                x.setdefault("mode", "tone")
+                x.setdefault("drum", "snare")
+                x.setdefault("color", "#9CA3AF")
+                x.setdefault("uid", new_uid())
+                return x
             
-            right = data.get("right", {})
-            self.right_subdiv = int(right.get("subdiv", 4))
-            self.right_freq = float(right.get("freq", 440.0))
-            self.right_vol = float(right.get("vol", 1.0))
-            self.right_mute = bool(right.get("mute", False))
-            self.right_color = right.get("color", "#EF4444")
+            self.left = [make_layer(**normalize(x)) for x in data.get("left", [])]
+            self.right = [make_layer(**normalize(x)) for x in data.get("right", [])]
+            
+            # Ensure at least one layer per ear
+            if not self.left:
+                self.left.append(make_layer(subdiv=4, freq=880.0, vol=1.0, color="#3B82F6"))
+            if not self.right:
+                self.right.append(make_layer(subdiv=4, freq=440.0, vol=1.0, color="#EF4444"))
 
 # ---------------- Metronome Engine ---------------- #
 
 class SimpleMetronomeEngine:
-    """Simplified audio engine for Android"""
+    """Audio engine for Android with multiple layers and drum support"""
     
     def __init__(self, rhythm_state, on_beat_callback=None):
         self.state = rhythm_state
         self.on_beat_callback = on_beat_callback
         self.tone_gen = ToneGenerator()
+        self.drum_synth = DrumSynth()
         
         self.running = False
         self.thread = None
         self._lock = threading.RLock()
-        
-        # Sound objects
-        self.left_sound = None
-        self.right_sound = None
-    
-    def _prepare_sounds(self):
-        """Pre-generate the tone sounds"""
-        # Generate left and right tones
-        left_data = self.tone_gen.generate_beep(self.state.left_freq, duration_ms=50)
-        right_data = self.tone_gen.generate_beep(self.state.right_freq, duration_ms=50)
-        
-        # In a real implementation, we'd convert these to audio files that Kivy can play
-        # For now, we'll use placeholders
-        # TODO: Save as temporary WAV files and load with SoundLoader
         
     def start(self):
         """Start the metronome"""
         if self.running:
             return
         
+        with self.state._lock:
+            if not self.state.left and not self.state.right:
+                print("No layers to play")
+                return
+        
         self.running = True
-        self._prepare_sounds()
         
         # Start the metronome thread
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -238,36 +338,319 @@ class SimpleMetronomeEngine:
             self.thread.join(timeout=1.0)
             self.thread = None
     
+    def _get_audio_data(self, layer):
+        """Get audio data for a layer based on its mode"""
+        mode = layer.get("mode", "tone")
+        
+        if mode == "drum":
+            drum_name = layer.get("drum", "snare")
+            return self.drum_synth.get(drum_name)
+        else:  # tone mode
+            freq = float(layer.get("freq", 880.0))
+            return self.tone_gen.generate_beep(freq, duration_ms=50)
+    
     def _run(self):
-        """Main metronome loop"""
+        """Main metronome loop with multiple layers"""
         with self.state._lock:
             bpm = self.state.bpm
-            left_interval = 60.0 / (bpm * (self.state.left_subdiv / 4.0))
-            right_interval = 60.0 / (bpm * (self.state.right_subdiv / 4.0))
+            beats_per_measure = self.state.beats_per_measure
+            
+            # Calculate intervals for each layer
+            left_layers = [dict(layer) for layer in self.state.left]
+            right_layers = [dict(layer) for layer in self.state.right]
+            
+            # Calculate interval in seconds for each layer
+            def calc_interval(subdiv):
+                notes_per_beat = subdiv / 4.0
+                return 60.0 / (bpm * notes_per_beat)
+            
+            left_intervals = [calc_interval(layer["subdiv"]) for layer in left_layers]
+            right_intervals = [calc_interval(layer["subdiv"]) for layer in right_layers]
         
         start_time = time.time()
-        left_next = 0.0
-        right_next = 0.0
+        left_next_times = [0.0] * len(left_layers)
+        right_next_times = [0.0] * len(right_layers)
         
         while self.running:
             current_time = time.time() - start_time
             
-            # Check if it's time for left beat
-            if current_time >= left_next and not self.state.left_mute:
-                if self.on_beat_callback:
-                    Clock.schedule_once(lambda dt: self.on_beat_callback('left'), 0)
-                left_next += left_interval
+            # Check left layers
+            for i, layer in enumerate(left_layers):
+                if not layer.get("mute", False) and current_time >= left_next_times[i]:
+                    if self.on_beat_callback:
+                        uid = layer.get("uid")
+                        color = layer.get("color", "#3B82F6")
+                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('left', u, c), 0)
+                    left_next_times[i] += left_intervals[i]
             
-            # Check if it's time for right beat
-            if current_time >= right_next and not self.state.right_mute:
-                if self.on_beat_callback:
-                    Clock.schedule_once(lambda dt: self.on_beat_callback('right'), 0)
-                right_next += right_interval
+            # Check right layers
+            for i, layer in enumerate(right_layers):
+                if not layer.get("mute", False) and current_time >= right_next_times[i]:
+                    if self.on_beat_callback:
+                        uid = layer.get("uid")
+                        color = layer.get("color", "#EF4444")
+                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('right', u, c), 0)
+                    right_next_times[i] += right_intervals[i]
             
             # Small sleep to avoid busy waiting
             time.sleep(0.001)
 
 # ---------------- UI Components ---------------- #
+
+class LayerWidget(BoxLayout):
+    """Widget for displaying and controlling a single layer"""
+    
+    def __init__(self, layer, side, on_change=None, on_delete=None, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.size_hint_y = None
+        self.height = '120dp'
+        self.padding = '5dp'
+        self.spacing = '5dp'
+        
+        self.layer = layer
+        self.side = side
+        self.on_change = on_change
+        self.on_delete_callback = on_delete
+        
+        # Set background color
+        with self.canvas.before:
+            color = layer.get("color", "#9CA3AF")
+            # Convert hex to RGB
+            r = int(color[1:3], 16) / 255.0
+            g = int(color[3:5], 16) / 255.0
+            b = int(color[5:7], 16) / 255.0
+            Color(r, g, b, 0.3)
+            self.rect = Rectangle(size=self.size, pos=self.pos)
+        self.bind(size=self._update_rect, pos=self._update_rect)
+        
+        self._build_ui()
+    
+    def _update_rect(self, *args):
+        self.rect.size = self.size
+        self.rect.pos = self.pos
+    
+    def _build_ui(self):
+        # Top row: Mode, Subdiv, Mute, Delete
+        top_row = BoxLayout(size_hint_y=0.4, spacing='5dp')
+        
+        # Mode selector
+        mode_label = Label(text="Mode:", size_hint_x=0.2, font_size='14sp')
+        top_row.add_widget(mode_label)
+        
+        self.mode_spinner = Spinner(
+            text=self.layer.get("mode", "tone"),
+            values=SOUND_MODES,
+            size_hint_x=0.3,
+            font_size='14sp'
+        )
+        self.mode_spinner.bind(text=self._on_mode_change)
+        top_row.add_widget(self.mode_spinner)
+        
+        # Subdivision
+        subdiv_label = Label(text="÷", size_hint_x=0.1, font_size='14sp')
+        top_row.add_widget(subdiv_label)
+        
+        self.subdiv_spinner = Spinner(
+            text=str(self.layer.get("subdiv", 4)),
+            values=SUBDIV_OPTIONS,
+            size_hint_x=0.2,
+            font_size='14sp'
+        )
+        self.subdiv_spinner.bind(text=self._on_subdiv_change)
+        top_row.add_widget(self.subdiv_spinner)
+        
+        # Mute button
+        self.mute_button = ToggleButton(
+            text="MUTE",
+            size_hint_x=0.3,
+            font_size='12sp',
+            state='down' if self.layer.get("mute", False) else 'normal'
+        )
+        self.mute_button.bind(state=self._on_mute_change)
+        top_row.add_widget(self.mute_button)
+        
+        # Delete button
+        delete_button = Button(
+            text="X",
+            size_hint_x=0.15,
+            font_size='12sp',
+            background_color=(0.8, 0.2, 0.2, 1)
+        )
+        delete_button.bind(on_press=lambda x: self.on_delete_callback(self.layer) if self.on_delete_callback else None)
+        top_row.add_widget(delete_button)
+        
+        self.add_widget(top_row)
+        
+        # Middle row: Frequency or Drum selector
+        self.middle_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        self._build_middle_row()
+        self.add_widget(self.middle_row)
+        
+        # Bottom row: Volume
+        bottom_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        vol_label = Label(text="Vol:", size_hint_x=0.2, font_size='14sp')
+        bottom_row.add_widget(vol_label)
+        
+        self.vol_slider = Slider(
+            min=0.0,
+            max=1.5,
+            value=self.layer.get("vol", 1.0),
+            size_hint_x=0.8
+        )
+        self.vol_slider.bind(value=self._on_vol_change)
+        bottom_row.add_widget(self.vol_slider)
+        
+        self.add_widget(bottom_row)
+    
+    def _build_middle_row(self):
+        self.middle_row.clear_widgets()
+        
+        mode = self.layer.get("mode", "tone")
+        
+        if mode == "tone":
+            freq_label = Label(text="Freq (Hz):", size_hint_x=0.3, font_size='14sp')
+            self.middle_row.add_widget(freq_label)
+            
+            self.freq_input = TextInput(
+                text=str(int(self.layer.get("freq", 880))),
+                multiline=False,
+                input_filter='int',
+                size_hint_x=0.7,
+                font_size='14sp'
+            )
+            self.freq_input.bind(text=self._on_freq_change)
+            self.middle_row.add_widget(self.freq_input)
+        else:  # drum mode
+            drum_label = Label(text="Drum:", size_hint_x=0.3, font_size='14sp')
+            self.middle_row.add_widget(drum_label)
+            
+            self.drum_spinner = Spinner(
+                text=self.layer.get("drum", "snare"),
+                values=DRUM_CHOICES,
+                size_hint_x=0.7,
+                font_size='14sp'
+            )
+            self.drum_spinner.bind(text=self._on_drum_change)
+            self.middle_row.add_widget(self.drum_spinner)
+    
+    def _on_mode_change(self, spinner, value):
+        self.layer["mode"] = value
+        self._build_middle_row()
+        if self.on_change:
+            self.on_change()
+    
+    def _on_subdiv_change(self, spinner, value):
+        try:
+            self.layer["subdiv"] = int(value)
+            if self.on_change:
+                self.on_change()
+        except ValueError:
+            pass
+    
+    def _on_mute_change(self, button, value):
+        self.layer["mute"] = (value == 'down')
+        if self.on_change:
+            self.on_change()
+    
+    def _on_freq_change(self, input, value):
+        try:
+            if value:
+                self.layer["freq"] = float(value)
+                if self.on_change:
+                    self.on_change()
+        except ValueError:
+            pass
+    
+    def _on_drum_change(self, spinner, value):
+        self.layer["drum"] = value
+        if self.on_change:
+            self.on_change()
+    
+    def _on_vol_change(self, slider, value):
+        self.layer["vol"] = value
+        if self.on_change:
+            self.on_change()
+
+
+class LayerListWidget(BoxLayout):
+    """Widget for displaying a list of layers with add/remove"""
+    
+    def __init__(self, state, side, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = '5dp'
+        self.spacing = '5dp'
+        
+        self.state = state
+        self.side = side
+        self.on_change = None
+        
+        # Title
+        title_box = BoxLayout(size_hint_y=None, height='40dp')
+        title = Label(
+            text=f"{side.upper()} Layers",
+            font_size='18sp',
+            bold=True,
+            size_hint_x=0.7
+        )
+        title_box.add_widget(title)
+        
+        # Add button
+        add_button = Button(
+            text="+",
+            size_hint_x=0.3,
+            font_size='20sp',
+            background_color=(0.2, 0.8, 0.2, 1)
+        )
+        add_button.bind(on_press=self._on_add_layer)
+        title_box.add_widget(add_button)
+        
+        self.add_widget(title_box)
+        
+        # Scroll view for layers
+        self.scroll = ScrollView(size_hint=(1, 1))
+        self.layers_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing='5dp')
+        self.layers_container.bind(minimum_height=self.layers_container.setter('height'))
+        self.scroll.add_widget(self.layers_container)
+        self.add_widget(self.scroll)
+        
+        self.refresh()
+    
+    def refresh(self):
+        self.layers_container.clear_widgets()
+        
+        layers = self.state.left if self.side == "left" else self.state.right
+        
+        for layer in layers:
+            layer_widget = LayerWidget(
+                layer,
+                self.side,
+                on_change=self._notify_change,
+                on_delete=self._on_delete_layer
+            )
+            self.layers_container.add_widget(layer_widget)
+    
+    def _on_add_layer(self, button):
+        layers = self.state.left if self.side == "left" else self.state.right
+        color = "#3B82F6" if self.side == "left" else "#EF4444"
+        new_layer = make_layer(subdiv=4, freq=880.0 if self.side == "left" else 440.0, vol=1.0, color=color)
+        layers.append(new_layer)
+        self.refresh()
+        self._notify_change()
+    
+    def _on_delete_layer(self, layer):
+        layers = self.state.left if self.side == "left" else self.state.right
+        if len(layers) > 1:  # Keep at least one layer
+            if layer in layers:
+                layers.remove(layer)
+                self.refresh()
+                self._notify_change()
+    
+    def _notify_change(self):
+        if self.on_change:
+            self.on_change()
+
 
 class MetronomeWidget(BoxLayout):
     """Main metronome control widget"""
@@ -275,8 +658,8 @@ class MetronomeWidget(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
-        self.padding = 20
-        self.spacing = 15
+        self.padding = '10dp'
+        self.spacing = '10dp'
         
         # Initialize state and engine
         self.state = RhythmState()
@@ -287,225 +670,116 @@ class MetronomeWidget(BoxLayout):
         
         # Build UI
         self._build_ui()
+        
+        # Bind to window size changes for orientation support
+        Window.bind(on_resize=self.on_window_resize)
+    
+    def on_window_resize(self, window, width, height):
+        """Handle orientation changes"""
+        # Rebuild UI for new orientation if needed
+        pass
     
     def _build_ui(self):
         """Build the user interface"""
         
-        # Title
-        title = Label(
-            text="PolyRhythm Metronome",
-            size_hint=(1, 0.08),
-            font_size='24sp',
-            bold=True
-        )
-        self.add_widget(title)
+        # Title and BPM
+        header = self._build_header()
+        self.add_widget(header)
         
-        # BPM Control Section
-        bpm_section = self._build_bpm_section()
-        self.add_widget(bpm_section)
+        # Layer lists (side by side or stacked based on orientation)
+        layers_section = BoxLayout(orientation='horizontal', spacing='10dp')
         
-        # Left/Right Layer Controls
-        layers_section = self._build_layers_section()
+        # Left layers
+        self.left_list = LayerListWidget(self.state, "left", size_hint_x=0.5)
+        self.left_list.on_change = self._autosave
+        layers_section.add_widget(self.left_list)
+        
+        # Right layers
+        self.right_list = LayerListWidget(self.state, "right", size_hint_x=0.5)
+        self.right_list.on_change = self._autosave
+        layers_section.add_widget(self.right_list)
+        
         self.add_widget(layers_section)
         
-        # Play/Stop and Save/Load buttons
-        controls_section = self._build_controls_section()
-        self.add_widget(controls_section)
+        # Control buttons
+        controls = self._build_controls()
+        self.add_widget(controls)
     
-    def _build_bpm_section(self):
-        """Build BPM control section"""
-        section = BoxLayout(orientation='vertical', size_hint=(1, 0.25), spacing=10)
+    def _build_header(self):
+        """Build title and BPM controls"""
+        header = BoxLayout(orientation='vertical', size_hint_y=None, height='120dp', spacing='5dp')
         
-        # BPM Label and Value
-        bpm_label_box = BoxLayout(size_hint=(1, 0.3))
-        bpm_label_box.add_widget(Label(text="BPM:", font_size='20sp', size_hint=(0.3, 1)))
+        # Title
+        title = Label(text="PolyRhythm Metronome", font_size='24sp', bold=True, size_hint_y=0.3)
+        header.add_widget(title)
+        
+        # BPM row
+        bpm_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        bpm_row.add_widget(Label(text="BPM:", font_size='18sp', size_hint_x=0.2))
+        
         self.bpm_value_label = Label(
             text=str(int(self.state.bpm)),
-            font_size='28sp',
+            font_size='24sp',
             bold=True,
-            size_hint=(0.7, 1)
+            size_hint_x=0.3
         )
-        bpm_label_box.add_widget(self.bpm_value_label)
-        section.add_widget(bpm_label_box)
+        bpm_row.add_widget(self.bpm_value_label)
         
-        # BPM Slider
         self.bpm_slider = Slider(
             min=40,
             max=240,
             value=self.state.bpm,
             step=1,
-            size_hint=(1, 0.3)
+            size_hint_x=0.5
         )
         self.bpm_slider.bind(value=self.on_bpm_change)
-        section.add_widget(self.bpm_slider)
+        bpm_row.add_widget(self.bpm_slider)
         
-        # BPM Preset Buttons
-        preset_grid = GridLayout(cols=4, size_hint=(1, 0.4), spacing=5)
+        header.add_widget(bpm_row)
+        
+        # BPM presets
+        preset_grid = GridLayout(cols=4, size_hint_y=0.4, spacing='5dp')
         for bpm in BPM_PRESETS:
-            btn = Button(
-                text=str(bpm),
-                font_size='16sp',
-                on_press=lambda x, b=bpm: self.set_bpm(b)
-            )
+            btn = Button(text=str(bpm), font_size='14sp')
+            btn.bind(on_press=lambda x, b=bpm: self.set_bpm(b))
             preset_grid.add_widget(btn)
-        section.add_widget(preset_grid)
         
-        return section
+        header.add_widget(preset_grid)
+        
+        return header
     
-    def _build_layers_section(self):
-        """Build left/right layer control section"""
-        section = BoxLayout(orientation='horizontal', size_hint=(1, 0.45), spacing=10)
-        
-        # Left ear controls
-        left_box = self._build_layer_controls("LEFT", "left")
-        section.add_widget(left_box)
-        
-        # Right ear controls
-        right_box = self._build_layer_controls("RIGHT", "right")
-        section.add_widget(right_box)
-        
-        return section
-    
-    def _build_layer_controls(self, title, side):
-        """Build controls for one layer (left or right)"""
-        box = BoxLayout(orientation='vertical', size_hint=(0.5, 1), spacing=5)
-        
-        # Set background color
-        with box.canvas.before:
-            if side == "left":
-                Color(0.23, 0.51, 0.96, 0.2)  # Light blue
-            else:
-                Color(0.94, 0.27, 0.27, 0.2)  # Light red
-            self.bg_rect = Rectangle(size=box.size, pos=box.pos)
-            box.bind(size=self._update_rect, pos=self._update_rect)
-        
-        # Title and Mute button
-        header = BoxLayout(size_hint=(1, 0.15))
-        header.add_widget(Label(text=title, font_size='18sp', bold=True, size_hint=(0.6, 1)))
-        
-        mute_btn = ToggleButton(
-            text="MUTE",
-            size_hint=(0.4, 1),
-            font_size='14sp'
-        )
-        if side == "left":
-            mute_btn.state = 'down' if self.state.left_mute else 'normal'
-            mute_btn.bind(state=self.on_left_mute)
-            self.left_mute_btn = mute_btn
-        else:
-            mute_btn.state = 'down' if self.state.right_mute else 'normal'
-            mute_btn.bind(state=self.on_right_mute)
-            self.right_mute_btn = mute_btn
-        
-        header.add_widget(mute_btn)
-        box.add_widget(header)
-        
-        # Subdivision control
-        subdiv_box = BoxLayout(size_hint=(1, 0.15))
-        subdiv_box.add_widget(Label(text="Subdiv:", font_size='14sp', size_hint=(0.4, 1)))
-        
-        spinner = Spinner(
-            text=str(getattr(self.state, f"{side}_subdiv")),
-            values=SUBDIV_OPTIONS,
-            size_hint=(0.6, 1),
-            font_size='14sp'
-        )
-        if side == "left":
-            spinner.bind(text=self.on_left_subdiv)
-        else:
-            spinner.bind(text=self.on_right_subdiv)
-        subdiv_box.add_widget(spinner)
-        box.add_widget(subdiv_box)
-        
-        # Frequency control
-        freq_box = BoxLayout(size_hint=(1, 0.15))
-        freq_box.add_widget(Label(text="Freq (Hz):", font_size='14sp', size_hint=(0.5, 1)))
-        
-        freq_input = TextInput(
-            text=str(int(getattr(self.state, f"{side}_freq"))),
-            multiline=False,
-            input_filter='int',
-            size_hint=(0.5, 1),
-            font_size='14sp'
-        )
-        if side == "left":
-            freq_input.bind(text=self.on_left_freq)
-        else:
-            freq_input.bind(text=self.on_right_freq)
-        freq_box.add_widget(freq_input)
-        box.add_widget(freq_box)
-        
-        # Volume control
-        vol_box = BoxLayout(orientation='vertical', size_hint=(1, 0.25))
-        vol_box.add_widget(Label(text="Volume", font_size='14sp', size_hint=(1, 0.4)))
-        
-        vol_slider = Slider(
-            min=0.0,
-            max=1.5,
-            value=getattr(self.state, f"{side}_vol"),
-            step=0.1,
-            size_hint=(1, 0.6)
-        )
-        if side == "left":
-            vol_slider.bind(value=self.on_left_vol)
-        else:
-            vol_slider.bind(value=self.on_right_vol)
-        vol_box.add_widget(vol_slider)
-        box.add_widget(vol_box)
-        
-        # Visual indicator (for beat flashing)
-        indicator = Label(
-            text="",
-            size_hint=(1, 0.3),
-            font_size='48sp'
-        )
-        if side == "left":
-            self.left_indicator = indicator
-        else:
-            self.right_indicator = indicator
-        box.add_widget(indicator)
-        
-        return box
-    
-    def _update_rect(self, instance, value):
-        """Update background rectangle when size/position changes"""
-        if hasattr(instance, 'canvas'):
-            instance.canvas.before.clear()
-            with instance.canvas.before:
-                if hasattr(self, 'state'):
-                    # Determine color based on side
-                    # This is a simple implementation - in practice you'd track which side
-                    Color(0.2, 0.2, 0.2, 0.1)
-                rect = Rectangle(size=instance.size, pos=instance.pos)
-    
-    def _build_controls_section(self):
+    def _build_controls(self):
         """Build play/stop and file operation controls"""
-        section = BoxLayout(orientation='vertical', size_hint=(1, 0.22), spacing=10)
+        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='80dp', spacing='5dp')
         
         # Play/Stop button
         self.play_button = Button(
             text="PLAY",
-            font_size='24sp',
-            size_hint=(1, 0.5),
+            font_size='20sp',
+            size_hint_y=0.5,
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.play_button.bind(on_press=self.on_play_stop)
-        section.add_widget(self.play_button)
+        controls.add_widget(self.play_button)
         
         # Save/Load buttons
-        file_box = BoxLayout(size_hint=(1, 0.5), spacing=10)
+        file_box = BoxLayout(size_hint_y=0.5, spacing='5dp')
         
-        save_btn = Button(text="SAVE", font_size='18sp')
+        save_btn = Button(text="SAVE", font_size='16sp')
         save_btn.bind(on_press=self.on_save)
         file_box.add_widget(save_btn)
         
-        load_btn = Button(text="LOAD", font_size='18sp')
+        load_btn = Button(text="LOAD", font_size='16sp')
         load_btn.bind(on_press=self.on_load)
         file_box.add_widget(load_btn)
         
-        section.add_widget(file_box)
+        new_btn = Button(text="NEW", font_size='16sp')
+        new_btn.bind(on_press=self.on_new)
+        file_box.add_widget(new_btn)
         
-        return section
+        controls.add_widget(file_box)
+        
+        return controls
     
     # Event Handlers
     
@@ -519,60 +793,6 @@ class MetronomeWidget(BoxLayout):
         """Set BPM to a specific value"""
         self.bpm_slider.value = bpm
     
-    def on_left_mute(self, instance, value):
-        """Handle left mute toggle"""
-        self.state.left_mute = (value == 'down')
-        self._autosave()
-    
-    def on_right_mute(self, instance, value):
-        """Handle right mute toggle"""
-        self.state.right_mute = (value == 'down')
-        self._autosave()
-    
-    def on_left_subdiv(self, instance, value):
-        """Handle left subdivision change"""
-        try:
-            self.state.left_subdiv = int(value)
-            self._autosave()
-        except ValueError:
-            pass
-    
-    def on_right_subdiv(self, instance, value):
-        """Handle right subdivision change"""
-        try:
-            self.state.right_subdiv = int(value)
-            self._autosave()
-        except ValueError:
-            pass
-    
-    def on_left_freq(self, instance, value):
-        """Handle left frequency change"""
-        try:
-            if value:
-                self.state.left_freq = float(value)
-                self._autosave()
-        except ValueError:
-            pass
-    
-    def on_right_freq(self, instance, value):
-        """Handle right frequency change"""
-        try:
-            if value:
-                self.state.right_freq = float(value)
-                self._autosave()
-        except ValueError:
-            pass
-    
-    def on_left_vol(self, instance, value):
-        """Handle left volume change"""
-        self.state.left_vol = value
-        self._autosave()
-    
-    def on_right_vol(self, instance, value):
-        """Handle right volume change"""
-        self.state.right_vol = value
-        self._autosave()
-    
     def on_play_stop(self, instance):
         """Handle play/stop button press"""
         if self.engine.running:
@@ -584,18 +804,24 @@ class MetronomeWidget(BoxLayout):
             self.play_button.text = "STOP"
             self.play_button.background_color = (0.8, 0.2, 0.2, 1)
     
-    def on_beat(self, side):
-        """Called when a beat occurs - flash the visual indicator"""
-        if side == 'left':
-            self.left_indicator.text = "●"
-            Clock.schedule_once(lambda dt: setattr(self.left_indicator, 'text', ''), FLASH_DURATION)
-        else:
-            self.right_indicator.text = "●"
-            Clock.schedule_once(lambda dt: setattr(self.right_indicator, 'text', ''), FLASH_DURATION)
+    def on_beat(self, side, uid, color):
+        """Called when a beat occurs"""
+        # Could flash the layer that triggered the beat
+        pass
+    
+    def on_new(self, instance):
+        """Create new rhythm pattern"""
+        self.state.left.clear()
+        self.state.right.clear()
+        self.state.left.append(make_layer(subdiv=4, freq=880.0, vol=1.0, color="#3B82F6"))
+        self.state.right.append(make_layer(subdiv=4, freq=440.0, vol=1.0, color="#EF4444"))
+        self.left_list.refresh()
+        self.right_list.refresh()
+        self._autosave()
     
     def on_save(self, instance):
         """Handle save button press"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
         
         filename_input = TextInput(
             text="my_rhythm.json",
@@ -605,7 +831,7 @@ class MetronomeWidget(BoxLayout):
         content.add_widget(Label(text="Enter filename:", size_hint=(1, 0.3)))
         content.add_widget(filename_input)
         
-        button_box = BoxLayout(size_hint=(1, 0.4), spacing=10)
+        button_box = BoxLayout(size_hint=(1, 0.4), spacing='10dp')
         
         popup = Popup(title="Save Rhythm", content=content, size_hint=(0.8, 0.4))
         
@@ -628,8 +854,7 @@ class MetronomeWidget(BoxLayout):
     
     def on_load(self, instance):
         """Handle load button press"""
-        # Simple file chooser - in a real app, use FileChooser
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
         
         filename_input = TextInput(
             text="my_rhythm.json",
@@ -639,7 +864,7 @@ class MetronomeWidget(BoxLayout):
         content.add_widget(Label(text="Enter filename:", size_hint=(1, 0.3)))
         content.add_widget(filename_input)
         
-        button_box = BoxLayout(size_hint=(1, 0.4), spacing=10)
+        button_box = BoxLayout(size_hint=(1, 0.4), spacing='10dp')
         
         popup = Popup(title="Load Rhythm", content=content, size_hint=(0.8, 0.4))
         
@@ -731,10 +956,10 @@ class MetronomeWidget(BoxLayout):
                 data = json.load(f)
                 self.state.from_dict(data)
             
-            # Update UI to reflect loaded values
+            # Update UI
             self.bpm_slider.value = self.state.bpm
-            # Note: Other UI elements will need to be updated too
-            # This is simplified for the example
+            self.left_list.refresh()
+            self.right_list.refresh()
             
             popup = Popup(
                 title="Success",
@@ -758,6 +983,8 @@ class PolyRhythmMetronomeApp(App):
     
     def build(self):
         """Build and return the root widget"""
+        # Set window title (for desktop testing)
+        self.title = "PolyRhythm Metronome"
         return MetronomeWidget()
     
     def on_stop(self):

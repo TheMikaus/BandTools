@@ -4,24 +4,27 @@ A touch-optimized metronome application for Android devices, specifically optimi
 
 ## Features
 
-This is a simplified version of the desktop PolyRhythmMetronome, optimized for mobile use:
+This is a full-featured version of PolyRhythmMetronome, optimized for mobile use:
 
-### Simplified for Touch
-- **Single Layer Per Ear**: Unlike the desktop version with multi-layer support, the Android version has one layer per ear for simplicity
+### Touch-Optimized for Mobile
+- **Multiple Layers Per Ear**: Full support for unlimited layers like the desktop version
 - **Large Touch Targets**: All buttons and controls are sized for easy touch interaction
 - **BPM Presets**: Quick-access buttons for common tempos (60, 80, 100, 120, 140, 160, 180, 200 BPM)
-- **Simplified Sound Generation**: Tone-only mode (no WAV files or drum samples) for reduced complexity
+- **Sound Generation**: Tone and Drum synthesis modes (kick, snare, hihat, crash, tom, ride)
+- **Orientation Support**: Works in both portrait and landscape orientations
 
 ### Core Features
-- **Stereo Layers**: Independent rhythm for left and right ears
+- **Multiple Stereo Layers**: Multiple independent rhythm layers for left and right ears (like desktop)
 - **BPM Control**: Adjustable from 40 to 240 BPM via slider or preset buttons
-- **Subdivision Settings**: Choose from 1, 2, 4, 8, or 16 notes per beat
-- **Frequency Control**: Adjust the tone frequency for each ear (Hz)
-- **Volume Control**: Independent volume for left and right
-- **Mute Controls**: Toggle each ear on/off
-- **Visual Feedback**: On-screen indicators flash with each beat
-- **Save/Load**: Save and load rhythm patterns as JSON files
+- **Subdivision Settings**: Choose from 1, 2, 4, 8, or 16 notes per beat per layer
+- **Sound Modes**: Tone (adjustable frequency in Hz) or Drum synthesis
+- **Drum Sounds**: Six drum types (kick, snare, hihat, crash, tom, ride)
+- **Volume Control**: Independent volume per layer
+- **Mute Controls**: Toggle any layer on/off
+- **Layer Management**: Add/remove layers dynamically with + and X buttons
+- **Save/Load**: Save and load rhythm patterns as JSON files (compatible with desktop)
 - **Auto-save**: Automatically saves your current settings
+- **Orientation Support**: Full support for portrait and landscape modes
 
 ## Requirements
 
@@ -147,12 +150,13 @@ buildozer android deploy run
 
 | Feature | Desktop | Android |
 |---------|---------|---------|
-| Layers per ear | Multiple | Single (simplified) |
-| Sound modes | Tone, WAV, Drum | Tone only |
+| Layers per ear | Multiple | Multiple (full support) |
+| Sound modes | Tone, WAV, Drum | Tone, Drum (WAV not supported) |
 | UI framework | Tkinter | Kivy |
 | File operations | Full file system | App storage |
 | Controls | Mouse/keyboard | Touch-optimized |
-| WAV export | Yes | No (simplified) |
+| Orientation | Any | Portrait and Landscape |
+| WAV export | Yes | No |
 
 ## Technical Details
 
