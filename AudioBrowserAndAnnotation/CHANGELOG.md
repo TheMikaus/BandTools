@@ -4,6 +4,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **AudioBrowserOrig: Auto-switch to Stereo View for Stereo Files** - Improved waveform viewing experience
+  - When loading a stereo audio file, the waveform view now automatically switches to stereo mode
+  - Displays left and right channels separately for better visualization of stereo content
+  - Automatically reverts to mono view when loading mono files
+  - Channel muting already maintains playback position when toggling (existing feature)
+
 ### Fixed
 - **AudioBrowserOrig: Temp Folder Location and Visibility** - Fixed `.audiobrowser_temp` folder location and visibility
   - Moved `.audiobrowser_temp` folder from user home directory to band practice folder root
