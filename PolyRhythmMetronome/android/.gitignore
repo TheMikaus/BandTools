@@ -1,0 +1,36 @@
+# Buildozer build artifacts
+.buildozer/
+bin/
+build/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App runtime files
+*.log
+metronome_autosave.json
+
+# Android specific
+*.apk
+*.aab
+local.properties
