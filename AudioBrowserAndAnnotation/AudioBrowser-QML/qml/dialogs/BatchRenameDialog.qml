@@ -81,7 +81,17 @@ Dialog {
     function executeRename() {
         if (!batchOperations || fileList.length === 0) return
         
-        // Close dialog
+        // Get preview for confirmation
+        var preview = batchOperations.previewBatchRename(fileList, patternField.text)
+        
+        // Show confirmation dialog
+        confirmDialog.openDialog(preview)
+    }
+    
+    function doActualRename() {
+        if (!batchOperations || fileList.length === 0) return
+        
+        // Close main dialog
         close()
         
         // Execute batch rename
@@ -95,6 +105,20 @@ Dialog {
     
     onAccepted: {
         executeRename()
+    }
+    
+    // ========== Confirmation Dialog ==========
+    
+    BatchRenameConfirmDialog {
+        id: confirmDialog
+        
+        onConfirmed: {
+            doActualRename()
+        }
+        
+        onCancelled: {
+            // User cancelled, keep main dialog open
+        }
     }
     
     // ========== Content ==========
