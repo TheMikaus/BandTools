@@ -7,13 +7,24 @@ Defines the common interface and data structures for all cloud sync implementati
 
 from __future__ import annotations
 import json
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 # PyQt6 imports for QML integration
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+
+# Combined metaclass to resolve metaclass conflict between QObject and ABC
+class QABCMeta(type(QObject), ABCMeta):
+    """
+    Combined metaclass for classes that need to inherit from both QObject and ABC.
+    
+    This resolves the metaclass conflict that occurs when trying to inherit from
+    both QObject (which uses PyQt6.sip.wrappertype) and ABC (which uses ABCMeta).
+    """
+    pass
 
 # Version file name
 VERSION_FILE = '.sync_version.json'
@@ -169,7 +180,7 @@ class SyncVersion:
         return []
 
 
-class CloudSyncBase(QObject, ABC):
+class CloudSyncBase(QObject, ABC, metaclass=QABCMeta):
     """
     Abstract base class for cloud synchronization providers.
     

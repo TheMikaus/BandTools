@@ -4,6 +4,14 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **Metaclass Conflict in Cloud Sync Base** - Fixed TypeError preventing cloud sync modules from loading
+  - Added `QABCMeta` combined metaclass to resolve conflict between QObject (PyQt6.sip.wrappertype) and ABC (ABCMeta)
+  - Updated `CloudSyncBase` class definition to use `metaclass=QABCMeta`
+  - Fixed in both AudioBrowser-QML and AudioBrowserOrig versions
+  - All cloud sync modules (GDriveSync, DropboxSync, WebDAVSync) now import successfully
+  - Added comprehensive test suite in `test_metaclass_fix.py`
+
 ### Added
 - **AudioBrowserOrig: Auto-switch to Stereo View for Stereo Files** - Improved waveform viewing experience
   - When loading a stereo audio file, the waveform view now automatically switches to stereo mode
