@@ -234,7 +234,7 @@ ApplicationWindow {
             }
             
             MenuItem {
-                text: "Google Drive Sync..."
+                text: "Cloud Sync..."
                 onTriggered: {
                     syncDialog.open()
                 }
@@ -593,7 +593,7 @@ ApplicationWindow {
             id: exportBestTakesDialog
         }
         
-        // Google Drive Sync Dialog
+        // Cloud Sync Dialog (supports multiple providers)
         SyncDialog {
             id: syncDialog
         }
