@@ -48,7 +48,45 @@ If an APK file is available, simply:
 
 ### Option 2: Build from Source
 
-#### Setup Build Environment
+#### For Windows Users
+
+**Quick Start: Desktop Testing (No Build Needed)**
+
+For rapid development and testing, run the app directly on Windows:
+
+```bash
+pip install kivy numpy
+python main.py
+```
+
+This gives instant feedback without building APKs. Perfect for 90% of development!
+
+See [Local Development on Windows](docs/user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) for complete guide.
+
+**Building APKs**
+
+When you need to create APKs, you have several options:
+
+**Option A: GitHub Actions (Recommended - No Local Setup)**
+- Fork the repository and set up GitHub Actions to build APKs
+- Download built APKs from GitHub Releases or Actions artifacts
+- No local Linux environment needed!
+
+**Option B: WSL2 (Fast Local Builds)**
+```powershell
+# Install WSL2
+wsl --install
+
+# Install Ubuntu from Microsoft Store, then run:
+sudo python3 setup_android_dev.py
+```
+Subsequent builds take only 5-10 minutes.
+
+**Option C: Docker or VM**
+- Use Docker Desktop with a Linux container
+- Use VirtualBox/VMware with Ubuntu
+
+#### Setup Build Environment (Linux/macOS)
 
 **Automated Setup (Recommended):**
 ```bash
@@ -227,6 +265,21 @@ This requires:
 ```bash
 pip install kivy numpy
 ```
+
+### Testing on Kindle Fire HD 10 with Kivy Launcher
+
+For rapid testing on real Kindle Fire hardware without building APKs:
+
+See the comprehensive guide: [Kindle Fire Kivy Launcher Setup](docs/user_guides/KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md)
+
+**Quick overview**:
+1. Enable Developer Options on Kindle Fire HD 10
+2. Install ADB on Windows
+3. Sideload Kivy Launcher APK
+4. Copy Python files with `adb push`
+5. Test instantly on device (30-60 second iteration)
+
+Perfect for rapid development and testing on actual hardware!
 
 ### Modifying the App
 
