@@ -19,6 +19,24 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from array import array
 
+# Add parent directory to path to import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import shared modules
+from shared.metadata_constants import (
+    NAMES_JSON as _NAMES_JSON,
+    NOTES_JSON as _NOTES_JSON,
+    WAVEFORM_JSON as _WAVEFORM_JSON,
+    DURATIONS_JSON as _DURATIONS_JSON,
+    FINGERPRINTS_JSON as _FINGERPRINTS_JSON,
+    TEMPO_JSON as _TEMPO_JSON,
+    PRACTICE_GOALS_JSON as _PRACTICE_GOALS_JSON,
+    SETLISTS_JSON as _SETLISTS_JSON,
+    AUDIO_EXTS as _AUDIO_EXTS,
+)
+from shared.file_utils import sanitize as _shared_sanitize, sanitize_library_name as _shared_sanitize_library_name
+from shared import backup_utils
+
 # Windows subprocess flag to hide console windows
 if sys.platform == "win32":
     CREATE_NO_WINDOW = 0x08000000  # Windows CREATE_NO_WINDOW flag
@@ -292,20 +310,20 @@ SETTINGS_KEY_NOW_PLAYING_COLLAPSED = "now_playing_panel_collapsed"  # Now Playin
 SETTINGS_KEY_PAGINATION_ENABLED = "pagination_enabled"  # Enable pagination for large libraries
 SETTINGS_KEY_PAGINATION_CHUNK_SIZE = "pagination_chunk_size"  # Number of files per page/chunk
 SETTINGS_KEY_PARALLEL_WORKERS = "parallel_workers"  # Number of parallel workers for generation (0 = auto)
-NAMES_JSON = ".provided_names.json"
-NOTES_JSON = ".audio_notes.json"
+NAMES_JSON = _NAMES_JSON
+NOTES_JSON = _NOTES_JSON
 SESSION_STATE_JSON = ".session_state.json"
-WAVEFORM_JSON = ".waveform_cache.json"
-DURATIONS_JSON = ".duration_cache.json"
-FINGERPRINTS_JSON = ".audio_fingerprints.json"
+WAVEFORM_JSON = _WAVEFORM_JSON
+DURATIONS_JSON = _DURATIONS_JSON
+FINGERPRINTS_JSON = _FINGERPRINTS_JSON
 USER_COLORS_JSON = ".user_colors.json"
 SONG_RENAMES_JSON = ".song_renames.json"
 PRACTICE_STATS_JSON = ".practice_stats.json"
-PRACTICE_GOALS_JSON = ".practice_goals.json"
-SETLISTS_JSON = ".setlists.json"
-TEMPO_JSON = ".tempo.json"
+PRACTICE_GOALS_JSON = _PRACTICE_GOALS_JSON
+SETLISTS_JSON = _SETLISTS_JSON
+TEMPO_JSON = _TEMPO_JSON
 RESERVED_JSON = {NAMES_JSON, NOTES_JSON, WAVEFORM_JSON, DURATIONS_JSON, FINGERPRINTS_JSON, USER_COLORS_JSON, SONG_RENAMES_JSON, PRACTICE_STATS_JSON, PRACTICE_GOALS_JSON, SETLISTS_JSON, TEMPO_JSON}
-AUDIO_EXTS = {".wav", ".wave", ".mp3"}
+AUDIO_EXTS = _AUDIO_EXTS
 WAVEFORM_COLUMNS = 2000
 APP_ICON_NAME = "app_icon.png"
 
@@ -649,14 +667,12 @@ def parse_time_to_ms(text: str) -> Optional[int]:
     return None
 
 def sanitize(name: str) -> str:
-    name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
-    return re.sub(r"\s+", " ", name).strip()
+    return _shared_sanitize(name)
+
 
 def sanitize_library_name(name: str) -> str:
     """Sanitize a library name for use in filenames: lowercase and replace spaces with underscores."""
-    name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
-    name = re.sub(r"\s+", "_", name).strip()
-    return name.lower()
+    return _shared_sanitize_library_name(name)
 
 def resource_path(name: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -3046,9 +3062,7 @@ def create_backup_folder_name(practice_folder: Path) -> Path:
     """
     Create a unique backup folder name with format .backup/YYYY-MM-DD-###
     
-    Backups are created in each practice folder under .backup/ directory.
-    The format ensures chronological ordering and prevents conflicts when
-    multiple backups are created on the same day.
+    Uses shared.backup_utils.create_backup_folder_name.
     
     Args:
         practice_folder: Practice folder where the backup will be created
@@ -3056,30 +3070,13 @@ def create_backup_folder_name(practice_folder: Path) -> Path:
     Returns:
         Path to the backup folder (not yet created)
     """
-    today = datetime.now()
-    date_str = today.strftime("%Y-%m-%d")
-    backups_dir = practice_folder / ".backup"
-    
-    # Find the next available number for today
-    counter = 1
-    while True:
-        backup_folder = backups_dir / f"{date_str}-{counter:03d}"
-        if not backup_folder.exists():
-            return backup_folder
-        counter += 1
+    return backup_utils.create_backup_folder_name(practice_folder)
 
 def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     """
-    Get list of metadata files that exist in the practice folder and might change.
+    Get list of metadata files that exist in the practice folder.
     
-    This includes:
-    - .provided_names.json (file naming data)
-    - .duration_cache.json (playback duration cache)
-    - .waveforms/.waveform_cache.json (waveform visualization cache)
-    - .audio_fingerprints.json (audio fingerprint data)
-    - .audio_notes_<username>.json (user-specific annotation data)
-    
-    Excludes any files in .backup or .backups directories.
+    Uses shared.backup_utils.get_metadata_files_to_backup.
     
     Args:
         practice_folder: Directory to scan for metadata files
@@ -3087,70 +3084,25 @@ def get_metadata_files_to_backup(practice_folder: Path) -> List[Path]:
     Returns:
         List of Path objects for existing metadata files
     """
-    # Skip backup directories entirely
-    if practice_folder.name in ['.backup', '.backups']:
-        return []
-    
-    metadata_files = []
-    
-    # List of all possible metadata files
-    possible_files = [
-        practice_folder / NAMES_JSON,
-        practice_folder / DURATIONS_JSON,
-        practice_folder / ".waveforms" / WAVEFORM_JSON,  # Waveform cache now in .waveforms subdirectory
-        practice_folder / FINGERPRINTS_JSON,
-    ]
-    
-    # Add user-specific annotation files
-    username = getpass.getuser()
-    user_notes_file = practice_folder / f".audio_notes_{username}.json"
-    possible_files.append(user_notes_file)
-    
-    # Also check for any other user-specific annotation files
-    for json_file in practice_folder.glob(".audio_notes_*.json"):
-        if json_file not in possible_files:
-            possible_files.append(json_file)
-    
-    # Only include files that actually exist and are not in backup directories
-    for file_path in possible_files:
-        if file_path.exists() and file_path.is_file():
-            # Make sure the file is not in a backup directory
-            if not any(part in ['.backup', '.backups'] for part in file_path.parts):
-                metadata_files.append(file_path)
-    
-    return metadata_files
+    return backup_utils.get_metadata_files_to_backup(practice_folder)
 
 def backup_metadata_files(practice_folder: Path, backup_base_folder: Path) -> int:
     """
     Backup metadata files from practice_folder to backup_base_folder.
+    
+    Uses shared.backup_utils.backup_metadata_files.
+    
     Returns the number of files backed up.
     """
-    metadata_files = get_metadata_files_to_backup(practice_folder)
-    
-    if not metadata_files:
-        return 0  # No files to backup
-    
-    # Create the backup directory
-    backup_base_folder.mkdir(parents=True, exist_ok=True)
-    
-    backed_up_count = 0
-    for metadata_file in metadata_files:
-        try:
-            backup_file_path = backup_base_folder / metadata_file.name
-            # Copy the file
-            backup_file_path.write_bytes(metadata_file.read_bytes())
-            backed_up_count += 1
-        except Exception as e:
-            log_print(f"Warning: Failed to backup {metadata_file}: {e}")
-    
-    return backed_up_count
+    return backup_utils.backup_metadata_files(practice_folder, backup_base_folder)
 
 def should_create_backup(practice_folder: Path) -> bool:
     """
     Determine if a backup should be created for this practice folder.
-    Only create backup if there are metadata files that could change.
+    
+    Uses shared.backup_utils.should_create_backup.
     """
-    return len(get_metadata_files_to_backup(practice_folder)) > 0
+    return backup_utils.should_create_backup(practice_folder)
 
 def create_metadata_backup_if_needed(practice_folder: Path) -> Optional[Path]:
     """
