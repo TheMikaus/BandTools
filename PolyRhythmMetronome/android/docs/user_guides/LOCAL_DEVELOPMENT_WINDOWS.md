@@ -208,9 +208,15 @@ android {
 
 Test on real Android devices without building APKs:
 
-### Setup
+### Overview
 
-1. **Install Kivy Launcher** from Google Play Store on your Android device
+Kivy Launcher allows you to run Python/Kivy apps directly on Android devices without building APKs. Perfect for rapid iteration and real hardware testing.
+
+**For detailed Kindle Fire HD 10 instructions**, see: [Kindle Fire Kivy Launcher Guide](KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md)
+
+### Quick Setup
+
+1. **Install Kivy Launcher** from Google Play Store (or sideload on Kindle Fire)
 2. **Enable USB debugging** on your device
 3. **Connect device** to Windows PC via USB
 
@@ -225,20 +231,30 @@ adb push main.py /sdcard/kivy/polyrhythm/main.py
 ```
 
 Or use network transfer:
-1. Put `main.py` in `/sdcard/kivy/yourapp/` on device
+1. Put `main.py` in `/sdcard/kivy/polyrhythm/` on device
 2. Launch from Kivy Launcher
 
 ### Advantages
 
 ✅ **No APK build** - Direct Python execution  
-✅ **Fast testing** - Just copy files  
+✅ **Fast testing** - Just copy files (30-60 seconds)  
 ✅ **Real device** - Test on actual hardware  
+✅ **Rapid iteration** - Edit, copy, test, repeat  
 
 ### Limitations
 
-⚠ **Requires Kivy Launcher** - Must install from Play Store  
+⚠ **Requires Kivy Launcher** - Must install on device  
 ⚠ **Limited features** - Can't test custom permissions  
 ⚠ **Development only** - Not for distribution  
+
+### Kindle Fire HD 10 Special Instructions
+
+Kindle Fire devices don't have Google Play Store, so you need to:
+1. Enable Developer Options on the Kindle Fire
+2. Sideload Kivy Launcher APK using ADB
+3. Set up file structure properly
+
+**Complete step-by-step guide**: [Kindle Fire Kivy Launcher Guide](KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md)  
 
 ---
 

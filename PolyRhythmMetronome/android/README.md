@@ -266,6 +266,21 @@ This requires:
 pip install kivy numpy
 ```
 
+### Testing on Kindle Fire HD 10 with Kivy Launcher
+
+For rapid testing on real Kindle Fire hardware without building APKs:
+
+See the comprehensive guide: [Kindle Fire Kivy Launcher Setup](docs/user_guides/KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md)
+
+**Quick overview**:
+1. Enable Developer Options on Kindle Fire HD 10
+2. Install ADB on Windows
+3. Sideload Kivy Launcher APK
+4. Copy Python files with `adb push`
+5. Test instantly on device (30-60 second iteration)
+
+Perfect for rapid development and testing on actual hardware!
+
 ### Modifying the App
 
 Key files:

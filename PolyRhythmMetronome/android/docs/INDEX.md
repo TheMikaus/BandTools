@@ -10,6 +10,7 @@ User-facing documentation for end users and musicians.
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
 - [FAQ](user_guides/FAQ.md) - Frequently asked questions
+- [Kindle Fire Kivy Launcher Guide](user_guides/KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md) - Complete setup for testing on Kindle Fire HD 10 with Kivy Launcher
 - [Local Development on Windows](user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) - Build, test, and iterate locally on Windows
 - [GitHub Actions Build Guide](user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) - Building APKs without local Linux setup (cloud builds)
 
