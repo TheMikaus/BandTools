@@ -191,11 +191,11 @@ def check_system_packages_ubuntu():
     """Check and install system packages for Ubuntu/Debian."""
     print_info("Checking system packages (Ubuntu/Debian)...")
     
-    # Note: libtinfo5 removed as it's not available in Ubuntu 24.04+
-    # ncurses6 provides the necessary functionality
+    # Note: In Ubuntu 24.04+, libncurses-dev provides both narrow and wide character support
+    # libncurses5-dev and libtinfo5 are not available in modern Ubuntu
     required_packages = [
         "git", "zip", "unzip", "autoconf", "libtool", "pkg-config",
-        "zlib1g-dev", "libncurses-dev", "libncursesw5-dev", 
+        "zlib1g-dev", "libncurses-dev",
         "cmake", "libffi-dev", "libssl-dev"
     ]
     

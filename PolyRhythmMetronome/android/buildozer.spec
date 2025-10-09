@@ -22,8 +22,8 @@ version = 1.0
 # comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy,numpy
 
-# (str) Supported orientation (portrait / landscape / all / sensor)
-orientation = all
+# (str) Supported orientation (portrait / landscape / sensorLandscape)
+orientation = landscape
 
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
