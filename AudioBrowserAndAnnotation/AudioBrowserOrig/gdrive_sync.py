@@ -17,6 +17,15 @@ from typing import Dict, List, Optional, Tuple, Set, Any
 from datetime import datetime
 import logging
 
+# PyQt6 imports for signals
+from PyQt6.QtCore import pyqtSignal, pyqtSlot
+
+# Import base class and shared structures
+from cloud_sync_base import (
+    CloudSyncBase, SyncHistory, SyncRules, SyncVersion,
+    SYNC_EXCLUDED, VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE, ANNOTATION_PATTERNS
+)
+
 # Google Drive API imports (will be auto-installed if needed)
 try:
     from google.auth.transport.requests import Request
@@ -34,180 +43,37 @@ logger = logging.getLogger(__name__)
 # Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-# Version file name
-VERSION_FILE = '.sync_version.json'
 
-# Sync history file name
-SYNC_HISTORY_FILE = '.sync_history.json'
-
-# Sync rules configuration file name
-SYNC_RULES_FILE = '.sync_rules.json'
-
-# Files and directories that should never be synced
-SYNC_EXCLUDED = {'.backup', '.backups', '.waveforms', '.git', '__pycache__'}
-
-# Annotation file patterns that user can modify
-ANNOTATION_PATTERNS = ['.audio_notes_', '.provided_names.json', '.duration_cache.json', 
-                       '.audio_fingerprints.json', '.user_colors.json', '.song_renames.json']
-
-
-class SyncHistory:
-    """Manages sync history tracking."""
+class GDriveSync(CloudSyncBase):
+    """Google Drive synchronization manager with multi-provider support."""
     
-    def __init__(self, entries: Optional[List[Dict]] = None):
-        self.entries = entries or []
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'SyncHistory':
-        """Load history from dictionary."""
-        return cls(entries=data.get('entries', []))
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary for JSON serialization."""
-        return {'entries': self.entries}
-    
-    def add_entry(self, operation_type: str, files_count: int, user: str, 
-                  timestamp: Optional[str] = None, details: Optional[str] = None):
-        """Add a sync history entry."""
-        if timestamp is None:
-            timestamp = datetime.now().isoformat()
-        
-        self.entries.append({
-            'operation': operation_type,  # 'upload', 'download', 'conflict_resolved'
-            'files_count': files_count,
-            'user': user,
-            'timestamp': timestamp,
-            'details': details
-        })
-        
-        # Keep only last 100 entries to prevent file bloat
-        if len(self.entries) > 100:
-            self.entries = self.entries[-100:]
-    
-    def get_recent_entries(self, count: int = 10) -> List[Dict]:
-        """Get most recent sync entries."""
-        return self.entries[-count:] if self.entries else []
-
-
-class SyncRules:
-    """Manages selective sync rules."""
-    
-    def __init__(self, max_file_size_mb: float = 0, 
-                 sync_audio_files: bool = True,
-                 sync_annotations_only: bool = False,
-                 auto_sync_enabled: bool = False,
-                 auto_download_best_takes: bool = False):
-        self.max_file_size_mb = max_file_size_mb  # 0 = no limit
-        self.sync_audio_files = sync_audio_files
-        self.sync_annotations_only = sync_annotations_only
-        self.auto_sync_enabled = auto_sync_enabled
-        self.auto_download_best_takes = auto_download_best_takes
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'SyncRules':
-        """Load rules from dictionary."""
-        return cls(
-            max_file_size_mb=data.get('max_file_size_mb', 0),
-            sync_audio_files=data.get('sync_audio_files', True),
-            sync_annotations_only=data.get('sync_annotations_only', False),
-            auto_sync_enabled=data.get('auto_sync_enabled', False),
-            auto_download_best_takes=data.get('auto_download_best_takes', False)
-        )
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            'max_file_size_mb': self.max_file_size_mb,
-            'sync_audio_files': self.sync_audio_files,
-            'sync_annotations_only': self.sync_annotations_only,
-            'auto_sync_enabled': self.auto_sync_enabled,
-            'auto_download_best_takes': self.auto_download_best_takes
-        }
-    
-    def should_sync_file(self, file_path: Path, file_size_bytes: int = 0) -> bool:
-        """Check if a file should be synced based on rules."""
-        # Check file size limit
-        if self.max_file_size_mb > 0:
-            size_mb = file_size_bytes / (1024 * 1024)
-            if size_mb > self.max_file_size_mb:
-                return False
-        
-        # Check if annotations only
-        if self.sync_annotations_only:
-            # Only sync metadata/annotation files
-            is_annotation = any(pattern in file_path.name for pattern in ANNOTATION_PATTERNS)
-            is_annotation = is_annotation or file_path.name in [VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE]
-            return is_annotation
-        
-        # Check if audio files should be synced
-        if not self.sync_audio_files:
-            audio_extensions = {'.wav', '.mp3', '.flac', '.ogg', '.m4a'}
-            if file_path.suffix.lower() in audio_extensions:
-                return False
-        
-        return True
-
-
-class SyncVersion:
-    """Manages sync version tracking and operations."""
-    
-    def __init__(self, version: int = 0, operations: Optional[List[Dict]] = None):
-        self.version = version
-        self.operations = operations or []
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'SyncVersion':
-        """Load version info from dictionary."""
-        return cls(
-            version=data.get('version', 0),
-            operations=data.get('operations', [])
-        )
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            'version': self.version,
-            'operations': self.operations
-        }
-    
-    def add_operation(self, op_type: str, file_path: str, timestamp: Optional[str] = None):
-        """Add an operation to the current version."""
-        if timestamp is None:
-            timestamp = datetime.now().isoformat()
-        
-        self.operations.append({
-            'type': op_type,  # 'add', 'update', 'delete', 'rename'
-            'path': file_path,
-            'timestamp': timestamp
-        })
-    
-    def get_operations_since(self, since_version: int) -> List[Dict]:
-        """Get all operations since a specific version."""
-        # For now, return all operations if version is newer
-        # In a more complex implementation, we'd track operations per version
-        if self.version > since_version:
-            return self.operations
-        return []
-
-
-class GDriveSync:
-    """Google Drive synchronization manager."""
-    
-    def __init__(self, credentials_path: Path, token_path: Path):
+    def __init__(self, credentials_path: Path, token_path: Path, parent=None):
         """
         Initialize Google Drive sync.
         
         Args:
             credentials_path: Path to OAuth credentials file
             token_path: Path to store/load authentication token
+            parent: QObject parent (optional)
         """
+        super().__init__(parent)
         self.credentials_path = credentials_path
         self.token_path = token_path
         self.creds: Optional[Credentials] = None
         self.service = None
-        self.remote_folder_id: Optional[str] = None
         self.current_user: str = os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'
     
+    @pyqtSlot(result=bool)
+    def isAvailable(self) -> bool:
+        """Check if Google Drive API libraries are available."""
+        return GDRIVE_AVAILABLE
+    
+    @pyqtSlot(result=bool)
+    def isAuthenticated(self) -> bool:
+        """Check if currently authenticated with Google Drive."""
+        return self.service is not None
+    
+    @pyqtSlot(result=bool)
     def authenticate(self) -> bool:
         """
         Authenticate with Google Drive API.
@@ -226,7 +92,9 @@ class GDriveSync:
                     self.creds.refresh(Request())
                 else:
                     if not self.credentials_path.exists():
-                        logger.error(f"Credentials file not found: {self.credentials_path}")
+                        error_msg = f"Credentials file not found: {self.credentials_path}"
+                        logger.error(error_msg)
+                        self.authenticationStatusChanged.emit(False, error_msg)
                         return False
                     
                     flow = InstalledAppFlow.from_client_secrets_file(
@@ -240,12 +108,16 @@ class GDriveSync:
             # Build the service
             self.service = build('drive', 'v3', credentials=self.creds)
             logger.info("Successfully authenticated with Google Drive")
+            self.authenticationStatusChanged.emit(True, "Successfully authenticated with Google Drive")
             return True
             
         except Exception as e:
-            logger.error(f"Authentication failed: {e}")
+            error_msg = f"Authentication failed: {e}"
+            logger.error(error_msg)
+            self.authenticationStatusChanged.emit(False, error_msg)
             return False
     
+    @pyqtSlot(str, result=str)
     def select_remote_folder(self, folder_name: Optional[str] = None) -> Optional[str]:
         """
         Select or create a remote folder for sync.
@@ -274,6 +146,7 @@ class GDriveSync:
                 if files:
                     self.remote_folder_id = files[0]['id']
                     logger.info(f"Found existing folder: {folder_name}")
+                    self.folderSelected.emit(folder_name, self.remote_folder_id)
                     return self.remote_folder_id
                 
                 # Create new folder
@@ -288,6 +161,7 @@ class GDriveSync:
                 
                 self.remote_folder_id = folder.get('id')
                 logger.info(f"Created new folder: {folder_name}")
+                self.folderSelected.emit(folder_name, self.remote_folder_id)
                 return self.remote_folder_id
             
             return None
@@ -608,6 +482,40 @@ class GDriveSync:
         
         # All other files can be modified
         return True
+    
+    @pyqtSlot(str, bool, result=bool)
+    def performSync(self, directory: str, upload: bool) -> bool:
+        """
+        Perform synchronization operation.
+        
+        Args:
+            directory: Local directory path
+            upload: True for upload, False for download
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            local_dir = Path(directory)
+            if not local_dir.exists():
+                self.syncError.emit(f"Directory does not exist: {directory}")
+                return False
+            
+            if not self.service or not self.remote_folder_id:
+                self.syncError.emit("Not authenticated or no folder selected")
+                return False
+            
+            # This is a placeholder implementation - the actual sync logic
+            # is handled by sync_dialog.py which calls upload_file/download_file
+            # individually through SyncWorker
+            self.syncProgress.emit(f"{'Upload' if upload else 'Download'} sync initiated for {directory}")
+            return True
+            
+        except Exception as e:
+            error_msg = f"Sync failed: {e}"
+            logger.error(error_msg)
+            self.syncError.emit(error_msg)
+            return False
 
 
 def load_local_version(version_path: Path) -> SyncVersion:
