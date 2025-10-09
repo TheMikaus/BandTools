@@ -21,6 +21,7 @@ End-user documentation and how-to guides:
 - [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - Folder navigation and hierarchical browsing guide
 - [GOOGLE_DRIVE_SYNC_README.md](user_guides/GOOGLE_DRIVE_SYNC_README.md) - Google Drive sync setup guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
+- [PHASE_15_VISUAL_GUIDE.md](user_guides/PHASE_15_VISUAL_GUIDE.md) - Phase 15 visual guide: Confirmation and progress dialogs
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
@@ -54,14 +55,23 @@ Developer and technical documentation:
 - [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - Error logging improvements
 - [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - UI improvements for toolbar and folder navigation
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
+- [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
 - [WAVEFORM_VIEW_PROPERTY_FIX.md](technical/WAVEFORM_VIEW_PROPERTY_FIX.md) - WaveformView peaks property type fix
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
+- [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
 - [QML_CONTROLS_BASIC_FIX.md](technical/QML_CONTROLS_BASIC_FIX.md) - QML controls fixes
+- [QML_FIXES_SUMMARY.md](technical/QML_FIXES_SUMMARY.md) - QML fixes summary
+- [QML_FIX_SUMMARY.md](technical/QML_FIX_SUMMARY.md) - QML fix summary
 - [PYDUB_PYAUDIOOP_FIX.md](technical/PYDUB_PYAUDIOOP_FIX.md) - PyDub and PyAudioOp fixes
 - [PYTHON_313_COMPATIBILITY.md](technical/PYTHON_313_COMPATIBILITY.md) - Python 3.13 compatibility
 - [SESSION_ENHANCED_FILE_LIST.md](technical/SESSION_ENHANCED_FILE_LIST.md) - Enhanced file list
 - [SESSION_SUMMARY.md](technical/SESSION_SUMMARY.md) - Session summaries
+- [TASK_COMPLETION_SUMMARY.md](technical/TASK_COMPLETION_SUMMARY.md) - Task completion summaries
+- [UI_CHANGES_CLOUD_SYNC.md](technical/UI_CHANGES_CLOUD_SYNC.md) - Cloud sync UI changes
+- [UI_FIX_SUMMARY.md](technical/UI_FIX_SUMMARY.md) - UI fix summary
+- [QUICK_VERIFICATION.md](technical/QUICK_VERIFICATION.md) - Quick verification procedures
+- [ISSUE_RESOLUTION.md](technical/ISSUE_RESOLUTION.md) - Issue resolution documentation
 - [VERIFICATION_SUMMARY.md](technical/VERIFICATION_SUMMARY.md) - Verification results
 
 #### Build and Deployment
@@ -83,9 +93,14 @@ Feature implementation summaries and completion reports:
 - [PRACTICE_STATISTICS_IMPLEMENTATION.md](PRACTICE_STATISTICS_IMPLEMENTATION.md) - Practice statistics feature (Issue 3)
 - [QML_COMPILATION_FIX.md](QML_COMPILATION_FIX.md) - QML compilation error fixes
 - [technical/SETLIST_BUILDER_IMPLEMENTATION.md](technical/SETLIST_BUILDER_IMPLEMENTATION.md) - Setlist builder feature (Issue 5)
-- [../ISSUE_7_IMPLEMENTATION_SUMMARY.md](../ISSUE_7_IMPLEMENTATION_SUMMARY.md) - Spectrogram overlay feature (Issue 7)
+- [technical/ISSUE_6_IMPLEMENTATION_SUMMARY.md](technical/ISSUE_6_IMPLEMENTATION_SUMMARY.md) - Tempo/BPM features (Issue 6)
+- [technical/ISSUE_7_IMPLEMENTATION_SUMMARY.md](technical/ISSUE_7_IMPLEMENTATION_SUMMARY.md) - Spectrogram overlay feature (Issue 7)
+- [technical/ISSUE_8_IMPLEMENTATION_SUMMARY.md](technical/ISSUE_8_IMPLEMENTATION_SUMMARY.md) - Issue 8 implementation
 - [DOCUMENTATION_BROWSER_IMPLEMENTATION.md](DOCUMENTATION_BROWSER_IMPLEMENTATION.md) - Documentation browser feature (Issue 15)
 - [technical/NOW_PLAYING_PANEL_IMPLEMENTATION.md](technical/NOW_PLAYING_PANEL_IMPLEMENTATION.md) - Now Playing panel implementation
+- [technical/CLOUD_SYNC_FEATURE_COMPLETE.md](technical/CLOUD_SYNC_FEATURE_COMPLETE.md) - Cloud sync feature completion
+- [technical/MULTI_CLOUD_SYNC_IMPLEMENTATION.md](technical/MULTI_CLOUD_SYNC_IMPLEMENTATION.md) - Multi-cloud sync implementation
+- [technical/FFMPEG_FIX_SUMMARY.md](technical/FFMPEG_FIX_SUMMARY.md) - FFmpeg detection and fix summary
 
 ### Test Plans (`test_plans/`)
 
@@ -124,6 +139,9 @@ Development phase reports and progress tracking:
 - [PHASE_7_SESSION_COMPLETE.md](phase_reports/PHASE_7_SESSION_COMPLETE.md) - Session completion
 - [PHASE_7_SUMMARY.md](phase_reports/PHASE_7_SUMMARY.md) - Phase 7 summary
 
+**Phase 8:**
+- [PHASE_8_COMPLETION_SUMMARY.md](phase_reports/PHASE_8_COMPLETION_SUMMARY.md) - Phase 8 completion
+
 **Phase 11:**
 - [PHASE_11_COMPLETION_SUMMARY.md](PHASE_11_COMPLETION_SUMMARY.md) - Phase 11 completion (merged annotations, auto-switch)
 
@@ -135,7 +153,11 @@ Development phase reports and progress tracking:
 - [PHASE_13_SUMMARY.md](phase_reports/PHASE_13_SUMMARY.md) - Phase 13 summary
 
 **Phase 14:**
+- [PHASE_14_QUALITY_IMPROVEMENTS.md](phase_reports/PHASE_14_QUALITY_IMPROVEMENTS.md) - Phase 14 quality improvements
 - [PHASE_14_SUMMARY.md](phase_reports/PHASE_14_SUMMARY.md) - Phase 14 summary
+
+**Phase 15:**
+- [PHASE_15_COMPLETION_SUMMARY.md](phase_reports/PHASE_15_COMPLETION_SUMMARY.md) - Phase 15 completion summary
 
 **Phase 16:**
 - [PHASE_16_SUMMARY.md](phase_reports/PHASE_16_SUMMARY.md) - Phase 16 summary
