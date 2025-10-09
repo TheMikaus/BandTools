@@ -168,60 +168,69 @@ def main():
     # Create documentation manager
     documentation_manager = DocumentationManager()
     
-    # Create undo manager
-    undo_manager = UndoManager()
-    undo_manager.setFileManager(file_manager)
-    undo_manager.setAnnotationManager(annotation_manager)
-    undo_manager.setCapacity(settings_manager.getUndoLimit())
-    
-    # Connect annotation manager to undo manager (for recording operations)
-    annotation_manager.setUndoManager(undo_manager)
-    
-    # Create unified sync manager (supports multiple cloud providers)
+    # Register custom QML types
+    qmlRegisterType(WaveformView, "AudioBrowser", 1, 0, "WaveformView")
+
+    # Create QML engine
+    engine = QQmlApplicationEngine()
+
+    # Create backend managers with error checks
+    def safe_create(name, ctor):
+        try:
+            obj = ctor()
+            if obj is None:
+                print(f"ERROR: {name} is None after construction", file=sys.stderr)
+                sys.exit(2)
+            return obj
+        except Exception as e:
+            print(f"ERROR: Failed to construct {name}: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(2)
+
+    settings_manager = safe_create("SettingsManager", SettingsManager)
+    color_manager = safe_create("ColorManager", lambda: ColorManager(theme=settings_manager.getTheme()))
+    audio_engine = safe_create("AudioEngine", AudioEngine)
+    file_manager = safe_create("FileManager", FileManager)
+    tempo_manager = safe_create("TempoManager", TempoManager)
+    waveform_engine = safe_create("WaveformEngine", WaveformEngine)
+    annotation_manager = safe_create("AnnotationManager", AnnotationManager)
+    clip_manager = safe_create("ClipManager", ClipManager)
+    folder_notes_manager = safe_create("FolderNotesManager", FolderNotesManager)
+    batch_operations = safe_create("BatchOperations", BatchOperations)
+    practice_statistics = safe_create("PracticeStatistics", PracticeStatistics)
+    practice_goals = safe_create("PracticeGoals", PracticeGoals)
+
+    # Connect practice goals to practice statistics
+    try:
+        practice_goals.setPracticeStatistics(practice_statistics)
+    except Exception as e:
+        print(f"ERROR: Failed to connect PracticeGoals to PracticeStatistics: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    setlist_manager = safe_create("SetlistManager", lambda: SetlistManager(Path.home()))
+    fingerprint_engine = safe_create("FingerprintEngine", FingerprintEngine)
+    backup_manager = safe_create("BackupManager", BackupManager)
+    export_manager = safe_create("ExportManager", ExportManager)
+    documentation_manager = safe_create("DocumentationManager", DocumentationManager)
+    undo_manager = safe_create("UndoManager", UndoManager)
+    try:
+        undo_manager.setFileManager(file_manager)
+        undo_manager.setAnnotationManager(annotation_manager)
+        undo_manager.setCapacity(settings_manager.getUndoLimit())
+    except Exception as e:
+        print(f"ERROR: Failed to configure UndoManager: {e}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        annotation_manager.setUndoManager(undo_manager)
+    except Exception as e:
+        print(f"ERROR: Failed to connect AnnotationManager to UndoManager: {e}", file=sys.stderr)
+        sys.exit(2)
     config_dir = Path.home() / ".audiobrowser"
-    sync_manager = SyncManager(config_dir)
-    
-    # Create data models (pass file_manager and tempo_manager to FileListModel)
-    file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
-    annotations_model = AnnotationsModel()
-    
-    # Create and expose view model to QML
-    view_model = ApplicationViewModel()
-    
-    # Expose backend objects to QML via context properties
-    engine.rootContext().setContextProperty("appViewModel", view_model)
-    engine.rootContext().setContextProperty("settingsManager", settings_manager)
-    engine.rootContext().setContextProperty("colorManager", color_manager)
-    engine.rootContext().setContextProperty("audioEngine", audio_engine)
-    engine.rootContext().setContextProperty("fileManager", file_manager)
-    engine.rootContext().setContextProperty("tempoManager", tempo_manager)
-    engine.rootContext().setContextProperty("fileListModel", file_list_model)
-    engine.rootContext().setContextProperty("annotationsModel", annotations_model)
-    engine.rootContext().setContextProperty("waveformEngine", waveform_engine)
-    engine.rootContext().setContextProperty("annotationManager", annotation_manager)
-    engine.rootContext().setContextProperty("clipManager", clip_manager)
-    engine.rootContext().setContextProperty("folderNotesManager", folder_notes_manager)
-    engine.rootContext().setContextProperty("batchOperations", batch_operations)
-    engine.rootContext().setContextProperty("practiceStatistics", practice_statistics)
-    engine.rootContext().setContextProperty("practiceGoals", practice_goals)
-    engine.rootContext().setContextProperty("setlistManager", setlist_manager)
-    engine.rootContext().setContextProperty("fingerprintEngine", fingerprint_engine)
-    engine.rootContext().setContextProperty("backupManager", backup_manager)
-    engine.rootContext().setContextProperty("exportManager", export_manager)
-    engine.rootContext().setContextProperty("documentationManager", documentation_manager)
-    engine.rootContext().setContextProperty("undoManager", undo_manager)
-    engine.rootContext().setContextProperty("syncManager", sync_manager)
-    
-    # Connect settings to color manager
-    settings_manager.themeChanged.connect(color_manager.setTheme)
-    
-    # Connect file manager to file list model
-    file_manager.filesDiscovered.connect(file_list_model.setFiles)
-    
-    # Connect file manager to waveform engine for cache directory
-    file_manager.currentDirectoryChanged.connect(waveform_engine.setCacheDirectory)
-    
-    # Connect file manager to tempo manager
+    sync_manager = safe_create("SyncManager", lambda: SyncManager(config_dir))
+    file_list_model = safe_create("FileListModel", lambda: FileListModel(file_manager=file_manager, tempo_manager=tempo_manager))
+    annotations_model = safe_create("AnnotationsModel", AnnotationsModel)
+    view_model = safe_create("ApplicationViewModel", ApplicationViewModel)
     def update_tempo_directory(directory):
         if directory:
             tempo_manager.setCurrentDirectory(Path(directory))
@@ -285,27 +294,52 @@ def main():
         except Exception as e:
             print(f"Error loading audio for fingerprinting: {e}")
             return None, None
-    
+
     fingerprint_engine.setAudioLoader(load_audio_for_fingerprinting)
-    
+
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())
-    
+
+    # Expose backend objects to QML before loading QML file
+    ctx = engine.rootContext()
+    ctx.setContextProperty("appViewModel", view_model)
+    ctx.setContextProperty("settingsManager", settings_manager)
+    ctx.setContextProperty("colorManager", color_manager)
+    ctx.setContextProperty("audioEngine", audio_engine)
+    ctx.setContextProperty("fileManager", file_manager)
+    ctx.setContextProperty("tempoManager", tempo_manager)
+    ctx.setContextProperty("fileListModel", file_list_model)
+    ctx.setContextProperty("annotationsModel", annotations_model)
+    ctx.setContextProperty("waveformEngine", waveform_engine)
+    ctx.setContextProperty("annotationManager", annotation_manager)
+    ctx.setContextProperty("clipManager", clip_manager)
+    ctx.setContextProperty("folderNotesManager", folder_notes_manager)
+    ctx.setContextProperty("batchOperations", batch_operations)
+    ctx.setContextProperty("practiceStatistics", practice_statistics)
+    ctx.setContextProperty("practiceGoals", practice_goals)
+    ctx.setContextProperty("setlistManager", setlist_manager)
+    ctx.setContextProperty("fingerprintEngine", fingerprint_engine)
+    ctx.setContextProperty("backupManager", backup_manager)
+    ctx.setContextProperty("exportManager", export_manager)
+    ctx.setContextProperty("documentationManager", documentation_manager)
+    ctx.setContextProperty("undoManager", undo_manager)
+    ctx.setContextProperty("syncManager", sync_manager)
+
     # Load saved root directory on startup
     saved_root = settings_manager.getRootDir()
     if saved_root and Path(saved_root).exists():
         file_manager.setCurrentDirectory(saved_root)
-    
+
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
     print(f"Loading QML file: {qml_file}")
     engine.load(QUrl.fromLocalFile(str(qml_file)))
-    
+
     # Check if QML loaded successfully
     if not engine.rootObjects():
         print("Error: Failed to load QML file")
         return 1
-    
+
     print("AudioBrowser QML Phase 7 - Application started successfully")
     sys.stdout.flush()  # Ensure message is printed immediately
     return app.exec()
