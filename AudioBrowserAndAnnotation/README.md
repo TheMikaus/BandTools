@@ -247,3 +247,57 @@ AudioBrowser now supports Google Drive synchronization for sharing practice sess
 - Your Google credentials are stored locally and never shared
 
 For complete setup instructions, see [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md).
+
+---
+
+# Testing Documentation
+
+Comprehensive test documentation is available for both AudioBrowser applications to ensure quality and help with bug reporting.
+
+## Test Plan Overview
+
+**Total Test Coverage: 345 Test Cases**
+
+- **AudioBrowserOrig**: 319 test cases across 10 major features
+- **AudioBrowser-QML**: 26 test cases for spectrogram feature
+
+### Quick Access
+
+- **[TEST_PLAN_SUMMARY.md](TEST_PLAN_SUMMARY.md)** - Quick reference guide with feature overview and testing priorities
+- **[COLLATED_TEST_PLAN.md](COLLATED_TEST_PLAN.md)** - Complete comprehensive test plan with all 345 test cases
+
+### Individual Test Plans
+
+#### AudioBrowserOrig Test Plans
+1. [Clickable Status Bar Items](AudioBrowserOrig/docs/test_plans/TEST_PLAN_CLICKABLE_STATUS.md) (23 tests)
+2. [Now Playing Panel](AudioBrowserOrig/docs/test_plans/TEST_PLAN_NOW_PLAYING_PANEL.md) (29 tests)
+3. [Performance Improvements](AudioBrowserOrig/docs/test_plans/TEST_PLAN_PERFORMANCE_IMPROVEMENTS.md) (41 tests) - **Critical**
+4. [Practice Goals](AudioBrowserOrig/docs/test_plans/TEST_PLAN_PRACTICE_GOALS.md) (40 tests)
+5. [Setlist Builder](AudioBrowserOrig/docs/test_plans/TEST_PLAN_SETLIST_BUILDER.md) (43 tests)
+6. [Spectral Analysis](AudioBrowserOrig/docs/test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md) (35 tests)
+7. [Stereo Waveform View](AudioBrowserOrig/docs/test_plans/TEST_PLAN_STEREO_WAVEFORM.md) (15 tests)
+8. [Sync Improvements](AudioBrowserOrig/docs/test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md) (38 tests)
+9. [Tempo & Metronome](AudioBrowserOrig/docs/test_plans/TEST_PLAN_TEMPO_METRONOME.md) (31 tests)
+10. [Workspace Layouts & Progress](AudioBrowserOrig/docs/test_plans/TEST_PLAN_WORKSPACE_PROGRESS.md) (24 tests)
+
+#### AudioBrowser-QML Test Plans
+11. [Spectrogram Overlay](AudioBrowser-QML/docs/test_plans/TEST_PLAN_SPECTROGRAM.md) (26 tests)
+
+### Testing Time Estimates
+
+| Testing Level | Duration | Description |
+|--------------|----------|-------------|
+| **Smoke Test** | 1 hour | Basic functionality verification |
+| **Essential Test** | 4 hours | Core features and workflows |
+| **Comprehensive Test** | 16-24 hours | Complete test suite (all 345 cases) |
+
+### Bug Reporting
+
+Found a bug during testing? Use the bug reporting template in [COLLATED_TEST_PLAN.md](COLLATED_TEST_PLAN.md#bug-reporting-template) to document issues with:
+- Steps to reproduce
+- Expected vs actual results
+- Severity rating
+- Environment details
+- Screenshots/logs
+
+---
