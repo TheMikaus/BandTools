@@ -56,6 +56,7 @@ Developer and technical documentation:
 - [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - UI improvements for toolbar and folder navigation
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
+- [WAVEFORM_VIEW_PROPERTY_FIX.md](technical/WAVEFORM_VIEW_PROPERTY_FIX.md) - WaveformView peaks property type fix
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
 - [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
