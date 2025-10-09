@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QTableWidget, QTableWidgetItem, QCheckBox, QTextEdit,
     QProgressDialog, QMessageBox, QInputDialog, QHeaderView,
-    QAbstractItemView
+    QAbstractItemView, QComboBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -100,23 +100,47 @@ class SyncWorker(QThread):
 
 
 class FolderSelectionDialog(QDialog):
-    """Dialog for selecting/creating Google Drive folder."""
+    """Dialog for selecting/creating cloud storage folder and provider."""
     
-    def __init__(self, parent=None):
+    def __init__(self, sync_manager, parent=None):
         super().__init__(parent)
+        self.sync_manager = sync_manager
         self.folder_name: Optional[str] = None
+        self.provider_name: Optional[str] = None
         self._init_ui()
     
     def _init_ui(self):
         """Initialize the UI."""
-        self.setWindowTitle("Select Google Drive Folder")
-        self.resize(400, 150)
+        self.setWindowTitle("Cloud Sync Configuration")
+        self.resize(500, 200)
         
         layout = QVBoxLayout(self)
         
+        # Provider selection
+        provider_layout = QHBoxLayout()
+        provider_label = QLabel("Cloud Provider:")
+        provider_layout.addWidget(provider_label)
+        
+        self.provider_combo = QComboBox()
+        
+        # Add available providers
+        providers = self.sync_manager.getAvailableProviders()
+        for provider in providers:
+            display_text = provider['displayName']
+            if not provider['available']:
+                display_text += " (library not installed)"
+            self.provider_combo.addItem(display_text, provider['name'])
+            # Disable if not available
+            if not provider['available']:
+                idx = self.provider_combo.count() - 1
+                self.provider_combo.model().item(idx).setEnabled(False)
+        
+        provider_layout.addWidget(self.provider_combo)
+        layout.addLayout(provider_layout)
+        
         # Instructions
         label = QLabel(
-            "Enter the name of the Google Drive folder to use for sync.\n"
+            "Enter the name of the cloud folder to use for sync.\n"
             "If it doesn't exist, it will be created."
         )
         label.setWordWrap(True)
@@ -124,7 +148,7 @@ class FolderSelectionDialog(QDialog):
         
         # Note about location
         note = QLabel(
-            "Note: The folder will be created in the root of your Google Drive."
+            "Note: The folder will be created in the root of your cloud storage."
         )
         note.setStyleSheet("color: gray; font-style: italic;")
         layout.addWidget(note)
@@ -144,10 +168,16 @@ class FolderSelectionDialog(QDialog):
     
     def _on_ok(self):
         """Handle OK button click."""
+        # Get selected provider
+        provider_idx = self.provider_combo.currentIndex()
+        self.provider_name = self.provider_combo.itemData(provider_idx)
+        
+        provider_display = self.sync_manager.getProviderDisplayName() if self.provider_name == self.sync_manager.getProvider() else self.provider_combo.currentText()
+        
         folder_name, ok = QInputDialog.getText(
             self,
             "Folder Name",
-            "Enter Google Drive folder name:",
+            f"Enter {provider_display} folder name:",
             text="BandPracticeSessions"
         )
         
@@ -182,15 +212,18 @@ class SyncReviewDialog(QDialog):
         
         layout = QVBoxLayout(self)
         
+        # Show current provider
+        provider_name = self.sync_manager.getProviderDisplayName() if hasattr(self.sync_manager, 'getProviderDisplayName') else 'Cloud Storage'
+        
         # Instructions
         if self.is_upload:
             instructions = QLabel(
-                "Review changes to upload to Google Drive.\n"
+                f"Review changes to upload to {provider_name}.\n"
                 "Check the boxes next to files you want to upload."
             )
         else:
             instructions = QLabel(
-                "Review changes to download from Google Drive.\n"
+                f"Review changes to download from {provider_name}.\n"
                 "Check the boxes next to files you want to download."
             )
         instructions.setWordWrap(True)

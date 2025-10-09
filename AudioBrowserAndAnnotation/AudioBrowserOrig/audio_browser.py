@@ -6179,9 +6179,9 @@ class AudioBrowser(QMainWindow):
         self._current_directory_index: int = 0
         self._follow_with_fingerprints: bool = False
         
-        # Google Drive sync
-        self.gdrive_sync_manager = None  # Will be initialized when needed
-        self.gdrive_folder_name: Optional[str] = self.config.get_gdrive_folder()
+        # Cloud Sync (multi-provider support: Google Drive, Dropbox, WebDAV)
+        self.sync_manager = None  # Will be initialized when needed
+        self.cloud_folder_name: Optional[str] = self.config.get_gdrive_folder()  # Reuse gdrive setting for backward compat
         self.remote_files: Set[str] = set()  # Track which files exist on remote
         
         # Setlists
@@ -7345,9 +7345,9 @@ class AudioBrowser(QMainWindow):
         
         file_menu.addSeparator()
         
-        self.gdrive_sync_action = QAction("Sync with &Google Drive…", self)
-        self.gdrive_sync_action.triggered.connect(self._show_gdrive_sync)
-        file_menu.addAction(self.gdrive_sync_action)
+        self.cloud_sync_action = QAction("☁ Cloud &Sync…", self)
+        self.cloud_sync_action.triggered.connect(self._show_cloud_sync)
+        file_menu.addAction(self.cloud_sync_action)
         
         self.sync_rules_action = QAction("Sync &Rules Configuration…", self)
         self.sync_rules_action.triggered.connect(self._show_sync_rules)
@@ -7357,9 +7357,9 @@ class AudioBrowser(QMainWindow):
         self.sync_history_action.triggered.connect(self._show_sync_history)
         file_menu.addAction(self.sync_history_action)
         
-        self.gdrive_delete_folder_action = QAction("Delete Remote Folder from Google Drive…", self)
-        self.gdrive_delete_folder_action.triggered.connect(self._delete_remote_folder)
-        file_menu.addAction(self.gdrive_delete_folder_action)
+        self.delete_remote_folder_action = QAction("Delete Remote Folder…", self)
+        self.delete_remote_folder_action.triggered.connect(self._delete_remote_folder)
+        file_menu.addAction(self.delete_remote_folder_action)
         
         # View menu
         view_menu = menubar.addMenu("&View")
@@ -7442,11 +7442,11 @@ class AudioBrowser(QMainWindow):
         
         tb.addSeparator()
         
-        # Google Drive Sync button
-        gdrive_sync_btn = QAction("☁ Sync", self)
-        gdrive_sync_btn.setToolTip("Sync with Google Drive")
-        gdrive_sync_btn.triggered.connect(self._show_gdrive_sync)
-        tb.addAction(gdrive_sync_btn)
+        # Cloud Sync button
+        cloud_sync_btn = QAction("☁ Sync", self)
+        cloud_sync_btn.setToolTip("Cloud Sync (Google Drive, Dropbox, WebDAV)")
+        cloud_sync_btn.triggered.connect(self._show_cloud_sync)
+        tb.addAction(cloud_sync_btn)
 
         # Create main widget to hold path label and splitter
         main_widget = QWidget()
@@ -14993,10 +14993,15 @@ class AudioBrowser(QMainWindow):
 
     # ----- Google Drive Sync methods -----
     def _refresh_remote_files(self):
-        """Refresh the list of files that exist on remote drive."""
-        if self.gdrive_sync_manager and self.gdrive_sync_manager.remote_folder_id:
+        """Refresh the list of files that exist on remote cloud storage."""
+        if self.sync_manager and self.sync_manager.remote_folder_id:
             try:
-                self.remote_files = self.gdrive_sync_manager.get_remote_file_names()
+                if hasattr(self.sync_manager, 'get_remote_file_names'):
+                    self.remote_files = self.sync_manager.get_remote_file_names()
+                else:
+                    # Fallback to getting file names from list_remote_files
+                    remote_list = self.sync_manager.list_remote_files()
+                    self.remote_files = {f['name'] for f in remote_list}
                 log_print(f"Remote files refreshed: {len(self.remote_files)} files")
             except Exception as e:
                 log_print(f"Error refreshing remote files: {e}")
@@ -15005,18 +15010,20 @@ class AudioBrowser(QMainWindow):
             self.remote_files = set()
     
     def _delete_file_from_remote(self, filename: str):
-        """Delete a file from Google Drive remote folder."""
-        if not self.gdrive_sync_manager or not self.gdrive_sync_manager.remote_folder_id:
+        """Delete a file from cloud storage remote folder."""
+        if not self.sync_manager or not self.sync_manager.remote_folder_id:
             QMessageBox.warning(
                 self, "Not Connected",
-                "Not connected to Google Drive. Please sync first."
+                "Not connected to cloud storage. Please sync first."
             )
             return
         
+        provider_name = self.sync_manager.getProviderDisplayName()
+        
         # Confirm deletion
         reply = QMessageBox.question(
-            self, "Delete from Google Drive",
-            f"Delete '{filename}' from Google Drive?\n\n"
+            self, "Delete from Cloud",
+            f"Delete '{filename}' from {provider_name}?\n\n"
             f"The local file will remain on your computer.\n"
             f"This action cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -15029,19 +15036,19 @@ class AudioBrowser(QMainWindow):
             from gdrive_sync import load_local_version, save_local_version
             
             # Delete the file
-            if self.gdrive_sync_manager.delete_remote_file(filename):
+            if self.sync_manager.delete_remote_file(filename):
                 # Update version tracking (using root_path)
                 local_version_path = self.root_path / ".sync_version.json"
                 local_version = load_local_version(local_version_path)
                 
                 # Get remote version and increment it
-                remote_version = self.gdrive_sync_manager.get_remote_version()
+                remote_version = self.sync_manager.get_remote_version()
                 if remote_version:
                     remote_version.version += 1
                     remote_version.add_operation('delete', filename)
                     
                     # Update remote version
-                    self.gdrive_sync_manager.update_remote_version(remote_version)
+                    self.sync_manager.update_remote_version(remote_version)
                     
                     # Update local version to match
                     local_version.version = remote_version.version
@@ -15052,12 +15059,12 @@ class AudioBrowser(QMainWindow):
                 self._refresh_remote_files()
                 self._refresh_right_table()
                 
-                self.statusBar().showMessage(f"Deleted '{filename}' from Google Drive", 5000)
-                log_print(f"Deleted file from Google Drive: {filename}")
+                self.statusBar().showMessage(f"Deleted '{filename}' from {provider_name}", 5000)
+                log_print(f"Deleted file from {provider_name}: {filename}")
             else:
                 QMessageBox.warning(
                     self, "Delete Failed",
-                    f"Failed to delete '{filename}' from Google Drive.\n"
+                    f"Failed to delete '{filename}' from {provider_name}.\n"
                     f"Check the logs for details."
                 )
         except Exception as e:
@@ -15068,19 +15075,21 @@ class AudioBrowser(QMainWindow):
             )
     
     def _delete_remote_folder(self):
-        """Delete the entire remote folder from Google Drive."""
-        if not self.gdrive_sync_manager or not self.gdrive_sync_manager.remote_folder_id:
+        """Delete the entire remote folder from cloud storage."""
+        if not self.sync_manager or not self.sync_manager.remote_folder_id:
             QMessageBox.warning(
                 self, "Not Connected",
-                "Not connected to Google Drive.\n\n"
-                "Please sync with Google Drive first to establish a connection."
+                "Not connected to cloud storage.\n\n"
+                "Please sync first to establish a connection."
             )
             return
+        
+        provider_name = self.sync_manager.getProviderDisplayName()
         
         # Strong confirmation
         reply = QMessageBox.warning(
             self, "Delete Remote Folder",
-            f"Delete the entire '{self.gdrive_folder_name}' folder from Google Drive?\n\n"
+            f"Delete the entire '{self.cloud_folder_name}' folder from {provider_name}?\n\n"
             f"⚠️ WARNING: This will permanently delete ALL files in the remote folder!\n\n"
             f"Local files on your computer will NOT be affected.\n"
             f"This action cannot be undone.",
@@ -15092,7 +15101,7 @@ class AudioBrowser(QMainWindow):
             return
         
         # Double confirmation
-        folder_name = self.gdrive_folder_name
+        folder_name = self.cloud_folder_name
         typed_name, ok = QInputDialog.getText(
             self, "Confirm Deletion",
             f"To confirm deletion, type the folder name:\n\n{folder_name}"
@@ -15106,12 +15115,13 @@ class AudioBrowser(QMainWindow):
             return
         
         try:
-            if self.gdrive_sync_manager.delete_remote_folder():
+            if self.sync_manager.delete_remote_folder():
                 # Clear local state
                 self.remote_files = set()
                 
                 # Clear local version file (using root_path)
-                from gdrive_sync import save_local_version, SyncVersion
+                from cloud_sync_base import SyncVersion
+                from gdrive_sync import save_local_version
                 local_version_path = self.root_path / ".sync_version.json"
                 save_local_version(local_version_path, SyncVersion(version=0))
                 
@@ -15182,72 +15192,78 @@ class AudioBrowser(QMainWindow):
             )
             return False
     
-    def _show_gdrive_sync(self):
-        """Show Google Drive sync dialog."""
+    def _show_cloud_sync(self):
+        """Show cloud sync dialog with multi-provider support."""
         try:
             # Ensure sync is available
             if not self._ensure_gdrive_sync_available():
                 return
             
             # Import sync modules
-            from gdrive_sync import GDriveSync, load_local_version, save_local_version, get_sync_files, compare_files
+            from gdrive_sync import load_local_version, save_local_version, get_sync_files, compare_files
             from sync_dialog import FolderSelectionDialog, SyncReviewDialog, SyncStatusDialog
-            
-            # Check for credentials file
-            credentials_path = Path(__file__).parent / "credentials.json"
-            token_path = Path(__file__).parent / "token.json"
-            
-            if not credentials_path.exists():
-                reply = QMessageBox.question(
-                    self, "Google Drive Setup Required",
-                    "Google Drive sync requires OAuth credentials.\n\n"
-                    "Would you like to view the setup instructions?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                
-                if reply == QMessageBox.StandardButton.Yes:
-                    # Show setup instructions
-                    setup_doc_path = Path(__file__).parent / "GOOGLE_DRIVE_SETUP.md"
-                    if setup_doc_path.exists():
-                        import webbrowser
-                        webbrowser.open(str(setup_doc_path))
-                    else:
-                        QMessageBox.information(
-                            self, "Setup Instructions",
-                            "Please see GOOGLE_DRIVE_SETUP.md for instructions on setting up Google Drive sync."
-                        )
-                return
+            from sync_manager import SyncManager
             
             # Initialize or reuse sync manager
-            if self.gdrive_sync_manager is None:
-                self.gdrive_sync_manager = GDriveSync(credentials_path, token_path)
+            if self.sync_manager is None:
+                config_dir = Path(__file__).parent
+                self.sync_manager = SyncManager(config_dir, parent=self)
             
-            # Authenticate
-            self.statusBar().showMessage("Authenticating with Google Drive...", 3000)
-            if not self.gdrive_sync_manager.authenticate():
+            # Check if current provider needs initial setup
+            if self.sync_manager.getProvider() == 'gdrive':
+                credentials_path = Path(__file__).parent / "credentials.json"
+                if not credentials_path.exists():
+                    reply = QMessageBox.question(
+                        self, "Google Drive Setup Required",
+                        "Google Drive sync requires OAuth credentials.\n\n"
+                        "Would you like to view the setup instructions?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        # Show setup instructions
+                        setup_doc_path = Path(__file__).parent / "GOOGLE_DRIVE_SETUP.md"
+                        if setup_doc_path.exists():
+                            import webbrowser
+                            webbrowser.open(str(setup_doc_path))
+                        else:
+                            QMessageBox.information(
+                                self, "Setup Instructions",
+                                "Please see GOOGLE_DRIVE_SETUP.md for instructions on setting up Google Drive sync."
+                            )
+                    return
+            
+            # Check if we have a folder configured
+            if not self.cloud_folder_name:
+                # Show folder and provider selection dialog
+                folder_dialog = FolderSelectionDialog(self.sync_manager, self)
+                if folder_dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
+                
+                # Set the provider from dialog
+                if folder_dialog.provider_name:
+                    self.sync_manager.setProvider(folder_dialog.provider_name)
+                
+                self.cloud_folder_name = folder_dialog.folder_name
+                self.config.set_gdrive_folder(self.cloud_folder_name)  # Reuse gdrive config key
+            
+            # Authenticate with selected provider
+            provider_name = self.sync_manager.getProviderDisplayName()
+            self.statusBar().showMessage(f"Authenticating with {provider_name}...", 3000)
+            if not self.sync_manager.authenticate():
                 QMessageBox.warning(
                     self, "Authentication Failed",
-                    "Failed to authenticate with Google Drive.\n\n"
+                    f"Failed to authenticate with {provider_name}.\n\n"
                     "Please check your credentials and try again."
                 )
                 return
             
-            # Check if we have a folder configured
-            if not self.gdrive_folder_name:
-                # Show folder selection dialog
-                folder_dialog = FolderSelectionDialog(self)
-                if folder_dialog.exec() != QDialog.DialogCode.Accepted:
-                    return
-                
-                self.gdrive_folder_name = folder_dialog.folder_name
-                self.config.set_gdrive_folder(self.gdrive_folder_name)
-            
             # Select/create the remote folder
-            self.statusBar().showMessage(f"Connecting to folder: {self.gdrive_folder_name}...", 3000)
-            if not self.gdrive_sync_manager.select_remote_folder(self.gdrive_folder_name):
+            self.statusBar().showMessage(f"Connecting to folder: {self.cloud_folder_name}...", 3000)
+            if not self.sync_manager.select_remote_folder(self.cloud_folder_name):
                 QMessageBox.warning(
                     self, "Folder Error",
-                    f"Failed to access Google Drive folder: {self.gdrive_folder_name}"
+                    f"Failed to access {provider_name} folder: {self.cloud_folder_name}"
                 )
                 return
             
@@ -15257,7 +15273,7 @@ class AudioBrowser(QMainWindow):
             # Get version information from root_path
             local_version_path = self.root_path / ".sync_version.json"
             local_version = load_local_version(local_version_path)
-            remote_version = self.gdrive_sync_manager.get_remote_version()
+            remote_version = self.sync_manager.get_remote_version()
             
             if remote_version is None:
                 QMessageBox.warning(
@@ -15267,7 +15283,7 @@ class AudioBrowser(QMainWindow):
                 return
             
             # Show status dialog
-            remote_files = self.gdrive_sync_manager.list_remote_files()
+            remote_files = self.sync_manager.list_remote_files()
             local_files = get_sync_files(self.root_path)
             
             status_dialog = SyncStatusDialog(
@@ -15282,10 +15298,10 @@ class AudioBrowser(QMainWindow):
             # Ask what to do
             reply = QMessageBox.question(
                 self, "Sync Options",
-                "What would you like to do?\n\n"
-                "Yes: Download changes from Google Drive\n"
-                "No: Upload changes to Google Drive\n"
-                "Cancel: Close without syncing",
+                f"What would you like to do?\n\n"
+                f"Yes: Download changes from {provider_name}\n"
+                f"No: Upload changes to {provider_name}\n"
+                f"Cancel: Close without syncing",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
             )
             
@@ -15296,16 +15312,16 @@ class AudioBrowser(QMainWindow):
             local_only, remote_only, both = compare_files(self.root_path, remote_files)
             
             if reply == QMessageBox.StandardButton.Yes:
-                # Download from Google Drive
+                # Download from cloud
                 if not remote_only:
-                    QMessageBox.information(self, "No Changes", "No new files to download from Google Drive.")
+                    QMessageBox.information(self, "No Changes", f"No new files to download from {provider_name}.")
                     return
                 
                 sync_dialog = SyncReviewDialog(
                     self.root_path,
                     local_only,
                     remote_only,
-                    self.gdrive_sync_manager,
+                    self.sync_manager,
                     is_upload=False,
                     current_user=getpass.getuser(),
                     parent=self
@@ -15317,7 +15333,7 @@ class AudioBrowser(QMainWindow):
                     save_local_version(local_version_path, local_version)
                     
                     self.statusBar().showMessage("Download complete!", 5000)
-                    log_print(f"Downloaded {len(sync_dialog.selected_operations)} files from Google Drive")
+                    log_print(f"Downloaded {len(sync_dialog.selected_operations)} files from {provider_name}")
                     
                     # Refresh remote files list and UI
                     self._refresh_remote_files()
@@ -15328,16 +15344,16 @@ class AudioBrowser(QMainWindow):
                     self._refresh_right_table()
                     self._refresh_tree_display()
             
-            else:  # Upload to Google Drive
+            else:  # Upload to cloud
                 if not local_only:
-                    QMessageBox.information(self, "No Changes", "No new files to upload to Google Drive.")
+                    QMessageBox.information(self, "No Changes", f"No new files to upload to {provider_name}.")
                     return
                 
                 sync_dialog = SyncReviewDialog(
                     self.root_path,
                     local_only,
                     remote_only,
-                    self.gdrive_sync_manager,
+                    self.sync_manager,
                     is_upload=True,
                     current_user=getpass.getuser(),
                     parent=self
@@ -15349,13 +15365,13 @@ class AudioBrowser(QMainWindow):
                     for op in sync_dialog.selected_operations:
                         remote_version.add_operation(op['type'], op['name'])
                     
-                    if self.gdrive_sync_manager.update_remote_version(remote_version):
+                    if self.sync_manager.update_remote_version(remote_version):
                         # Update local version to match
                         local_version.version = remote_version.version
                         save_local_version(local_version_path, local_version)
                         
                         self.statusBar().showMessage("Upload complete!", 5000)
-                        log_print(f"Uploaded {len(sync_dialog.selected_operations)} files to Google Drive")
+                        log_print(f"Uploaded {len(sync_dialog.selected_operations)} files to {provider_name}")
                         
                         # Refresh remote files list and UI
                         self._refresh_remote_files()
@@ -15363,11 +15379,11 @@ class AudioBrowser(QMainWindow):
                     else:
                         QMessageBox.warning(
                             self, "Version Update Failed",
-                            "Failed to update version information on Google Drive."
+                            f"Failed to update version information on {provider_name}."
                         )
         
         except Exception as e:
-            log_print(f"Error in Google Drive sync: {e}")
+            log_print(f"Error in cloud sync: {e}")
             QMessageBox.critical(
                 self, "Sync Error",
                 f"An error occurred during sync:\n\n{str(e)}"
