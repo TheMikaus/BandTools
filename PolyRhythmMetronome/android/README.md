@@ -50,14 +50,29 @@ If an APK file is available, simply:
 
 #### For Windows Users
 
-Building Android APKs on Windows requires a Linux environment. You have several options:
+**Quick Start: Desktop Testing (No Build Needed)**
+
+For rapid development and testing, run the app directly on Windows:
+
+```bash
+pip install kivy numpy
+python main.py
+```
+
+This gives instant feedback without building APKs. Perfect for 90% of development!
+
+See [Local Development on Windows](docs/user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) for complete guide.
+
+**Building APKs**
+
+When you need to create APKs, you have several options:
 
 **Option A: GitHub Actions (Recommended - No Local Setup)**
 - Fork the repository and set up GitHub Actions to build APKs
 - Download built APKs from GitHub Releases or Actions artifacts
 - No local Linux environment needed!
 
-**Option B: WSL2 (Windows Subsystem for Linux)**
+**Option B: WSL2 (Fast Local Builds)**
 ```powershell
 # Install WSL2
 wsl --install
@@ -65,6 +80,7 @@ wsl --install
 # Install Ubuntu from Microsoft Store, then run:
 sudo python3 setup_android_dev.py
 ```
+Subsequent builds take only 5-10 minutes.
 
 **Option C: Docker or VM**
 - Use Docker Desktop with a Linux container

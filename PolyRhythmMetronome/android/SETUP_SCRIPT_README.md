@@ -2,7 +2,10 @@
 
 This directory contains `setup_android_dev.py`, an automated script to check and install all dependencies needed for building the PolyRhythmMetronome Android app.
 
-> **📢 Windows Users**: Building Android APKs requires a Linux environment. See [GitHub Actions Build Guide](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) to build in the cloud without any local setup, or use WSL2/Docker. This is the easiest option for Windows!
+> **📢 Windows Users**: 
+> - **For development/testing**: Run the app on desktop with `python main.py` (no build needed!)
+> - **For building APKs**: Use [GitHub Actions](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) (cloud builds) or WSL2 (local builds)
+> - See [Local Development on Windows](docs/user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) for complete guide
 
 ## Quick Start
 

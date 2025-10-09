@@ -10,7 +10,8 @@ User-facing documentation for end users and musicians.
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
 - [FAQ](user_guides/FAQ.md) - Frequently asked questions
-- [GitHub Actions Build Guide](user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) - Building APKs without local Linux setup (Windows users)
+- [Local Development on Windows](user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) - Build, test, and iterate locally on Windows
+- [GitHub Actions Build Guide](user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) - Building APKs without local Linux setup (cloud builds)
 
 ### Technical Documentation
 Developer-focused documentation for understanding and modifying the code.
