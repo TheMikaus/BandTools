@@ -258,11 +258,135 @@ This ensures that on first startup (or if settings are lost), the user is immedi
    - Added `_migrate_legacy_settings()` method
    - Called migration method in `__init__`
 
+## Additional Fixes (Phase 2)
+
+### 6. Additional Dialog Binding Loops
+
+**Problem**: Three more dialogs were found to have binding loop errors:
+```
+QML BackupSelectionDialog: Binding loop detected for property "backupManager"
+QML AutoGenerationSettingsDialog: Binding loop detected for property "settingsManager"
+QML DocumentationBrowserDialog: Binding loop detected for property "documentationManager"
+```
+
+**Solution**: Removed redundant property assignments in `main.qml`:
+
+| Dialog | Properties Removed |
+|--------|-------------------|
+| DocumentationBrowserDialog | `documentationManager` |
+| AutoGenerationSettingsDialog | `settingsManager` |
+| BackupSelectionDialog | `backupManager` |
+
+```qml
+// Before:
+DocumentationBrowserDialog {
+    id: documentationBrowserDialog
+    documentationManager: documentationManager  // Binding loop!
+}
+
+// After:
+DocumentationBrowserDialog {
+    id: documentationBrowserDialog
+    // documentationManager is accessed from context properties
+}
+```
+
+### 7. Shortcut Warnings
+
+**Problem**: Shortcuts using `StandardKey` were generating warnings:
+```
+QML Shortcut: Only binding to one of multiple key bindings associated with 11/12
+```
+
+**Root Cause**: Qt 6 deprecated the `sequence:` syntax for `StandardKey` shortcuts when multiple key sequences exist.
+
+**Solution**: Changed `sequence:` to `sequences: []` in `main.qml`:
+
+```qml
+// Before:
+Shortcut {
+    sequence: StandardKey.Undo  // Warning!
+}
+
+// After:
+Shortcut {
+    sequences: [StandardKey.Undo]  // Correct!
+}
+```
+
+Applied to:
+- Line 184: Undo shortcut
+- Line 202: Redo shortcut
+
+### 8. MiniWaveformWidget Signal Handler Errors
+
+**Problem**: MiniWaveformWidget.qml had incorrect method calls and signal handlers:
+```
+QML Connections: Detected function "onWaveformCleared" in Connections element
+TypeError: unable to convert a Python 'NoneType' object to a C++ 'PyQt_PyObject' instance
+```
+
+**Root Cause**: 
+- Called non-existent methods: `loadWaveform()`, `clearWaveform()`
+- Used non-existent signal handler: `onWaveformCleared()`
+- Wrong signal signature: `onWaveformReady(peaks, duration)` instead of `onWaveformReady(path)`
+
+**Solution**: Fixed method calls and signal handlers in `qml/components/MiniWaveformWidget.qml`:
+
+```qml
+// Before:
+onFilePathChanged: {
+    if (filePath && filePath.length > 0) {
+        waveformEngine.loadWaveform(filePath)  // Wrong method!
+    } else {
+        waveformEngine.clearWaveform()  // Doesn't exist!
+    }
+}
+
+Connections {
+    target: waveformEngine
+    
+    function onWaveformReady(peaks, duration) {  // Wrong signature!
+        miniWaveform.setWaveformData(peaks, duration)
+        root.durationMs = duration
+    }
+    
+    function onWaveformCleared() {  // Signal doesn't exist!
+        miniWaveform.clearWaveform()
+        root.durationMs = 0
+    }
+}
+
+// After:
+onFilePathChanged: {
+    if (filePath && filePath.length > 0) {
+        waveformEngine.generateWaveform(filePath)  // Correct method!
+    } else {
+        miniWaveform.clearWaveform()
+        root.durationMs = 0
+    }
+}
+
+Connections {
+    target: waveformEngine
+    
+    function onWaveformReady(path) {  // Correct signature!
+        if (path === filePath) {
+            var peaks = waveformEngine.getWaveformData(path)
+            var duration = waveformEngine.getWaveformDuration(path)
+            miniWaveform.setWaveformData(peaks, duration)
+            root.durationMs = duration
+        }
+    }
+}
+```
+
 ## Testing
 
-Created `test_binding_fixes.py` and `test_binding_loop_fixes.py` to verify all fixes:
+Created `test_binding_fixes.py`, `test_binding_loop_fixes.py`, and `test_qml_binding_fixes.py` to verify all fixes:
 - ✓ No binding loops in main.qml components (ClipsTab, FolderNotesTab)
 - ✓ No binding loops in all dialogs (BatchRenameDialog, BatchConvertDialog, ProgressDialog, etc.)
+- ✓ No binding loops in additional dialogs (DocumentationBrowserDialog, AutoGenerationSettingsDialog, BackupSelectionDialog)
 - ✓ No binding loops in FingerprintsTab
 - ✓ All Theme.foregroundColor references replaced
 - ✓ All Theme color aliases properly defined (backgroundWhite, primary, success, etc.)
@@ -271,6 +395,8 @@ Created `test_binding_fixes.py` and `test_binding_loop_fixes.py` to verify all f
 - ✓ Startup folder prompt implemented
 - ✓ FolderDialog properly configured for Qt6
 - ✓ FileContextMenu has no binding loops
+- ✓ All StandardKey shortcuts use correct 'sequences:' syntax
+- ✓ MiniWaveformWidget uses correct methods and signal handlers
 
 All tests pass successfully.
 

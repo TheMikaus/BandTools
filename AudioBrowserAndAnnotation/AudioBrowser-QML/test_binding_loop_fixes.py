@@ -23,6 +23,9 @@ def test_no_binding_loops_in_main():
         ("SetlistBuilderDialog", ["setlistManager", "fileManager"]),
         ("ExportAnnotationsDialog", ["annotationManager", "fileManager"]),
         ("FingerprintsTab", ["fingerprintEngine", "fileManager", "fileListModel"]),
+        ("DocumentationBrowserDialog", ["documentationManager"]),
+        ("AutoGenerationSettingsDialog", ["settingsManager"]),
+        ("BackupSelectionDialog", ["backupManager"]),
     ]
     
     all_passed = True
