@@ -50,6 +50,20 @@ If an APK file is available, simply:
 
 #### Setup Build Environment
 
+**Automated Setup (Recommended):**
+```bash
+# Run the automated setup script
+sudo python3 setup_android_dev.py
+```
+
+This script will:
+- Check Python version (3.8+)
+- Install buildozer and cython
+- Install system dependencies (OpenJDK, build tools)
+- Verify all requirements are met
+
+**Manual Setup:**
+
 1. **Install Buildozer**:
 ```bash
 pip install buildozer
@@ -58,7 +72,7 @@ pip install buildozer
 2. **Install Dependencies** (Ubuntu/Debian):
 ```bash
 sudo apt update
-sudo apt install -y git zip unzip openjdk-11-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+sudo apt install -y git zip unzip openjdk-11-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev libncursesw5-dev cmake libffi-dev libssl-dev
 ```
 
 3. **Install Cython**:
