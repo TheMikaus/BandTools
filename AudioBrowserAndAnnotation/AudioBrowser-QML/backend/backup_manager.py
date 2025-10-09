@@ -5,25 +5,27 @@ Handles metadata file backups for AudioBrowser QML.
 Creates timestamped backups before modifications and supports restore functionality.
 """
 
+import sys
 from pathlib import Path
-from datetime import datetime
 from typing import List, Tuple, Dict, Optional
-import shutil
-import getpass
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
+# Add parent directory to path to import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Metadata file constants (matching original)
-NAMES_JSON = ".provided_names.json"
-DURATIONS_JSON = ".duration_cache.json"
-WAVEFORM_JSON = ".waveform_cache.json"
-FINGERPRINTS_JSON = ".audio_fingerprints.json"
-TEMPO_JSON = ".tempo.json"
-TAKES_METADATA_JSON = ".takes_metadata.json"
-PRACTICE_GOALS_JSON = ".practice_goals.json"
-SETLISTS_JSON = ".setlists.json"
-CLIPS_JSON = ".clips.json"
+from shared.metadata_constants import (
+    NAMES_JSON,
+    DURATIONS_JSON,
+    WAVEFORM_JSON,
+    FINGERPRINTS_JSON,
+    TEMPO_JSON,
+    TAKES_METADATA_JSON,
+    PRACTICE_GOALS_JSON,
+    SETLISTS_JSON,
+    CLIPS_JSON,
+)
+from shared import backup_utils
 
 
 class BackupManager(QObject):
@@ -67,33 +69,13 @@ class BackupManager(QObject):
         Returns:
             Path to the backup folder (not yet created)
         """
-        today = datetime.now()
-        date_str = today.strftime("%Y-%m-%d")
-        backups_dir = practice_folder / ".backup"
-        
-        # Find the next available number for today
-        counter = 1
-        while True:
-            backup_folder = backups_dir / f"{date_str}-{counter:03d}"
-            if not backup_folder.exists():
-                return backup_folder
-            counter += 1
+        return backup_utils.create_backup_folder_name(practice_folder)
     
     def get_metadata_files_to_backup(self, practice_folder: Path) -> List[Path]:
         """
         Get list of metadata files that exist in the practice folder.
         
-        This includes:
-        - .provided_names.json (file naming data)
-        - .duration_cache.json (playback duration cache)
-        - .waveforms/.waveform_cache.json (waveform visualization cache)
-        - .audio_fingerprints.json (audio fingerprint data)
-        - .tempo.json (tempo/BPM data)
-        - .takes_metadata.json (best/partial take indicators)
-        - .practice_goals.json (practice goals)
-        - .setlists.json (setlist data)
-        - .clips.json (clip definitions)
-        - .audio_notes_<username>.json (user-specific annotation data)
+        See shared.backup_utils.get_metadata_files_to_backup for details.
         
         Args:
             practice_folder: Directory to scan for metadata files
@@ -101,43 +83,7 @@ class BackupManager(QObject):
         Returns:
             List of Path objects for existing metadata files
         """
-        # Skip backup directories entirely
-        if practice_folder.name in ['.backup', '.backups']:
-            return []
-        
-        metadata_files = []
-        
-        # List of all possible metadata files
-        possible_files = [
-            practice_folder / NAMES_JSON,
-            practice_folder / DURATIONS_JSON,
-            practice_folder / ".waveforms" / WAVEFORM_JSON,
-            practice_folder / FINGERPRINTS_JSON,
-            practice_folder / TEMPO_JSON,
-            practice_folder / TAKES_METADATA_JSON,
-            practice_folder / PRACTICE_GOALS_JSON,
-            practice_folder / SETLISTS_JSON,
-            practice_folder / CLIPS_JSON,
-        ]
-        
-        # Add user-specific annotation files
-        username = getpass.getuser()
-        user_notes_file = practice_folder / f".audio_notes_{username}.json"
-        possible_files.append(user_notes_file)
-        
-        # Also check for any other user-specific annotation files
-        for json_file in practice_folder.glob(".audio_notes_*.json"):
-            if json_file not in possible_files:
-                possible_files.append(json_file)
-        
-        # Only include files that actually exist and are not in backup directories
-        for file_path in possible_files:
-            if file_path.exists() and file_path.is_file():
-                # Make sure the file is not in a backup directory
-                if not any(part in ['.backup', '.backups'] for part in file_path.parts):
-                    metadata_files.append(file_path)
-        
-        return metadata_files
+        return backup_utils.get_metadata_files_to_backup(practice_folder)
     
     def backup_metadata_files(self, practice_folder: Path, backup_base_folder: Path) -> int:
         """
@@ -150,25 +96,7 @@ class BackupManager(QObject):
         Returns:
             Number of files backed up
         """
-        metadata_files = self.get_metadata_files_to_backup(practice_folder)
-        
-        if not metadata_files:
-            return 0
-        
-        # Create the backup directory
-        backup_base_folder.mkdir(parents=True, exist_ok=True)
-        
-        backed_up_count = 0
-        for metadata_file in metadata_files:
-            try:
-                backup_file_path = backup_base_folder / metadata_file.name
-                # Copy the file
-                backup_file_path.write_bytes(metadata_file.read_bytes())
-                backed_up_count += 1
-            except Exception as e:
-                print(f"Warning: Failed to backup {metadata_file}: {e}")
-        
-        return backed_up_count
+        return backup_utils.backup_metadata_files(practice_folder, backup_base_folder)
     
     def should_create_backup(self, practice_folder: Path) -> bool:
         """
@@ -181,7 +109,7 @@ class BackupManager(QObject):
         Returns:
             True if backup should be created
         """
-        return len(self.get_metadata_files_to_backup(practice_folder)) > 0
+        return backup_utils.should_create_backup(practice_folder)
     
     @pyqtSlot(str, result=str)
     def createBackup(self, folder_path: str) -> str:

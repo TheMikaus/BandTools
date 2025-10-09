@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
+# Add parent directory to path to import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared.file_utils import sanitize_library_name as _shared_sanitize_library_name
+
 
 def _ensure_import(mod_name: str, pip_name: str | None = None) -> tuple[bool, str]:
     """Try to import a module, auto-installing if needed.
@@ -105,15 +110,15 @@ def sanitize_library_name(name: str) -> str:
     """
     Sanitize a library name for use in filenames.
     
+    Uses shared.file_utils.sanitize_library_name.
+    
     Args:
         name: Name to sanitize
         
     Returns:
         Sanitized name (lowercase, spaces->underscores, no special chars)
     """
-    name = re.sub(r'[\\/:*?"<>|]+', "_", name.strip())
-    name = re.sub(r"\s+", "_", name).strip()
-    return name.lower()
+    return _shared_sanitize_library_name(name)
 
 
 # ========== Worker Classes ==========
