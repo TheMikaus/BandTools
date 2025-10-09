@@ -20,10 +20,10 @@ The QML version has made significant progress and is now **95% production-ready*
 - 🚧 Only critical missing feature: Batch operations (2 weeks away)
 
 **Documentation:**
-- **[QML_MIGRATION_SUMMARY.md](QML_MIGRATION_SUMMARY.md)** - Quick answer: "How much work remains?" (4-6 weeks for 95%, 12-14 weeks for 100%)
-- **[QML_FEATURE_PARITY_STATUS.md](QML_FEATURE_PARITY_STATUS.md)** - Comprehensive status report with detailed breakdown
-- **[FEATURE_COMPARISON_ORIG_VS_QML.md](FEATURE_COMPARISON_ORIG_VS_QML.md)** - Side-by-side feature comparison
-- **[QML_MIGRATION_ISSUES.md](QML_MIGRATION_ISSUES.md)** - Detailed tracking of 19 issues (7 completed, 12 remaining)
+- **[QML_MIGRATION_SUMMARY.md](AudioBrowser-QML/docs/technical/QML_MIGRATION_SUMMARY.md)** - Quick answer: "How much work remains?" (4-6 weeks for 95%, 12-14 weeks for 100%)
+- **[QML_FEATURE_PARITY_STATUS.md](AudioBrowser-QML/docs/technical/QML_FEATURE_PARITY_STATUS.md)** - Comprehensive status report with detailed breakdown
+- **[FEATURE_COMPARISON_ORIG_VS_QML.md](AudioBrowser-QML/docs/technical/FEATURE_COMPARISON_ORIG_VS_QML.md)** - Side-by-side feature comparison
+- **[QML_MIGRATION_ISSUES.md](AudioBrowser-QML/docs/technical/QML_MIGRATION_ISSUES.md)** - Detailed tracking of 19 issues (7 completed, 12 remaining)
 
 **Recommendation:** Use QML version for daily practice (all core features work). Only missing batch file operations, which will be completed in Phase 7 (2 weeks).
 
@@ -263,8 +263,8 @@ Comprehensive test documentation is available for both AudioBrowser applications
 
 ### Quick Access
 
-- **[TEST_PLAN_SUMMARY.md](TEST_PLAN_SUMMARY.md)** - Quick reference guide with feature overview and testing priorities
-- **[COLLATED_TEST_PLAN.md](COLLATED_TEST_PLAN.md)** - Complete comprehensive test plan with all 345 test cases
+- **[TEST_PLAN_SUMMARY.md](AudioBrowser-QML/docs/test_plans/TEST_PLAN_SUMMARY.md)** - Quick reference guide with feature overview and testing priorities
+- **[COLLATED_TEST_PLAN.md](AudioBrowser-QML/docs/test_plans/COLLATED_TEST_PLAN.md)** - Complete comprehensive test plan with all 345 test cases
 
 ### Individual Test Plans
 
@@ -293,7 +293,7 @@ Comprehensive test documentation is available for both AudioBrowser applications
 
 ### Bug Reporting
 
-Found a bug during testing? Use the bug reporting template in [COLLATED_TEST_PLAN.md](COLLATED_TEST_PLAN.md#bug-reporting-template) to document issues with:
+Found a bug during testing? Use the bug reporting template in [COLLATED_TEST_PLAN.md](AudioBrowser-QML/docs/test_plans/COLLATED_TEST_PLAN.md#bug-reporting-template) to document issues with:
 - Steps to reproduce
 - Expected vs actual results
 - Severity rating

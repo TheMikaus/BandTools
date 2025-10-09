@@ -16,6 +16,7 @@ Documentation for end users, including how-to guides, feature explanations, and 
 **Key Documents:**
 - **[HOWTO_NEW_FEATURES.md](user_guides/HOWTO_NEW_FEATURES.md)** - Step-by-step guides for major features (Dark Mode, Export Best Takes, Stereo Waveform View)
 - **[UI_IMPROVEMENTS.md](user_guides/UI_IMPROVEMENTS.md)** - Guide to UI enhancements (Recent Folders, Preferences Dialog)
+- **[AUDIO_FINGERPRINTING.md](user_guides/AUDIO_FINGERPRINTING.md)** - Audio fingerprinting feature documentation for automatic song identification
 - **[PRACTICE_GOALS_GUIDE.md](user_guides/PRACTICE_GOALS_GUIDE.md)** - Complete guide to setting and tracking practice goals
 - **[PRACTICE_STATISTICS.md](user_guides/PRACTICE_STATISTICS.md)** - How to use practice analytics and tracking
 - **[SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md)** - Guide to creating and managing performance setlists
