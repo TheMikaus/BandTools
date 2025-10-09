@@ -2,6 +2,8 @@
 
 This directory contains `setup_android_dev.py`, an automated script to check and install all dependencies needed for building the PolyRhythmMetronome Android app.
 
+> **📢 Windows Users**: Building Android APKs requires a Linux environment. See [GitHub Actions Build Guide](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) to build in the cloud without any local setup, or use WSL2/Docker. This is the easiest option for Windows!
+
 ## Quick Start
 
 ```bash
@@ -29,7 +31,7 @@ The script automatically:
 - **Ubuntu/Debian**: Full automatic installation with sudo
 - **macOS**: Manual instructions provided
 - **Fedora/RHEL**: Manual instructions provided
-- **Windows**: Not recommended (use WSL2 instead)
+- **Windows**: See [GitHub Actions Build Guide](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) for building without local Linux setup, or use WSL2/Docker
 
 ## Usage Examples
 
@@ -152,12 +154,31 @@ sudo dnf install zlib-devel ncurses-devel libffi-devel openssl-devel
 pip3 install --user buildozer cython
 ```
 
-### Windows (via WSL2)
-1. Install WSL2 with Ubuntu
-2. Run the setup script in WSL2:
+### Windows
+
+**Option 1: GitHub Actions (Recommended)**
+
+For Windows users who don't want to set up WSL2/Docker/VM:
+1. Fork the BandTools repository on GitHub
+2. Create a GitHub Actions workflow to build the APK automatically
+3. Download built APKs from GitHub Releases or Actions artifacts
+4. No local setup required!
+
+**Option 2: WSL2 (Windows Subsystem for Linux)**
+
+1. Install WSL2:
+```powershell
+wsl --install
+```
+2. Install Ubuntu from Microsoft Store
+3. Open Ubuntu and run the setup script:
 ```bash
 sudo python3 setup_android_dev.py
 ```
+
+**Option 3: Docker or Linux VM**
+
+Use Docker Desktop or a virtual machine (VirtualBox, VMware) with Ubuntu, then run the setup script inside.
 
 ## Related Documentation
 

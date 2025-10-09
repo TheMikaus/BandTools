@@ -48,7 +48,29 @@ If an APK file is available, simply:
 
 ### Option 2: Build from Source
 
-#### Setup Build Environment
+#### For Windows Users
+
+Building Android APKs on Windows requires a Linux environment. You have several options:
+
+**Option A: GitHub Actions (Recommended - No Local Setup)**
+- Fork the repository and set up GitHub Actions to build APKs
+- Download built APKs from GitHub Releases or Actions artifacts
+- No local Linux environment needed!
+
+**Option B: WSL2 (Windows Subsystem for Linux)**
+```powershell
+# Install WSL2
+wsl --install
+
+# Install Ubuntu from Microsoft Store, then run:
+sudo python3 setup_android_dev.py
+```
+
+**Option C: Docker or VM**
+- Use Docker Desktop with a Linux container
+- Use VirtualBox/VMware with Ubuntu
+
+#### Setup Build Environment (Linux/macOS)
 
 **Automated Setup (Recommended):**
 ```bash

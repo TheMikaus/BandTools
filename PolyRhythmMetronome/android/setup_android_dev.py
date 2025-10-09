@@ -293,10 +293,22 @@ def provide_manual_instructions(os_type):
         
     elif os_type == "windows":
         print_error("Windows is not recommended for Android development with Buildozer")
-        print_info("Consider using:")
+        print()
+        print_info("Option 1: Use GitHub Actions (Recommended for Windows users)")
+        print("  - Fork the repository on GitHub")
+        print("  - Create a GitHub Actions workflow to build APKs in the cloud")
+        print("  - Download built APKs from GitHub Releases or Actions artifacts")
+        print("  - No local setup required!")
+        print()
+        print_info("Option 2: Use a Linux environment")
         print("  - WSL2 (Windows Subsystem for Linux) with Ubuntu")
         print("  - Docker container with Linux")
-        print("  - Linux VM")
+        print("  - Linux VM (VirtualBox, VMware, etc.)")
+        print()
+        print_info("For WSL2 setup:")
+        print("  1. Install WSL2: wsl --install")
+        print("  2. Install Ubuntu from Microsoft Store")
+        print("  3. Run: sudo python3 setup_android_dev.py")
         print()
         
     else:
