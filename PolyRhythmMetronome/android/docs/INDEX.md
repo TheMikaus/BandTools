@@ -17,6 +17,7 @@ Developer-focused documentation for understanding and modifying the code.
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
 - [Porting Analysis](technical/PORTING_ANALYSIS.md) - Desktop to Android porting decisions
 - [Build Guide](technical/BUILD_GUIDE.md) - Building and deploying
+- [Setup Script](technical/SETUP_SCRIPT.md) - Automated dependency setup technical details
 
 ### Test Plans
 Quality assurance and testing documentation.
@@ -27,6 +28,7 @@ Quality assurance and testing documentation.
 ## Quick Links
 
 - [Main README](../README.md) - Installation and basic usage
+- [Setup Script README](../SETUP_SCRIPT_README.md) - Automated dependency setup
 - [Desktop Version](../../Desktop/README.md) - Desktop application documentation
 - [Buildozer Spec](../buildozer.spec) - Build configuration
 

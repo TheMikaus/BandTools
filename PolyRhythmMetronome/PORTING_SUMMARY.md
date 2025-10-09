@@ -269,6 +269,14 @@ PolyRhythmMetronome/
 ## Building the APK
 
 ### Prerequisites
+
+**Automated Setup (Recommended):**
+```bash
+cd PolyRhythmMetronome/android
+sudo python3 setup_android_dev.py
+```
+
+**Manual Setup:**
 ```bash
 pip install buildozer cython
 sudo apt install openjdk-11-jdk
