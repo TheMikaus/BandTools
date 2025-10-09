@@ -25,6 +25,7 @@ Documentation for end users, including how-to guides, feature explanations, and 
 - **[GOOGLE_DRIVE_SETUP.md](user_guides/GOOGLE_DRIVE_SETUP.md)** - Setting up cloud sync
 - **[SYNC_README.md](user_guides/SYNC_README.md)** - Cloud synchronization overview
 - **[USER_COLORS.md](user_guides/USER_COLORS.md)** - Color customization options
+- **[QUICK_FIX_GUIDE.md](user_guides/QUICK_FIX_GUIDE.md)** - Quick fix guide for MP3 waveforms and FFmpeg issues
 
 **Visual Guides:**
 - **[VISUAL_GUIDE_CLICKABLE_STATUS.md](user_guides/VISUAL_GUIDE_CLICKABLE_STATUS.md)** - Visual guide to clickable status bar
@@ -61,6 +62,10 @@ Implementation details, architecture decisions, and developer-focused documentat
 - **[IMPLEMENTATION_SUMMARY_SYNC_IMPROVEMENTS.md](technical/IMPLEMENTATION_SUMMARY_SYNC_IMPROVEMENTS.md)** - Cloud sync improvements
 - **[IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md](technical/IMPLEMENTATION_SUMMARY_TEMPO_METRONOME.md)** - Tempo and metronome
 - **[IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md](technical/IMPLEMENTATION_SUMMARY_WORKSPACE_PROGRESS.md)** - Workspace layouts
+- **[CLOUD_SYNC_IMPLEMENTATION_SUMMARY.md](technical/CLOUD_SYNC_IMPLEMENTATION_SUMMARY.md)** - Cloud sync implementation summary
+- **[FFMPEG_FIX_SUMMARY.md](technical/FFMPEG_FIX_SUMMARY.md)** - FFmpeg detection and fix summary
+- **[MULTI_CLOUD_SYNC.md](technical/MULTI_CLOUD_SYNC.md)** - Multi-cloud sync architecture and implementation
+- **[ARCHITECTURE_DIAGRAM.md](technical/ARCHITECTURE_DIAGRAM.md)** - Multi-cloud sync architecture diagram
 
 **Feature Summaries:**
 - **[FEATURE_COMPLETION_PRACTICE_GOALS.md](technical/FEATURE_COMPLETION_PRACTICE_GOALS.md)** - Practice goals completion checklist
@@ -78,6 +83,7 @@ Comprehensive test documentation for quality assurance and validation.
 - **[TEST_PLAN_NOW_PLAYING_PANEL.md](test_plans/TEST_PLAN_NOW_PLAYING_PANEL.md)** - Test plan for now playing panel
 - **[TEST_PLAN_PRACTICE_GOALS.md](test_plans/TEST_PLAN_PRACTICE_GOALS.md)** - Test plan for practice goals (40 test cases)
 - **[TEST_PLAN_SETLIST_BUILDER.md](test_plans/TEST_PLAN_SETLIST_BUILDER.md)** - Test plan for setlist builder (43 test cases)
+- **[FFMPEG_TESTING.md](test_plans/FFMPEG_TESTING.md)** - FFmpeg detection and functionality testing
 - **[TEST_PLAN_SPECTRAL_ANALYSIS.md](test_plans/TEST_PLAN_SPECTRAL_ANALYSIS.md)** - Test plan for spectral analysis (35 test cases)
 - **[TEST_PLAN_STEREO_WAVEFORM.md](test_plans/TEST_PLAN_STEREO_WAVEFORM.md)** - Test plan for stereo waveform view and channel muting (15 test cases)
 - **[TEST_PLAN_SYNC_IMPROVEMENTS.md](test_plans/TEST_PLAN_SYNC_IMPROVEMENTS.md)** - Test plan for sync improvements (38 test cases)
