@@ -181,7 +181,7 @@ ApplicationWindow {
                     }
                 }
                 Shortcut {
-                    sequence: StandardKey.Undo
+                    sequences: [StandardKey.Undo]
                     onActivated: {
                         if (undoManager && undoManager.canUndo()) {
                             undoManager.undo()
@@ -199,7 +199,7 @@ ApplicationWindow {
                     }
                 }
                 Shortcut {
-                    sequence: StandardKey.Redo
+                    sequences: [StandardKey.Redo]
                     onActivated: {
                         if (undoManager && undoManager.canRedo()) {
                             undoManager.redo()
@@ -572,19 +572,16 @@ ApplicationWindow {
         // Documentation Browser Dialog
         DocumentationBrowserDialog {
             id: documentationBrowserDialog
-            documentationManager: documentationManager
         }
         
         // Auto-Generation Settings Dialog
         AutoGenerationSettingsDialog {
             id: autoGenDialog
-            settingsManager: settingsManager
         }
         
         // Backup Selection Dialog
         BackupSelectionDialog {
             id: backupDialog
-            backupManager: backupManager
             currentFolder: fileManager.currentDirectory
             rootPath: fileManager.currentDirectory
         }

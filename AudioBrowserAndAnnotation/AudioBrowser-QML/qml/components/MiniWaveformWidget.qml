@@ -48,9 +48,11 @@ Rectangle {
     // Load waveform when file changes
     onFilePathChanged: {
         if (filePath && filePath.length > 0) {
-            waveformEngine.loadWaveform(filePath)
+            waveformEngine.generateWaveform(filePath)
         } else {
-            waveformEngine.clearWaveform()
+            // Clear the waveform display
+            miniWaveform.clearWaveform()
+            root.durationMs = 0
         }
     }
     
@@ -58,14 +60,14 @@ Rectangle {
     Connections {
         target: waveformEngine
         
-        function onWaveformReady(peaks, duration) {
-            miniWaveform.setWaveformData(peaks, duration)
-            root.durationMs = duration
-        }
-        
-        function onWaveformCleared() {
-            miniWaveform.clearWaveform()
-            root.durationMs = 0
+        function onWaveformReady(path) {
+            // Only update if this is for our file
+            if (path === filePath) {
+                var peaks = waveformEngine.getWaveformData(path)
+                var duration = waveformEngine.getWaveformDuration(path)
+                miniWaveform.setWaveformData(peaks, duration)
+                root.durationMs = duration
+            }
         }
     }
     
