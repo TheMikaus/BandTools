@@ -19,6 +19,7 @@ End-user documentation and how-to guides:
 - [CLOUD_SYNC_SETUP.md](user_guides/CLOUD_SYNC_SETUP.md) - **NEW**: Multi-cloud sync overview and setup
 - [DROPBOX_SYNC_SETUP.md](user_guides/DROPBOX_SYNC_SETUP.md) - **NEW**: Dropbox sync setup guide
 - [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - Folder navigation and hierarchical browsing guide
+- [GOOGLE_DRIVE_SYNC_README.md](user_guides/GOOGLE_DRIVE_SYNC_README.md) - Google Drive sync setup guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide

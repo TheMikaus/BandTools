@@ -11,7 +11,7 @@ AudioBrowser-QML supports synchronization with multiple cloud storage providers,
 - **Best for**: Users with Google accounts
 - **Features**: Automatic authentication flow, folder management
 - **Setup Complexity**: Medium (requires Google Cloud Console setup)
-- **See**: [Google Drive Sync Setup](../GOOGLE_DRIVE_SYNC_README.md)
+- **See**: [Google Drive Sync Setup](GOOGLE_DRIVE_SYNC_README.md)
 
 ### Dropbox
 - **Status**: Fully supported with access token authentication
@@ -208,7 +208,7 @@ A:
 ## Getting Help
 
 For provider-specific help, see the individual setup guides:
-- [Google Drive Sync Setup](../GOOGLE_DRIVE_SYNC_README.md)
+- [Google Drive Sync Setup](GOOGLE_DRIVE_SYNC_README.md)
 - [Dropbox Sync Setup](DROPBOX_SYNC_SETUP.md)
 - [WebDAV Sync Setup](WEBDAV_SYNC_SETUP.md)
 

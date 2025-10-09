@@ -94,7 +94,7 @@ from backend.backup_manager import BackupManager
 from backend.export_manager import ExportManager
 from backend.documentation_manager import DocumentationManager
 from backend.undo_manager import UndoManager
-from backend.gdrive_sync import GDriveSync
+from backend.sync_manager import SyncManager
 
 
 class ApplicationViewModel(QObject):
@@ -177,10 +177,9 @@ def main():
     # Connect annotation manager to undo manager (for recording operations)
     annotation_manager.setUndoManager(undo_manager)
     
-    # Create Google Drive sync manager (using default paths)
-    credentials_path = Path.home() / ".audiobrowser" / "credentials.json"
-    token_path = Path.home() / ".audiobrowser" / "token.json"
-    gdrive_sync = GDriveSync(credentials_path, token_path)
+    # Create unified sync manager (supports multiple cloud providers)
+    config_dir = Path.home() / ".audiobrowser"
+    sync_manager = SyncManager(config_dir)
     
     # Create data models (pass file_manager and tempo_manager to FileListModel)
     file_list_model = FileListModel(file_manager=file_manager, tempo_manager=tempo_manager)
@@ -211,7 +210,7 @@ def main():
     engine.rootContext().setContextProperty("exportManager", export_manager)
     engine.rootContext().setContextProperty("documentationManager", documentation_manager)
     engine.rootContext().setContextProperty("undoManager", undo_manager)
-    engine.rootContext().setContextProperty("gdriveSync", gdrive_sync)
+    engine.rootContext().setContextProperty("syncManager", sync_manager)
     
     # Connect settings to color manager
     settings_manager.themeChanged.connect(color_manager.setTheme)

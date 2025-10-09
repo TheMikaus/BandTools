@@ -6,12 +6,13 @@ import "../styles"
 /**
  * SyncDialog Component
  * 
- * Google Drive synchronization dialog.
- * Allows users to authenticate, select folders, and sync files.
+ * Multi-cloud synchronization dialog.
+ * Supports Google Drive, Dropbox, and WebDAV/Nextcloud.
+ * Allows users to select provider, authenticate, select folders, and sync files.
  */
 Dialog {
     id: syncDialog
-    title: "Google Drive Sync"
+    title: "Cloud Sync"
     modal: true
     standardButtons: Dialog.Close
     
@@ -31,19 +32,65 @@ Dialog {
     property bool isAuthenticated: false
     property string currentFolder: ""
     property bool isSyncing: false
+    property string currentProvider: "gdrive"  // Default to Google Drive for backward compatibility
     
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.spacingLarge
         spacing: Theme.spacingLarge
         
-        // Title
-        Label {
-            text: "Google Drive Synchronization"
-            font.pixelSize: Theme.fontSizeLarge
-            font.bold: true
-            color: Theme.textColor
+        // Title and Provider Selection
+        RowLayout {
             Layout.fillWidth: true
+            spacing: Theme.spacingLarge
+            
+            Label {
+                text: "Cloud Synchronization"
+                font.pixelSize: Theme.fontSizeLarge
+                font.bold: true
+                color: Theme.textColor
+            }
+            
+            Item { Layout.fillWidth: true }
+            
+            Label {
+                text: "Provider:"
+                font.pixelSize: Theme.fontSizeNormal
+                color: Theme.textColor
+            }
+            
+            ComboBox {
+                id: providerComboBox
+                model: ["Google Drive", "Dropbox", "WebDAV/Nextcloud"]
+                currentIndex: 0
+                enabled: !isSyncing
+                
+                background: Rectangle {
+                    color: parent.enabled ? Theme.surfaceColor : Theme.disabledColor
+                    border.color: Theme.borderColor
+                    radius: Theme.radiusSmall
+                }
+                
+                contentItem: Text {
+                    text: parent.displayText
+                    font.pixelSize: Theme.fontSizeNormal
+                    color: parent.enabled ? Theme.textColor : Theme.disabledTextColor
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: Theme.spacingSmall
+                }
+                
+                onCurrentIndexChanged: {
+                    // Map UI index to provider ID
+                    var providers = ["gdrive", "dropbox", "webdav"]
+                    currentProvider = providers[currentIndex]
+                    
+                    if (typeof syncManager !== "undefined") {
+                        syncManager.setProvider(currentProvider)
+                        isAuthenticated = syncManager.isAuthenticated()
+                        statusLabel.text = "Provider changed to: " + displayText
+                    }
+                }
+            }
         }
         
         // Status section
@@ -107,8 +154,8 @@ Dialog {
                         }
                         
                         onClicked: {
-                            if (typeof gdriveSync !== "undefined" && gdriveSync.isAvailable()) {
-                                isAuthenticated = gdriveSync.authenticate()
+                            if (typeof syncManager !== "undefined" && syncManager.isAvailable()) {
+                                isAuthenticated = syncManager.authenticate()
                                 if (!isAuthenticated) {
                                     statusLabel.text = "Authentication failed. Check credentials file."
                                     statusLabel.color = Theme.errorColor
@@ -170,8 +217,8 @@ Dialog {
                         }
                         
                         onClicked: {
-                            if (typeof gdriveSync !== "undefined") {
-                                var folderId = gdriveSync.select_remote_folder(folderNameField.text)
+                            if (typeof syncManager !== "undefined") {
+                                var folderId = syncManager.select_remote_folder(folderNameField.text)
                                 if (folderId) {
                                     currentFolder = folderNameField.text
                                     statusLabel.text = "Folder selected: " + currentFolder
@@ -242,14 +289,14 @@ Dialog {
                         }
                         
                         onClicked: {
-                            if (typeof gdriveSync !== "undefined" && typeof fileManager !== "undefined") {
+                            if (typeof syncManager !== "undefined" && typeof fileManager !== "undefined") {
                                 var currentDir = fileManager.getCurrentFolder()
                                 if (currentDir) {
                                     isSyncing = true
                                     statusLabel.text = "Uploading files..."
                                     statusLabel.color = Theme.accentColor
                                     
-                                    if (gdriveSync.performSync(currentDir, true)) {
+                                    if (syncManager.performSync(currentDir, true)) {
                                         // Success will be reported via signal
                                     } else {
                                         statusLabel.text = "Upload failed"
@@ -281,14 +328,14 @@ Dialog {
                         }
                         
                         onClicked: {
-                            if (typeof gdriveSync !== "undefined" && typeof fileManager !== "undefined") {
+                            if (typeof syncManager !== "undefined" && typeof fileManager !== "undefined") {
                                 var currentDir = fileManager.getCurrentFolder()
                                 if (currentDir) {
                                     isSyncing = true
                                     statusLabel.text = "Downloading files..."
                                     statusLabel.color = Theme.accentColor
                                     
-                                    if (gdriveSync.performSync(currentDir, false)) {
+                                    if (syncManager.performSync(currentDir, false)) {
                                         // Success will be reported via signal
                                     } else {
                                         statusLabel.text = "Download failed"
@@ -362,47 +409,47 @@ Dialog {
     
     // Connect to backend signals
     Component.onCompleted: {
-        if (typeof gdriveSync !== "undefined") {
+        if (typeof syncManager !== "undefined") {
             // Check if API is available
-            if (!gdriveSync.isAvailable()) {
+            if (!syncManager.isAvailable()) {
                 statusLabel.text = "Google Drive API not available. Please install required packages:\n" +
                                  "pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client"
                 statusLabel.color = Theme.warningColor
             }
             
             // Connect signals
-            gdriveSync.syncProgress.connect(function(message) {
+            syncManager.syncProgress.connect(function(message) {
                 progressLog.text += message + "\n"
             })
             
-            gdriveSync.syncCompleted.connect(function(success, message, count) {
+            syncManager.syncCompleted.connect(function(success, message, count) {
                 isSyncing = false
                 statusLabel.text = message
                 statusLabel.color = success ? Theme.successColor : Theme.warningColor
                 progressLog.text += "\n" + message + "\n"
             })
             
-            gdriveSync.syncError.connect(function(message) {
+            syncManager.syncError.connect(function(message) {
                 isSyncing = false
                 statusLabel.text = "Error: " + message
                 statusLabel.color = Theme.errorColor
                 progressLog.text += "ERROR: " + message + "\n"
             })
             
-            gdriveSync.authenticationStatusChanged.connect(function(success, message) {
+            syncManager.authenticationStatusChanged.connect(function(success, message) {
                 isAuthenticated = success
                 statusLabel.text = message
                 statusLabel.color = success ? Theme.successColor : Theme.errorColor
             })
             
-            gdriveSync.folderSelected.connect(function(folderId, folderName) {
+            syncManager.folderSelected.connect(function(folderId, folderName) {
                 currentFolder = folderName
                 statusLabel.text = "Folder selected: " + folderName
                 statusLabel.color = Theme.successColor
             })
             
             // Check initial authentication state
-            isAuthenticated = gdriveSync.isAuthenticated()
+            isAuthenticated = syncManager.isAuthenticated()
         }
     }
 }
