@@ -86,7 +86,7 @@ class WaveformView(QQuickPaintedItem):
             self._peaks = peaks if peaks else []
             self.update()
     
-    peaks = pyqtProperty(list, _get_peaks, _set_peaks)
+    peaks = pyqtProperty('QVariant', _get_peaks, _set_peaks)
     
     def _get_duration_ms(self) -> int:
         return self._duration_ms
