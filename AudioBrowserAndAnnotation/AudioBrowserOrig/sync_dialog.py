@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QTableWidget, QTableWidgetItem, QCheckBox, QTextEdit,
     QProgressDialog, QMessageBox, QInputDialog, QHeaderView,
-    QAbstractItemView
+    QAbstractItemView, QComboBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -121,7 +121,6 @@ class FolderSelectionDialog(QDialog):
         provider_label = QLabel("Cloud Provider:")
         provider_layout.addWidget(provider_label)
         
-        from PyQt6.QtWidgets import QComboBox
         self.provider_combo = QComboBox()
         
         # Add available providers

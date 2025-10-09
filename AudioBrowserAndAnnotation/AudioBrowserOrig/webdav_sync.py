@@ -16,7 +16,7 @@ from datetime import datetime
 
 from PyQt6.QtCore import pyqtSlot
 
-from .cloud_sync_base import (
+from cloud_sync_base import (
     CloudSyncBase, SyncHistory, SyncRules, SyncVersion,
     SYNC_EXCLUDED, VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE
 )
@@ -263,6 +263,11 @@ class WebDAVSync(CloudSyncBase):
         except Exception as e:
             logger.error(f"Failed to list remote files: {e}")
             return []
+    
+    def get_remote_file_names(self):
+        """Get set of filenames that exist on remote (for compatibility)."""
+        remote_files = self.list_remote_files()
+        return {f['name'] for f in remote_files}
     
     @pyqtSlot(str, bool, result=bool)
     def performSync(self, directory: str, upload: bool) -> bool:
