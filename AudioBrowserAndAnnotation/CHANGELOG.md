@@ -4,6 +4,18 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Shared Modules for Code Reuse** - Created common modules shared between AudioBrowserOrig and AudioBrowser-QML
+  - Created `shared/` directory with reusable modules
+  - `metadata_constants.py` - Common JSON file name constants and audio extensions
+  - `backup_utils.py` - Metadata backup and restore functionality (~270 lines)
+  - `file_utils.py` - Common file operations (sanitize, file signatures)
+  - `audio_workers.py` - Background audio processing workers (channel muting, etc.)
+  - Updated both applications to import from shared modules
+  - Removed ~145 lines of duplicate code across applications
+  - Added comprehensive test suite in `test_shared_modules.py`
+  - See [SHARED_MODULES_MIGRATION.md](SHARED_MODULES_MIGRATION.md) for complete details
+
 ### Fixed
 - **Metaclass Conflict in Cloud Sync Base** - Fixed TypeError preventing cloud sync modules from loading
   - Added `QABCMeta` combined metaclass to resolve conflict between QObject (PyQt6.sip.wrappertype) and ABC (ABCMeta)

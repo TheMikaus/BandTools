@@ -6,8 +6,20 @@ This project contains two versions of the AudioBrowser application:
 
 1. **[AudioBrowserOrig/](AudioBrowserOrig/)** - The original, stable PyQt6 widgets-based version (production-ready)
 2. **[AudioBrowser-QML/](AudioBrowser-QML/)** - New QML-based version (70% complete, 95% production-ready)
+3. **[shared/](shared/)** - Common modules shared between both applications to reduce code duplication
 
 Both versions share the same goal: helping bands listen to, critique, and catalog their practice recordings.
+
+### Shared Modules
+
+Both AudioBrowser applications use shared modules for common functionality:
+
+- **Metadata constants** - Common JSON file name constants
+- **Backup utilities** - Metadata backup and restore functions
+- **File utilities** - File operations (sanitize, signatures)
+- **Audio workers** - Background audio processing
+
+See [shared/README.md](shared/README.md) for complete documentation.
 
 ### QML Version Status (January 2025)
 
