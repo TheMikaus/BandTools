@@ -55,23 +55,25 @@ class SettingsManager(QObject):
         self._migrate_legacy_settings()
     
     # Geometry and layout
-    @pyqtSlot(result=bytes)
-    def getGeometry(self) -> Optional[bytes]:
+    @pyqtSlot(result=str)
+    def getGeometry(self) -> str:
         """Get saved window geometry."""
-        return self.settings.value(SETTINGS_KEY_WINDOW_GEOMETRY)
+        result = self.settings.value(SETTINGS_KEY_WINDOW_GEOMETRY)
+        return result if result is not None else ""
     
-    @pyqtSlot(bytes)
-    def setGeometry(self, geometry: bytes):
+    @pyqtSlot(str)
+    def setGeometry(self, geometry: str):
         """Save window geometry."""
         self.settings.setValue(SETTINGS_KEY_WINDOW_GEOMETRY, geometry)
     
-    @pyqtSlot(result=bytes)
-    def getSplitterState(self) -> Optional[bytes]:
+    @pyqtSlot(result=str)
+    def getSplitterState(self) -> str:
         """Get saved splitter state."""
-        return self.settings.value(SETTINGS_KEY_SPLITTER_STATE)
+        result = self.settings.value(SETTINGS_KEY_SPLITTER_STATE)
+        return result if result is not None else ""
     
-    @pyqtSlot(bytes)
-    def setSplitterState(self, state: bytes):
+    @pyqtSlot(str)
+    def setSplitterState(self, state: str):
         """Save splitter state."""
         self.settings.setValue(SETTINGS_KEY_SPLITTER_STATE, state)
     
