@@ -16,6 +16,7 @@ Features:
 - Installs buildozer and cython (pip packages)
 - Detects and installs system dependencies (Ubuntu/Debian)
 - Installs OpenJDK 11
+- Checks for WSL and Ubuntu on Windows (with installation instructions)
 - Verifies all requirements are met
 - Provides clear instructions for manual steps if needed
 """
@@ -136,6 +137,14 @@ def detect_os():
     system = platform.system()
     
     if system == "Linux":
+        # Check if running inside WSL
+        try:
+            with open("/proc/version", "r") as f:
+                if "microsoft" in f.read().lower():
+                    return "wsl"
+        except:
+            pass
+        
         # Try to detect distribution
         try:
             with open("/etc/os-release", "r") as f:
@@ -158,6 +167,124 @@ def detect_os():
 def check_system_command(command):
     """Check if a system command is available."""
     return shutil.which(command) is not None
+
+def check_wsl_installed():
+    """Check if WSL is installed on Windows."""
+    print_info("Checking if WSL is installed...")
+    
+    try:
+        # Try to run wsl --status
+        success, stdout, stderr = run_command(
+            ["wsl", "--status"],
+            check=False,
+            capture_output=True
+        )
+        
+        if success or "Default Distribution" in stdout or "Default Version" in stdout:
+            print_success("WSL is installed")
+            return True
+        else:
+            print_warning("WSL does not appear to be installed")
+            return False
+    except Exception as e:
+        print_warning(f"Could not check WSL status: {e}")
+        return False
+
+def check_ubuntu_in_wsl():
+    """Check if Ubuntu is installed in WSL."""
+    print_info("Checking for Ubuntu distribution in WSL...")
+    
+    try:
+        # List WSL distributions
+        success, stdout, stderr = run_command(
+            ["wsl", "--list", "--verbose"],
+            check=False,
+            capture_output=True
+        )
+        
+        if success and stdout:
+            # Check if Ubuntu is in the list
+            if "Ubuntu" in stdout or "ubuntu" in stdout.lower():
+                print_success("Ubuntu is installed in WSL")
+                return True
+            else:
+                print_warning("Ubuntu distribution not found in WSL")
+                return False
+        else:
+            print_warning("Could not list WSL distributions")
+            return False
+    except Exception as e:
+        print_warning(f"Could not check WSL distributions: {e}")
+        return False
+
+def install_wsl_windows():
+    """Provide instructions to install WSL on Windows."""
+    print_header("WSL Installation Required")
+    
+    print_error("WSL (Windows Subsystem for Linux) is not installed")
+    print()
+    print_info("To install WSL, you need to run PowerShell as Administrator:")
+    print()
+    print("  1. Open PowerShell as Administrator")
+    print("     (Right-click Start Menu → Windows PowerShell (Admin))")
+    print()
+    print("  2. Run this command:")
+    print(f"     {BOLD}wsl --install{RESET}")
+    print()
+    print("  3. Restart your computer when prompted")
+    print()
+    print("  4. After restart, run this setup script again")
+    print()
+    print_info("This will install WSL 2 and Ubuntu by default")
+    print()
+    return False
+
+def install_ubuntu_in_wsl():
+    """Provide instructions to install Ubuntu in WSL."""
+    print_header("Ubuntu Installation Required")
+    
+    print_warning("Ubuntu is not installed in WSL")
+    print()
+    print_info("To install Ubuntu, run one of these commands in PowerShell:")
+    print()
+    print("  Option 1: Install Ubuntu from command line")
+    print(f"     {BOLD}wsl --install -d Ubuntu{RESET}")
+    print()
+    print("  Option 2: Install from Microsoft Store")
+    print("     - Open Microsoft Store")
+    print("     - Search for 'Ubuntu'")
+    print("     - Click 'Get' or 'Install'")
+    print()
+    print("  3. After installation, open Ubuntu and complete setup")
+    print("     (Create username and password when prompted)")
+    print()
+    print("  4. Run this script again from Ubuntu terminal:")
+    print(f"     {BOLD}sudo python3 setup_android_dev.py{RESET}")
+    print()
+    return False
+
+def setup_wsl_and_ubuntu():
+    """Check and setup WSL and Ubuntu on Windows."""
+    print_header("WSL and Ubuntu Setup")
+    
+    # Check if WSL is installed
+    wsl_ok = check_wsl_installed()
+    if not wsl_ok:
+        return install_wsl_windows()
+    
+    # Check if Ubuntu is installed
+    ubuntu_ok = check_ubuntu_in_wsl()
+    if not ubuntu_ok:
+        return install_ubuntu_in_wsl()
+    
+    print_success("WSL and Ubuntu are both installed!")
+    print()
+    print_info("Next steps:")
+    print("  1. Open Ubuntu from Start Menu or run: wsl -d Ubuntu")
+    print("  2. Navigate to this directory (Windows drives are at /mnt/c/)")
+    print("  3. Run: sudo python3 setup_android_dev.py")
+    print()
+    return True
 
 def check_openjdk():
     """Check if OpenJDK 11 is installed."""
@@ -391,7 +518,7 @@ def main():
     # 5. Check/Install system dependencies
     print_header("Step 4: System Dependencies")
     
-    if os_type == "ubuntu":
+    if os_type == "ubuntu" or os_type == "wsl":
         # Check OpenJDK
         openjdk_ok = check_openjdk()
         if not openjdk_ok:
@@ -406,8 +533,18 @@ def main():
         packages_ok = check_system_packages_ubuntu()
         if not packages_ok:
             all_checks_passed = False
+    
+    elif os_type == "windows":
+        # Windows-specific: Check and install WSL/Ubuntu
+        print_info("Detected Windows - checking WSL and Ubuntu installation...")
+        wsl_setup_ok = setup_wsl_and_ubuntu()
+        if not wsl_setup_ok:
+            all_checks_passed = False
+        else:
+            print_info("WSL and Ubuntu are ready. Please continue setup in Ubuntu terminal.")
+        return 1 if not all_checks_passed else 0
             
-    elif os_type in ["macos", "fedora", "windows", "linux"]:
+    elif os_type in ["macos", "fedora", "linux"]:
         print_warning("Automatic system package installation not available for this OS")
         provide_manual_instructions(os_type)
         

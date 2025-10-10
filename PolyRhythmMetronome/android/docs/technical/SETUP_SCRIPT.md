@@ -22,9 +22,11 @@ This script eliminates the manual setup process and ensures all requirements are
 ```
 setup_android_dev.py
 ├── Detection Functions
-│   ├── detect_os()           # Identify Linux, macOS, Windows
+│   ├── detect_os()           # Identify Linux, macOS, Windows, WSL
 │   ├── check_python_version() # Verify Python 3.8+
-│   └── check_system_command() # Check for system commands
+│   ├── check_system_command() # Check for system commands
+│   ├── check_wsl_installed()  # Check if WSL is installed (Windows)
+│   └── check_ubuntu_in_wsl()  # Check if Ubuntu is in WSL
 │
 ├── Check Functions
 │   ├── check_pip()            # Verify pip availability
@@ -34,6 +36,9 @@ setup_android_dev.py
 ├── Installation Functions
 │   ├── check_and_install_pip_package()
 │   ├── install_openjdk_ubuntu()
+│   ├── install_wsl_windows()  # Guide WSL installation
+│   ├── install_ubuntu_in_wsl() # Guide Ubuntu installation
+│   ├── setup_wsl_and_ubuntu()  # Orchestrate WSL/Ubuntu setup
 │   └── check_system_packages_ubuntu()
 │
 ├── Verification Functions
@@ -127,12 +132,30 @@ def check_system_packages_ubuntu():
 def detect_os():
     system = platform.system()
     if system == "Linux":
+        # Check if running inside WSL
+        with open("/proc/version", "r") as f:
+            if "microsoft" in f.read().lower():
+                return "wsl"
         # Check /etc/os-release for distribution
         if "Ubuntu" in content or "Debian" in content:
             return "ubuntu"
 ```
 
-**Why**: Different operating systems require different installation methods. Ubuntu/Debian use `apt`, Fedora uses `dnf`, macOS uses `brew`.
+**Why**: Different operating systems require different installation methods. Ubuntu/Debian use `apt`, Fedora uses `dnf`, macOS uses `brew`. WSL detection allows the script to provide appropriate instructions for Windows users.
+
+### 7. WSL and Ubuntu Detection (Windows)
+
+```python
+def check_wsl_installed():
+    success, stdout, stderr = run_command(["wsl", "--status"])
+    return success or "Default Distribution" in stdout
+
+def check_ubuntu_in_wsl():
+    success, stdout, stderr = run_command(["wsl", "--list", "--verbose"])
+    return "Ubuntu" in stdout or "ubuntu" in stdout.lower()
+```
+
+**Why**: On Windows, buildozer requires a Linux environment. WSL (Windows Subsystem for Linux) provides this. The script checks if WSL and Ubuntu are installed and guides users through installation if needed.
 
 ## Package Requirements
 
@@ -247,6 +270,11 @@ sudo python3 setup_android_dev.py
 - ✓ Automatic installation with sudo
 - ✓ Verified on Ubuntu 24.04
 
+#### WSL (Full Support)
+- ✓ Detected automatically
+- ✓ Same Ubuntu/Debian support
+- ✓ Verified on WSL2 with Ubuntu
+
 #### macOS (Instructions Only)
 - Manual instructions provided
 - Uses Homebrew for packages
@@ -257,10 +285,13 @@ sudo python3 setup_android_dev.py
 - Uses `dnf` for packages
 - User must install manually
 
-#### Windows (Not Supported)
+#### Windows (Guided Setup)
+- ✓ Automatic WSL detection
+- ✓ Automatic Ubuntu distribution check
+- ✓ Provides step-by-step installation instructions
+- ✓ Guides user to complete setup in Ubuntu/WSL
 - Buildozer doesn't support native Windows
-- Script suggests WSL2 or Docker
-- User must set up Linux environment first
+- Requires WSL2 or Docker for local builds
 
 ## Integration Points
 

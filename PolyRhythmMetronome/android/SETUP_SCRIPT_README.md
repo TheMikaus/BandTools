@@ -28,13 +28,15 @@ The script automatically:
    - autoconf, libtool, pkg-config
    - zlib, ncurses, libffi, openssl development libraries
    - cmake
+7. ✓ **On Windows**: Checks for WSL and Ubuntu, provides guided installation instructions
 
 ## Supported Platforms
 
 - **Ubuntu/Debian**: Full automatic installation with sudo
+- **WSL (Windows Subsystem for Linux)**: Full support with Ubuntu
 - **macOS**: Manual instructions provided
 - **Fedora/RHEL**: Manual instructions provided
-- **Windows**: See [GitHub Actions Build Guide](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) for building without local Linux setup, or use WSL2/Docker
+- **Windows**: Automatic WSL and Ubuntu installation checks (with guided instructions)
 
 ## Usage Examples
 
@@ -159,25 +161,35 @@ pip3 install --user buildozer cython
 
 ### Windows
 
-**Option 1: GitHub Actions (Recommended)**
+**Automatic WSL/Ubuntu Check (New!)**
 
-For Windows users who don't want to set up WSL2/Docker/VM:
+The setup script now automatically checks for and guides you through WSL and Ubuntu installation:
+
+```powershell
+# Run the script on Windows - it will check for WSL and Ubuntu
+python3 setup_android_dev.py
+```
+
+The script will:
+1. ✓ Detect if WSL is installed
+2. ✓ Check if Ubuntu is available in WSL
+3. ✓ Provide step-by-step instructions to install missing components
+4. ✓ Guide you to complete setup in Ubuntu terminal
+
+**Option 1: WSL2 (Recommended for Local Builds)**
+
+After running the setup script and following its instructions:
+1. Install WSL2: `wsl --install` (if not already installed)
+2. Install Ubuntu from Microsoft Store (if not already installed)
+3. Open Ubuntu and run: `sudo python3 setup_android_dev.py`
+
+**Option 2: GitHub Actions (For Cloud Builds)**
+
+For Windows users who prefer not to set up WSL:
 1. Fork the BandTools repository on GitHub
 2. Create a GitHub Actions workflow to build the APK automatically
 3. Download built APKs from GitHub Releases or Actions artifacts
 4. No local setup required!
-
-**Option 2: WSL2 (Windows Subsystem for Linux)**
-
-1. Install WSL2:
-```powershell
-wsl --install
-```
-2. Install Ubuntu from Microsoft Store
-3. Open Ubuntu and run the setup script:
-```bash
-sudo python3 setup_android_dev.py
-```
 
 **Option 3: Docker or Linux VM**
 
