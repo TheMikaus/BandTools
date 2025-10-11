@@ -88,6 +88,22 @@ jobs:
         buildozer --version
         which buildozer
     
+    - name: Accept Android SDK licenses
+      run: |
+        echo "Preparing to accept Android SDK licenses..."
+        # Create licenses directory structure that buildozer will use
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        # Accept all SDK licenses by creating license files
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        echo "504467f4c0de7af1a06de9f4b1727b84351f2910" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-arm-dbt-license
+        echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > ~/.buildozer/android/platform/android-sdk/licenses/google-gdk-license
+        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > ~/.buildozer/android/platform/android-sdk/licenses/intel-android-extra-license
+        echo "e9acab5b5fbb560a72cfaecce8946896ff6aab9d" > ~/.buildozer/android/platform/android-sdk/licenses/mips-android-sysimage-license
+        echo "Android SDK licenses pre-accepted"
+    
     - name: Verify build prerequisites
       run: |
         cd PolyRhythmMetronome/android
