@@ -68,9 +68,11 @@ See [Local Development on Windows](docs/user_guides/LOCAL_DEVELOPMENT_WINDOWS.md
 When you need to create APKs, you have several options:
 
 **Option A: GitHub Actions (Recommended - No Local Setup)**
-- Fork the repository and set up GitHub Actions to build APKs
+- The repository includes a pre-configured workflow at `.github/workflows/build-polyrhythm-apk.yml`
+- Fork the repository (if needed) and enable GitHub Actions
 - Download built APKs from GitHub Releases or Actions artifacts
 - No local Linux environment needed!
+- See [GitHub Actions Build Guide](docs/user_guides/GITHUB_ACTIONS_BUILD_GUIDE.md) for details
 
 **Option B: WSL2 (Fast Local Builds)**
 ```powershell

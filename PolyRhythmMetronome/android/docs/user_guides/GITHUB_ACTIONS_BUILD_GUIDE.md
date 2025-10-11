@@ -17,19 +17,21 @@ GitHub Actions is a free CI/CD service that runs builds in the cloud on Linux se
 ## Prerequisites
 
 - A GitHub account
-- Fork of the BandTools repository
+- Fork of the BandTools repository (or use the main repository if you have write access)
 
 ## Step-by-Step Guide
 
-### Step 1: Fork the Repository
+### Step 1: Fork the Repository (Optional)
+
+**Note**: The BandTools repository now includes a pre-configured GitHub Actions workflow at `.github/workflows/build-polyrhythm-apk.yml`. If you have access to the main repository, you can use it directly. Otherwise:
 
 1. Go to https://github.com/TheMikaus/BandTools
 2. Click the "Fork" button in the top right
 3. This creates your own copy of the repository
 
-### Step 2: Create a GitHub Actions Workflow
+### Step 2: Use the Pre-configured Workflow
 
-Create a new file in your fork at `.github/workflows/build-android-apk.yml`:
+The repository already includes a workflow file at `.github/workflows/build-polyrhythm-apk.yml` with the following configuration:
 
 ```yaml
 name: Build Android APK
@@ -81,11 +83,14 @@ jobs:
         retention-days: 30
 ```
 
+**Alternative**: If you need to customize the workflow, you can create your own file at `.github/workflows/build-android-apk.yml` with the configuration shown above.
+
 ### Step 3: Enable GitHub Actions
 
-1. Go to your forked repository on GitHub
+1. Go to your repository on GitHub (forked or main)
 2. Click "Actions" tab
 3. If prompted, click "I understand my workflows, go ahead and enable them"
+4. You should see "Build PolyRhythmMetronome APK" in the list of workflows
 
 ### Step 4: Trigger a Build
 
@@ -94,7 +99,7 @@ jobs:
 
 **Option B: Manual Trigger**
 1. Go to "Actions" tab
-2. Select "Build Android APK" workflow
+2. Select "Build PolyRhythmMetronome APK" workflow
 3. Click "Run workflow"
 4. Select branch and click "Run workflow"
 
@@ -105,6 +110,8 @@ jobs:
 3. Scroll down to "Artifacts"
 4. Download "polyrhythm-metronome-apk"
 5. Extract the ZIP file to get your APK
+
+**Note**: APKs are also available as GitHub Releases when builds run on the `main` branch, or when manually triggered with the "Create a release after build" option enabled.
 
 ## Creating Releases
 
