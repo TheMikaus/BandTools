@@ -14,7 +14,7 @@ This directory contains scripts to build a standalone executable for the AudioBr
 
 ## Automated Builds (Recommended)
 
-**Pre-built executables are automatically created** for every commit and available in the [Releases section](https://github.com/TheMikaus/BandTools/releases). This is the easiest way to get a working executable without setting up a build environment.
+**Pre-built executables are created on-demand** and available in the [Releases section](https://github.com/TheMikaus/BandTools/releases). Releases are created manually by the maintainer using GitHub Actions workflow dispatch. This is the easiest way to get a working executable without setting up a build environment.
 
 ### Where GitHub Actions Build Outputs Go
 
@@ -24,12 +24,13 @@ This directory contains scripts to build a standalone executable for the AudioBr
    - Go to: Repository → Actions tab → Select a workflow run → Artifacts section
    - Download format: `AudioFolderPlayer-{version}-windows` (raw executable)
 
-2. **GitHub Releases** (permanent, main branch builds):
+2. **GitHub Releases** (permanent, manually triggered builds):
    - Go to: Repository → Releases section → Latest release
    - Download format: 
      - Windows: `AudioFolderPlayer-{version}-windows.zip`  
      - Linux: `AudioFolderPlayer-{version}-linux.tar.gz`
      - macOS: `AudioFolderPlayer-{version}-macos.tar.gz`
+   - Note: Releases are created manually by maintainers, not automatically on every commit
 
 **Note**: You will NOT find the executable in the repository's `dist/` folder after GitHub Actions builds. The `dist/` folder is cleaned during the build process and only exists temporarily during the build.
 
@@ -117,9 +118,9 @@ AudioBrowserAndAnnotation/
 This repository includes a GitHub Actions workflow that automatically builds executables on every commit to main/develop branches. The workflow:
 
 - **Builds for multiple platforms**: Windows, Linux, and macOS simultaneously
-- **Creates releases**: Automatically publishes releases with downloadable archives  
+- **Creates artifacts**: Automatically uploads build artifacts for testing (30-day retention)
+- **Creates releases**: Only when manually triggered via workflow dispatch  
 - **Version management**: Uses git commit count for automatic version numbering
-- **Artifact storage**: Keeps build artifacts for 30 days, release archives permanently
 
 See [../.github/CI_CD_SETUP.md](../.github/CI_CD_SETUP.md) for detailed information about the automated build system.
 
