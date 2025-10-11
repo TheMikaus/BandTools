@@ -70,8 +70,9 @@ jobs:
       run: |
         echo "Installing system dependencies..."
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk git zip unzip autoconf libtool pkg-config
+        sudo apt-get install -y build-essential openjdk-11-jdk git zip unzip autoconf libtool pkg-config
         sudo apt-get install -y zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
+        sudo apt-get install -y ccache libltdl-dev
         echo "System dependencies installed successfully"
     
     - name: Install Python dependencies
