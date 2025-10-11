@@ -47,6 +47,7 @@ Implementation details, architecture decisions, and developer-focused documentat
 - **[PHASE_1_IMPLEMENTATION_SUMMARY.md](technical/PHASE_1_IMPLEMENTATION_SUMMARY.md)** - **NEW**: Phase 1 completion summary (ConfigManager, JSONPersistence, UIFactory)
 - **[ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md)** - **NEW**: Error logging improvements for _ensure_import function
 - **[BUILD.md](technical/BUILD.md)** - Build instructions for developers
+- **[HOW_TO_CREATE_RELEASE.md](HOW_TO_CREATE_RELEASE.md)** - **NEW**: Guide for creating releases via GitHub Actions workflow dispatch
 - **[COLOR_CONSISTENCY.md](technical/COLOR_CONSISTENCY.md)** - Color system implementation details
 - **[ENHANCED_AUTO_LABELING.md](technical/ENHANCED_AUTO_LABELING.md)** - Auto-labeling feature details
 - **[FEATURES_COMPARISON.md](technical/FEATURES_COMPARISON.md)** - Feature comparison and analysis

@@ -89,7 +89,7 @@ The workflow will be automatically triggered on:
 - Manual workflow dispatch
 
 Artifacts are uploaded to GitHub Actions with 30-day retention.
-Releases are created automatically on main branch builds.
+Releases are created only when manually triggered via workflow dispatch.
 
 ## Version Management
 

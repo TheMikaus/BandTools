@@ -182,8 +182,8 @@ jobs:
         path: ${{ steps.archive.outputs.archive_path }}
         retention-days: 30
     
-    - name: Create Release (if requested or on main branch)
-      if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+    - name: Create Release (manual trigger only)
+      if: github.event_name == 'workflow_dispatch' && inputs.create_release == 'true'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: audiobrowser-v${{ steps.version.outputs.version_string }}
@@ -357,8 +357,8 @@ jobs:
         path: ${{ steps.archive.outputs.archive_path }}
         retention-days: 30
     
-    - name: Create Release (if requested or on main branch)
-      if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+    - name: Create Release (manual trigger only)
+      if: github.event_name == 'workflow_dispatch' && inputs.create_release == 'true'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: audiobrowser-qml-v${{ steps.version.outputs.version_string }}

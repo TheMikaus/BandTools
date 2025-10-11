@@ -4,6 +4,13 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Changed
+- **GitHub Actions CI/CD Pipeline**: Changed release creation to manual-trigger only
+  - Releases are now created only when manually triggered via workflow dispatch
+  - Automatic builds still run on every commit (artifacts stored for 30 days)
+  - This gives maintainers control over when releases are published
+  - Updated documentation to reflect new release process
+
 ### Added
 - **Shared Modules for Code Reuse** - Created common modules shared between AudioBrowserOrig and AudioBrowser-QML
   - Created `shared/` directory with reusable modules
@@ -814,7 +821,7 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Windows-only build pipeline for AudioBrowser executable
   - Triggers on changes to AudioBrowserAndAnnotation directory
   - Automatic version increment using existing git-based system
-  - Build artifacts stored for 30 days, releases created on main branch
+  - Build artifacts stored for 30 days
   - Uses existing build infrastructure (PyInstaller, version.py, audio_browser.spec)
 - **Partial Take Checkbox in Annotations Tab**: Complete the partial take marking workflow
   - Added "Partial Take" checkbox next to "Best Take" checkbox in Annotations tab
@@ -881,10 +888,9 @@ This file tracks changes made to the AudioBrowser application. The version numbe
   - Fixed Windows archive creation using Python zipfile instead of 7z dependency
   - Enhanced Linux build dependencies to resolve PyInstaller library warnings
   - Updated action versions for better security and stability
-- **GitHub Actions CI/CD Pipeline**: Automated building and releasing system
+- **GitHub Actions CI/CD Pipeline**: Automated building system
   - Multi-platform builds (Windows, Linux, macOS) on every commit
-  - Automatic release creation with downloadable executables
-  - Build artifacts stored for 30 days, releases permanent
+  - Build artifacts stored for 30 days
   - Integration with existing git-based version system
 - **Documentation**: CI/CD setup documentation and updated README/BUILD guides
 - **Release Distribution**: Pre-built executables available from GitHub Releases page
