@@ -36,11 +36,6 @@ jobs:
       with:
         fetch-depth: 0  # Need full history for potential version calculation
     
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
     - name: Free disk space
       run: |
         echo "Freeing up disk space for Android build..."
@@ -50,125 +45,40 @@ jobs:
         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
         df -h
     
-    - name: Cache Buildozer global directory
-      uses: actions/cache@v4
+    - name: Build APK with Buildozer Action
+      uses: ArtemSBulgakov/buildozer-action@v1.2.0
+      id: buildozer
       with:
-        path: ~/.buildozer
-        key: ${{ runner.os }}-buildozer-${{ hashFiles('PolyRhythmMetronome/android/buildozer.spec') }}
-        restore-keys: |
-          ${{ runner.os }}-buildozer-
-    
-    - name: Cache Buildozer build directory
-      uses: actions/cache@v4
-      with:
-        path: PolyRhythmMetronome/android/.buildozer
-        key: ${{ runner.os }}-buildozer-build-${{ hashFiles('PolyRhythmMetronome/android/buildozer.spec') }}
-        restore-keys: |
-          ${{ runner.os }}-buildozer-build-
-    
-    - name: Install system dependencies
-      run: |
-        echo "Installing system dependencies..."
-        sudo apt-get update
-        sudo apt-get install -y build-essential openjdk-11-jdk git zip unzip autoconf libtool pkg-config
-        sudo apt-get install -y zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
-        sudo apt-get install -y ccache libltdl-dev
-        echo "System dependencies installed successfully"
-    
-    - name: Install Python dependencies
-      run: |
-        echo "Installing Python dependencies..."
-        pip install --upgrade pip
-        pip install buildozer cython
-        echo "Python dependencies installed successfully"
-    
-    - name: Verify buildozer installation
-      run: |
-        echo "Verifying buildozer installation..."
-        buildozer --version
-        which buildozer
-    
-    - name: Set up Android SDK environment
-      run: |
-        echo "Setting up Android SDK environment variables..."
-        # Set environment variables for buildozer to auto-accept licenses
-        echo "ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
-        # Auto-accept licenses during SDK installation
-        echo "BUILDOZER_WARN_ON_ROOT=1" >> $GITHUB_ENV
-        echo "Environment variables configured"
-    
-    - name: Verify build prerequisites
-      run: |
-        cd PolyRhythmMetronome/android
-        echo "Verifying build prerequisites..."
-        
-        if [ -f "main.py" ]; then
-          echo "✅ Found: main.py"
-        else
-          echo "❌ Missing: main.py"
-          exit 1
-        fi
-        
-        if [ -f "buildozer.spec" ]; then
-          echo "✅ Found: buildozer.spec"
-        else
-          echo "❌ Missing: buildozer.spec"
-          exit 1
-        fi
-        
-        echo "All required files present"
-        echo "Current directory contents:"
-        ls -la
-    
-    - name: Build APK with Buildozer
-      working-directory: PolyRhythmMetronome/android
-      run: |
-        echo "Starting APK build..."
-        echo "This may take 30-60 minutes on first build..."
-        # Use yes to auto-accept all prompts including SDK licenses
-        yes | buildozer -v android debug || buildozer -v android debug
-        echo "Build completed!"
+        workdir: PolyRhythmMetronome/android
+        buildozer_version: stable
     
     - name: Verify APK build
       run: |
-        cd PolyRhythmMetronome/android
-        if [ -d "bin" ]; then
-          echo "✅ bin/ directory exists"
-          ls -lh bin/
-          
-          APK_COUNT=$(ls bin/*.apk 2>/dev/null | wc -l)
-          if [ $APK_COUNT -gt 0 ]; then
-            echo "✅ Found $APK_COUNT APK file(s)"
-            for apk in bin/*.apk; do
-              echo "APK: $apk"
-              echo "Size: $(ls -lh "$apk" | awk '{print $5}')"
-            done
-          else
-            echo "❌ No APK files found in bin/"
-            exit 1
-          fi
+        echo "✅ Buildozer action completed successfully"
+        echo "APK filename: ${{ steps.buildozer.outputs.filename }}"
+        if [ -f "${{ steps.buildozer.outputs.filename }}" ]; then
+          echo "✅ APK file verified"
+          ls -lh "${{ steps.buildozer.outputs.filename }}"
         else
-          echo "❌ bin/ directory not found"
+          echo "❌ APK file not found at expected location"
           exit 1
         fi
     
     - name: Get APK info
       id: apk_info
       run: |
-        cd PolyRhythmMetronome/android/bin
-        APK_FILE=$(ls *.apk | head -n 1)
-        APK_NAME=$(basename "$APK_FILE")
+        APK_PATH="${{ steps.buildozer.outputs.filename }}"
+        APK_NAME=$(basename "$APK_PATH")
         echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
-        echo "apk_path=PolyRhythmMetronome/android/bin/$APK_FILE" >> $GITHUB_OUTPUT
+        echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
         echo "APK Name: $APK_NAME"
-        echo "APK Path: PolyRhythmMetronome/android/bin/$APK_FILE"
+        echo "APK Path: $APK_PATH"
     
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: polyrhythm-metronome-apk
-        path: PolyRhythmMetronome/android/bin/*.apk
+        path: ${{ steps.buildozer.outputs.filename }}
         retention-days: 30
     
     - name: Create Release (if requested or on main branch)
