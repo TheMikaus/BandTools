@@ -1,0 +1,203 @@
+name: Build PolyRhythmMetronome APK
+
+# This workflow builds the PolyRhythmMetronome Android APK and stores it as GitHub Artifacts and Releases.
+# Built APKs are available via:
+# 1. Artifacts section (30 days retention)
+# 2. Releases section (permanent, main branch builds only)
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'PolyRhythmMetronome/android/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'PolyRhythmMetronome/android/**'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a release after build'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-polyrhythm-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for potential version calculation
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Free disk space
+      run: |
+        echo "Freeing up disk space for Android build..."
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        df -h
+    
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v4
+      with:
+        path: ~/.buildozer
+        key: ${{ runner.os }}-buildozer-${{ hashFiles('PolyRhythmMetronome/android/buildozer.spec') }}
+        restore-keys: |
+          ${{ runner.os }}-buildozer-
+    
+    - name: Cache Buildozer build directory
+      uses: actions/cache@v4
+      with:
+        path: PolyRhythmMetronome/android/.buildozer
+        key: ${{ runner.os }}-buildozer-build-${{ hashFiles('PolyRhythmMetronome/android/buildozer.spec') }}
+        restore-keys: |
+          ${{ runner.os }}-buildozer-build-
+    
+    - name: Install system dependencies
+      run: |
+        echo "Installing system dependencies..."
+        sudo apt-get update
+        sudo apt-get install -y openjdk-11-jdk git zip unzip autoconf libtool pkg-config
+        sudo apt-get install -y zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
+        echo "System dependencies installed successfully"
+    
+    - name: Install Python dependencies
+      run: |
+        echo "Installing Python dependencies..."
+        pip install --upgrade pip
+        pip install buildozer cython
+        echo "Python dependencies installed successfully"
+    
+    - name: Verify buildozer installation
+      run: |
+        echo "Verifying buildozer installation..."
+        buildozer --version
+        which buildozer
+    
+    - name: Verify build prerequisites
+      run: |
+        cd PolyRhythmMetronome/android
+        echo "Verifying build prerequisites..."
+        
+        if [ -f "main.py" ]; then
+          echo "✅ Found: main.py"
+        else
+          echo "❌ Missing: main.py"
+          exit 1
+        fi
+        
+        if [ -f "buildozer.spec" ]; then
+          echo "✅ Found: buildozer.spec"
+        else
+          echo "❌ Missing: buildozer.spec"
+          exit 1
+        fi
+        
+        echo "All required files present"
+        echo "Current directory contents:"
+        ls -la
+    
+    - name: Build APK with Buildozer
+      working-directory: PolyRhythmMetronome/android
+      run: |
+        echo "Starting APK build..."
+        echo "This may take 30-60 minutes on first build..."
+        buildozer -v android debug
+        echo "Build completed!"
+    
+    - name: Verify APK build
+      run: |
+        cd PolyRhythmMetronome/android
+        if [ -d "bin" ]; then
+          echo "✅ bin/ directory exists"
+          ls -lh bin/
+          
+          APK_COUNT=$(ls bin/*.apk 2>/dev/null | wc -l)
+          if [ $APK_COUNT -gt 0 ]; then
+            echo "✅ Found $APK_COUNT APK file(s)"
+            for apk in bin/*.apk; do
+              echo "APK: $apk"
+              echo "Size: $(ls -lh "$apk" | awk '{print $5}')"
+            done
+          else
+            echo "❌ No APK files found in bin/"
+            exit 1
+          fi
+        else
+          echo "❌ bin/ directory not found"
+          exit 1
+        fi
+    
+    - name: Get APK info
+      id: apk_info
+      run: |
+        cd PolyRhythmMetronome/android/bin
+        APK_FILE=$(ls *.apk | head -n 1)
+        APK_NAME=$(basename "$APK_FILE")
+        echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+        echo "apk_path=PolyRhythmMetronome/android/bin/$APK_FILE" >> $GITHUB_OUTPUT
+        echo "APK Name: $APK_NAME"
+        echo "APK Path: PolyRhythmMetronome/android/bin/$APK_FILE"
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: polyrhythm-metronome-apk
+        path: PolyRhythmMetronome/android/bin/*.apk
+        retention-days: 30
+    
+    - name: Create Release (if requested or on main branch)
+      if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: polyrhythm-metronome-android-${{ github.run_number }}
+        name: PolyRhythmMetronome Android v1.0-build${{ github.run_number }}
+        body: |
+          # PolyRhythmMetronome Android APK
+          
+          Automated build of PolyRhythmMetronome Android application.
+          
+          ## Downloads
+          - **Android APK**: ${{ steps.apk_info.outputs.apk_name }}
+          
+          ## Installation
+          1. Download the APK file
+          2. Transfer it to your Android device
+          3. Enable "Install from Unknown Sources" in Settings
+          4. Tap the APK file to install
+          
+          ## Build Information
+          - Build: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          - Workflow: ${{ github.workflow }}
+          
+          ## Compatibility
+          - Minimum Android: 5.0 (API 21)
+          - Target Android: 12 (API 31)
+          - Architectures: arm64-v8a, armeabi-v7a
+          
+          ## Features
+          - Multi-layer rhythm patterns
+          - Stereo subdivision metronome
+          - Custom drum sounds and tone generation
+          - Real-time rhythm editing
+          - Save/load rhythm patterns
+          
+          For more information, see the [PolyRhythmMetronome documentation](https://github.com/TheMikaus/BandTools/tree/main/PolyRhythmMetronome/android).
+        files: |
+          ${{ steps.apk_info.outputs.apk_path }}
+        draft: false
+        prerelease: false
