@@ -473,10 +473,10 @@ class SimpleMetronomeEngine:
                 # We'll save to a temporary WAV file and play it
                 import tempfile
                 import wave
-                import struct
                 
-                # Create a unique filename
-                audio_hash = hash(audio_data.tobytes())
+                # Create a unique hash based on stereo audio data
+                # This allows caching the same sound for reuse
+                audio_hash = hash(stereo.tobytes())
                 
                 # Check cache
                 if audio_hash not in self.temp_audio_files:
