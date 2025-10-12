@@ -5,25 +5,32 @@ on:
     inputs:
       target:
         description: "Buildozer command"
-        type: choice
-        required: true
+        type: bool
+        required: false
         default: android debug
-        options:
-          - android debug
-          - android release
-          - android release aab
+
+      create_release:
+        description: 'Create a release after build'
+        required: false
+        default: android debug
+        type: boolean
+
       spec_path:
         description: "Path to buildozer.spec (usually ./buildozer.spec)"
         type: string
         required: true
-        default: ./buildozer.spec
+        default: ./PolyRhythmMetronome/android/buildozer.spec
+
       clean:
         description: "Clean before build?"
         type: boolean
         default: false
 
+
 permissions:
-  contents: read
+  contents: write
+  packages: write
+
 
 concurrency:
   group: build-android-${{ github.ref }}
