@@ -19,7 +19,8 @@ User-facing documentation for end users and musicians.
 Developer-focused documentation for understanding and modifying the code.
 
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
-- [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - NEW in v1.1: Audio playback system details
+- [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - Audio playback system details (v1.1)
+- [V1.2 Changes](technical/V1.2_CHANGES.md) - NEW: Technical details of v1.2 improvements and bug fixes
 - [Porting Analysis](technical/PORTING_ANALYSIS.md) - Desktop to Android porting decisions
 - [Build Guide](technical/BUILD_GUIDE.md) - Building and deploying
 - [Setup Script](technical/SETUP_SCRIPT.md) - Automated dependency setup technical details
@@ -28,7 +29,8 @@ Developer-focused documentation for understanding and modifying the code.
 Quality assurance and testing documentation.
 
 - [Test Plan](test_plans/TEST_PLAN.md) - Testing strategy and cases
-- [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - NEW: Comprehensive test plan for v1.1 bug fixes
+- [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - Comprehensive test plan for v1.1 bug fixes
+- [Bug Fixes v1.2 Test Plan](test_plans/bug_fixes_v1.2_test_plan.md) - NEW: Comprehensive test plan for v1.2 UI improvements and bug fixes
 - [Device Compatibility](test_plans/DEVICE_COMPATIBILITY.md) - Tested devices
 
 ## Quick Links
