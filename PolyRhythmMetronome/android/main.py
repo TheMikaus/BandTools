@@ -268,7 +268,7 @@ def new_uid():
     return uuid.uuid4().hex
 
 
-def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", uid=None):
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
     """Create a layer dictionary"""
     return {
         "uid": uid or new_uid(),
@@ -278,7 +278,9 @@ def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="sna
         "mute": bool(mute),
         "mode": mode,
         "drum": drum,
-        "color": color
+        "color": color,
+        "flash_color": flash_color or color,  # Default to same as color for backward compatibility
+        "accent_vol": float(accent_vol)  # Volume multiplier for first beat of measure
     }
 
 
@@ -326,6 +328,8 @@ class RhythmState:
                 x.setdefault("mode", "tone")
                 x.setdefault("drum", "snare")
                 x.setdefault("color", "#9CA3AF")
+                x.setdefault("flash_color", x.get("color", "#9CA3AF"))  # Default to color if not set
+                x.setdefault("accent_vol", 1.6)
                 x.setdefault("uid", new_uid())
                 return x
             
@@ -443,9 +447,21 @@ class SimpleMetronomeEngine:
                 # Convert to int16 for Android AudioTrack
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 
-                # Create AudioTrack
-                # Use audio_int16.size to get total elements (samples * channels)
-                buffer_size = audio_int16.size * 2  # total elements * 2 bytes per int16
+                # Get the actual data size in bytes
+                audio_bytes = audio_int16.tobytes()
+                data_size = len(audio_bytes)
+                
+                # Get minimum buffer size required by AudioTrack
+                min_buffer_size = self.AudioTrack.getMinBufferSize(
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT
+                )
+                
+                # Use the larger of minimum required or actual data size
+                buffer_size = max(min_buffer_size, data_size)
+                
+                # Create AudioTrack with appropriate buffer size
                 audio_track = self.AudioTrack(
                     self.AudioManager.STREAM_MUSIC,
                     SAMPLE_RATE,
@@ -456,7 +472,7 @@ class SimpleMetronomeEngine:
                 )
                 
                 # Write audio data and play
-                audio_track.write(audio_int16.tobytes(), 0, buffer_size)
+                audio_track.write(audio_bytes, 0, data_size)
                 audio_track.play()
             except Exception as e:
                 print(f"Android audio playback error: {e}")
@@ -542,8 +558,8 @@ class SimpleMetronomeEngine:
                     # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
-                        color = layer.get("color", "#3B82F6")
-                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('left', u, c), 0)
+                        flash_color = layer.get("flash_color", layer.get("color", "#3B82F6"))
+                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('left', u, c), 0)
                     left_next_times[i] += left_intervals[i]
             
             # Check right layers
@@ -557,8 +573,8 @@ class SimpleMetronomeEngine:
                     # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
-                        color = layer.get("color", "#EF4444")
-                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('right', u, c), 0)
+                        flash_color = layer.get("flash_color", layer.get("color", "#EF4444"))
+                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('right', u, c), 0)
                     right_next_times[i] += right_intervals[i]
             
             # Small sleep to avoid busy waiting
@@ -606,7 +622,8 @@ class LayerWidget(BoxLayout):
     def flash(self, color=None, duration=0.12):
         """Flash the layer widget with the specified color"""
         if color is None:
-            color = self.layer.get("color", "#9CA3AF")
+            # Use flash_color if available, otherwise use regular color
+            color = self.layer.get("flash_color", self.layer.get("color", "#9CA3AF"))
         
         # Parse hex color
         try:
@@ -684,20 +701,29 @@ class LayerWidget(BoxLayout):
         
         self.add_widget(top_row)
         
-        # Row 2: [Color] [Volume slider]
+        # Row 2: [InactiveColor] [ActiveColor] [Volume slider]
         bottom_row = BoxLayout(size_hint_y=0.5, spacing='3dp')
         
-        # Color picker button
+        # Inactive color picker button
         self.color_button = Button(
             text="",
-            size_hint_x=0.15,
+            size_hint_x=0.1,
             background_color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
         )
-        self.color_button.bind(on_press=self._open_color_picker)
+        self.color_button.bind(on_press=lambda x: self._open_color_picker("inactive"))
         bottom_row.add_widget(self.color_button)
         
+        # Active/Flash color picker button
+        self.flash_color_button = Button(
+            text="",
+            size_hint_x=0.1,
+            background_color=self._hex_to_rgba(self.layer.get("flash_color", self.layer.get("color", "#9CA3AF")))
+        )
+        self.flash_color_button.bind(on_press=lambda x: self._open_color_picker("active"))
+        bottom_row.add_widget(self.flash_color_button)
+        
         # Volume label
-        vol_label = Label(text="Vol:", size_hint_x=0.1, font_size='12sp')
+        vol_label = Label(text="Vol:", size_hint_x=0.08, font_size='12sp')
         bottom_row.add_widget(vol_label)
         
         # Volume slider
@@ -705,7 +731,7 @@ class LayerWidget(BoxLayout):
             min=0.0,
             max=1.5,
             value=self.layer.get("vol", 1.0),
-            size_hint_x=0.75
+            size_hint_x=0.72
         )
         self.vol_slider.bind(value=self._on_vol_change)
         bottom_row.add_widget(self.vol_slider)
@@ -751,36 +777,50 @@ class LayerWidget(BoxLayout):
         except (ValueError, IndexError):
             return (0.6, 0.6, 0.6, 1)
     
-    def _open_color_picker(self, instance):
-        """Open color picker popup"""
+    def _open_color_picker(self, color_type):
+        """Open color picker popup for inactive or active color"""
         from kivy.uix.colorpicker import ColorPicker
         
         content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
         
+        # Get current color based on type
+        if color_type == "active":
+            current_color = self.layer.get("flash_color", self.layer.get("color", "#9CA3AF"))
+        else:
+            current_color = self.layer.get("color", "#9CA3AF")
+        
         color_picker = ColorPicker(
-            color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
+            color=self._hex_to_rgba(current_color)
         )
         content.add_widget(color_picker)
         
         # Buttons
         button_box = BoxLayout(size_hint_y=0.2, spacing='10dp')
         
-        popup = Popup(title='Pick Color', content=content, size_hint=(0.9, 0.9))
+        title = 'Pick Active Color' if color_type == "active" else 'Pick Inactive Color'
+        popup = Popup(title=title, content=content, size_hint=(0.9, 0.9))
         
         def on_ok(btn):
             # Convert RGBA to hex
             r, g, b, a = color_picker.color
             hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
-            self.layer["color"] = hex_color
-            self.color_button.background_color = color_picker.color
             
-            # Update background color
-            with self.canvas.before:
-                self.canvas.before.clear()
-                Color(r, g, b, 0.3)
-                self.rect = Rectangle(size=self.size, pos=self.pos)
-            
-            self.base_rgba = (r, g, b, 0.3)
+            if color_type == "active":
+                # Update flash color
+                self.layer["flash_color"] = hex_color
+                self.flash_color_button.background_color = color_picker.color
+            else:
+                # Update inactive color and background
+                self.layer["color"] = hex_color
+                self.color_button.background_color = color_picker.color
+                
+                # Update background color
+                with self.canvas.before:
+                    self.canvas.before.clear()
+                    Color(r, g, b, 0.3)
+                    self.rect = Rectangle(size=self.size, pos=self.pos)
+                
+                self.base_rgba = (r, g, b, 0.3)
             
             if self.on_change:
                 self.on_change()

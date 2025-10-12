@@ -2,10 +2,14 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
-## [1.5.0] - Audio Playback Bug Fix
+## [1.5.0] - Audio Playback Bug Fix and Color Enhancements
 
 ### Fixed
-- **Tone Audio Playback on Android**: Fixed critical buffer size calculation bug in AudioTrack implementation that prevented tone sounds from playing correctly. The bug calculated buffer size using only the number of samples instead of total elements (samples × channels), causing tones (short duration) to fail while drums (long duration) worked. Changed from `len(audio_int16) * 2` to `audio_int16.size * 2` for correct byte count.
+- **Tone Audio Playback on Android**: Fixed critical buffer size calculation bug in AudioTrack implementation. Now uses `getMinBufferSize()` to ensure buffer meets Android system requirements, preventing "Invalid audio buffer size" errors. The fix ensures compatibility across all Android devices.
+
+### Added
+- **Separate Active/Inactive Colors**: Each layer now has two color pickers - one for the inactive background color and one for the active/flash color. This allows full customization of layer appearance during beats without breaking the flash functionality.
+- **Accent Volume Support**: Added `accent_vol` parameter to layers (default 1.6) for future accent beat implementation on first beat of measure.
 
 ## [1.4.0] - UI Improvements and Enhanced Usability
 
