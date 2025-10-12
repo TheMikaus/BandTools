@@ -33,6 +33,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Add this step to fix the permission issue
+      - name: Fix permissions for buildozer user
+        run: |
+          sudo chown -R 1000:1000 .
+
       # Make sure the dirs exist and are writable by *any* uid the container uses
       - name: Prep cache dirs (permissive perms)
         run: |
@@ -65,9 +70,6 @@ jobs:
         with:
           workdir: ./PolyRhythmMetronome/android
           command: ${{ inputs.target }}
-        env:
-          USER_ID: "1000"
-          GROUP_ID: "1000"
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
