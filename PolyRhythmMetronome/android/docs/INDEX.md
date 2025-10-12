@@ -9,7 +9,8 @@ User-facing documentation for end users and musicians.
 
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
-- [Color and Flash Guide](user_guides/color_and_flash_guide.md) - NEW in v1.1: Custom colors and visual feedback
+- [v1.2 Improvements Guide](user_guides/v1.2_improvements.md) - NEW: What's new in v1.2 with visual examples
+- [Color and Flash Guide](user_guides/color_and_flash_guide.md) - Custom colors and visual feedback (v1.1)
 - [FAQ](user_guides/FAQ.md) - Frequently asked questions
 - [Kindle Fire Kivy Launcher Guide](user_guides/KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md) - Complete setup for testing on Kindle Fire HD 10 with Kivy Launcher
 - [Local Development on Windows](user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) - Build, test, and iterate locally on Windows
