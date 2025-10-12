@@ -23,6 +23,8 @@ import math
 import time
 import uuid
 from pathlib import Path
+from io import StringIO
+from datetime import datetime
 
 # ---------------- Auto-install missing packages ---------------- #
 
@@ -74,6 +76,41 @@ except ImportError as e:
 if platform == 'android':
     from android.permissions import request_permissions, Permission
     request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
+
+# ---------------- Log Capture ---------------- #
+
+class LogCapture:
+    """Captures stdout/stderr for display in the app"""
+    def __init__(self):
+        self.buffer = StringIO()
+        self.start_time = datetime.now()
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
+        
+    def write(self, text):
+        """Capture text to buffer and pass through to original"""
+        if text and text.strip():
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            line = f"[{timestamp}] {text}"
+            self.buffer.write(line)
+            if not line.endswith('\n'):
+                self.buffer.write('\n')
+        # Also write to original output
+        self.original_stdout.write(text)
+        
+    def flush(self):
+        """Flush both buffer and original stdout"""
+        self.buffer.flush()
+        self.original_stdout.flush()
+        
+    def get_logs(self):
+        """Get all captured logs"""
+        return self.buffer.getvalue()
+
+# Initialize log capture at module level
+log_capture = LogCapture()
+sys.stdout = log_capture
+sys.stderr = log_capture
 
 # ---------------- Constants ---------------- #
 
@@ -892,20 +929,20 @@ class MetronomeWidget(BoxLayout):
     
     def _build_controls(self):
         """Build play/stop and file operation controls"""
-        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='80dp', spacing='5dp')
+        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='120dp', spacing='5dp')
         
         # Play/Stop button
         self.play_button = Button(
             text="PLAY",
             font_size='20sp',
-            size_hint_y=0.5,
+            size_hint_y=0.4,
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.play_button.bind(on_press=self.on_play_stop)
         controls.add_widget(self.play_button)
         
-        # Save/Load buttons
-        file_box = BoxLayout(size_hint_y=0.5, spacing='5dp')
+        # Save/Load/New buttons
+        file_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
         
         save_btn = Button(text="SAVE", font_size='16sp')
         save_btn.bind(on_press=self.on_save)
@@ -920,6 +957,19 @@ class MetronomeWidget(BoxLayout):
         file_box.add_widget(new_btn)
         
         controls.add_widget(file_box)
+        
+        # Logs button
+        logs_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        
+        logs_btn = Button(
+            text="VIEW LOGS",
+            font_size='16sp',
+            background_color=(0.3, 0.3, 0.8, 1)
+        )
+        logs_btn.bind(on_press=self.on_view_logs)
+        logs_box.add_widget(logs_btn)
+        
+        controls.add_widget(logs_box)
         
         return controls
     
@@ -1026,6 +1076,61 @@ class MetronomeWidget(BoxLayout):
         cancel_button = Button(text="Cancel")
         cancel_button.bind(on_press=popup.dismiss)
         button_box.add_widget(cancel_button)
+        
+        content.add_widget(button_box)
+        popup.open()
+    
+    def on_view_logs(self, instance):
+        """Handle view logs button press"""
+        content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
+        
+        # Get logs from the log capture
+        logs_text = log_capture.get_logs()
+        if not logs_text.strip():
+            logs_text = "No logs available yet."
+        
+        # Create scrollable text input to display logs
+        logs_display = TextInput(
+            text=logs_text,
+            multiline=True,
+            readonly=True,
+            size_hint=(1, 0.9),
+            font_size='12sp',
+            font_name='RobotoMono-Regular.ttf' if os.path.exists('RobotoMono-Regular.ttf') else 'DroidSansMono'
+        )
+        content.add_widget(logs_display)
+        
+        # Button box
+        button_box = BoxLayout(size_hint=(1, 0.1), spacing='10dp')
+        
+        popup = Popup(title="Application Logs", content=content, size_hint=(0.95, 0.9))
+        
+        def refresh_logs(instance):
+            """Refresh the log display"""
+            logs_display.text = log_capture.get_logs()
+        
+        def copy_logs(instance):
+            """Copy logs to clipboard (if available)"""
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(log_capture.get_logs())
+                # Show brief confirmation
+                copy_btn.text = "Copied!"
+                Clock.schedule_once(lambda dt: setattr(copy_btn, 'text', 'Copy'), 2)
+            except Exception as e:
+                print(f"Clipboard error: {e}")
+        
+        refresh_btn = Button(text="Refresh")
+        refresh_btn.bind(on_press=refresh_logs)
+        button_box.add_widget(refresh_btn)
+        
+        copy_btn = Button(text="Copy")
+        copy_btn.bind(on_press=copy_logs)
+        button_box.add_widget(copy_btn)
+        
+        close_button = Button(text="Close")
+        close_button.bind(on_press=popup.dismiss)
+        button_box.add_widget(close_button)
         
         content.add_widget(button_box)
         popup.open()

@@ -8,10 +8,14 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 - **Audio Playback**: Improved simpleaudio auto-installation to ensure Play button properly plays audio
 - **Per-Layer Visual Flashing**: Fixed flashing to highlight specific layer rows instead of full-screen overlay, matching desktop behavior
 
+### Added
+- **Log Viewer**: New "VIEW LOGS" button displays application logs from the current session with Refresh and Copy functionality for debugging
+
 ### Changed
 - **BPM Button Layout**: Changed BPM preset buttons from 4 columns (2 rows) to 8 columns (1 row) - buttons are now taller but thinner for better space usage
 - **UI Spacing**: Reduced gap between BPM buttons and layer list boxes for more compact layout (spacing reduced from 10dp to 2dp)
 - **Header Height**: Increased from 120dp to 140dp to accommodate taller BPM buttons
+- **Controls Height**: Increased from 80dp to 120dp to accommodate logs button
 
 ## [1.1.0] - Bug Fixes and Enhancements
 
