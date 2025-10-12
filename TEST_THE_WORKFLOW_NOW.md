@@ -21,20 +21,15 @@ https://github.com/TheMikaus/BandTools/actions/workflows/build-polyrhythm-apk.ym
 
 ## What was fixed?
 
-The error **"chown: invalid user: 'user'"** was caused by this problematic code:
-```yaml
-- name: Fix permissions for buildozer user
-  run: |
-    sudo chown -R 1000:1000 .
-```
+The error **"chown: invalid user: 'user'"** was caused by a bug in the `ArtemSBulgakov/buildozer-action@v1` Docker container. The container's entrypoint script tried to run `chown user:user` where "user" was a literal string that didn't exist in the container.
 
-This tried to change ownership to UID 1000, but the buildozer-action Docker container runs as a different user, causing the error.
+The previous attempted fix using `sudo chown -R 1000:1000 .` was trying to work around this bug but couldn't help because the error occurred inside the action's Docker container.
 
-### The fix:
-- ✅ Removed the `sudo chown` command entirely
+### The real fix:
+- ✅ **Updated buildozer-action from `@v1` to `@master`** - The master version has the chown bug fixed
+- ✅ Removed the workaround `sudo chown` command (no longer needed)
 - ✅ Removed unnecessary `sudo` from directory creation
-- ✅ Simplified to just `chmod 777` on needed directories
-- ✅ The buildozer-action handles permissions internally
+- ✅ Simplified to just `chmod 777` on cache directories
 
 ---
 
