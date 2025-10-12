@@ -330,10 +330,8 @@ class SimpleMetronomeEngine:
         if self.running:
             return
         
-        with self.state._lock:
-            if not self.state.left and not self.state.right:
-                print("No layers to play")
-                return
+        # Allow starting even with no layers - just won't play any sounds
+        # This lets users add layers while running
         
         self.running = True
         
@@ -361,6 +359,10 @@ class SimpleMetronomeEngine:
     
     def _play_sound(self, audio_data, volume=1.0, channel='center'):
         """Play audio data using available library"""
+        if self.audio_lib is None:
+            # No audio library available, skip playback
+            return
+            
         if self.audio_lib == 'simpleaudio':
             try:
                 # Convert to int16 stereo
