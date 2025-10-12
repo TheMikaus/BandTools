@@ -33,16 +33,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Add this step to fix the permission issue
-      - name: Fix permissions for buildozer user
+      # Make sure the dirs exist and are writable
+      - name: Prep cache dirs
         run: |
-          sudo chown -R 1000:1000 .
-
-      # Make sure the dirs exist and are writable by *any* uid the container uses
-      - name: Prep cache dirs (permissive perms)
-        run: |
-          sudo mkdir -p "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
-          sudo chmod -R a+rwx "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
+          mkdir -p "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
+          chmod -R 777 "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
 
       - name: Cache global .buildozer
         uses: actions/cache@v4
@@ -59,16 +54,15 @@ jobs:
       - name: Optional clean
         if: ${{ fromJson(inputs.clean) }}
         run: |
-          buildozer android clean || true
           rm -rf .buildozer PolyRhythmMetronome/android/bin || true
           mkdir -p .buildozer PolyRhythmMetronome/android/bin
-          chmod -R a+rwx .buildozer PolyRhythmMetronome/android/bin
+          chmod -R 777 .buildozer PolyRhythmMetronome/android/bin
 
-      - name: Build with Buildozer (run container as uid 1000)
+      - name: Build with Buildozer
         id: build
-        uses: ArtemSBulgakov/buildozer-action@v1
+        uses: ArtemSBulgakov/buildozer-action@master
         with:
-          workdir: ./PolyRhythmMetronome/android
+          workdir: PolyRhythmMetronome/android
           command: ${{ inputs.target }}
 
       - name: Upload artifacts (APK/AAB)
