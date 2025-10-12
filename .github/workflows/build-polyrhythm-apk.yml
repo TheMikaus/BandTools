@@ -30,8 +30,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Create custom user and change ownership
+        run: |
+          # The `run` keyword executes scripts in the virtual machine environment.
+          # Here we create a new user named `custom-builder` and a group.
+          sudo useradd -m user
+          sudo groupadd user-group
+          sudo usermod -a -G user-group user
+          
+          # We need to change the ownership of the workspace directory
+          # so our new user can check out the code.
+          sudo chown -R user:user-group $GITHUB_WORKSPACE
+        shell: bash
       - name: Checkout
-        uses: actions/checkout@v4
+        env:
+          HOME: /home/custom-builder
+          USER: custom-builder
+        run: |
+          # Use `sudo` to execute the checkout command as our new user.
+          sudo -u custom-builder -i actions/checkout@v4
 
       # Make sure the dirs exist and are writable
       - name: Prep cache dirs
@@ -60,11 +77,10 @@ jobs:
 
       - name: Build with Buildozer
         id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@master
+        uses: ArtemSBulgakov/buildozer-action@v1
         with:
           workdir: PolyRhythmMetronome/android
           command: ${{ inputs.target }}
-          buildozer_version: stable
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
