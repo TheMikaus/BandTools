@@ -8,10 +8,7 @@ on:
         type: choice
         required: true
         default: android debug
-        options:
-          - android debug
-          - android release
-          - android release aab
+        options: [android debug, android release, android release aab]
       spec_path:
         description: "Path to buildozer.spec"
         type: string
@@ -40,23 +37,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Workaround for user issue
+      # Create cache dirs as root, then give them back to the runner user.
+      - name: Prep cache dirs (no chown to 'user')
         run: |
-          if ! id -u user >/dev/null 2>&1; then
-            sudo useradd -m -s /bin/bash user
-          fi
-          sudo chown -R user:user "$GITHUB_WORKSPACE" "${HOME}/.buildozer" || true
-      
-      - name: Prep dirs (workspace & caches)
-        run: |
-          mkdir -p "${HOME}/.buildozer" ".buildozer" "bin"
-          
-      # Optional caches
+          sudo mkdir -p "${HOME}/.buildozer" ".buildozer" "bin"
+          sudo chown -R "$USER:$USER" "${HOME}/.buildozer" ".buildozer" "bin"
+
       - name: Cache global .buildozer
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
           key: global-buildozer-${{ runner.os }}-${{ hashFiles(inputs.spec_path) }}
+
       - name: Cache project .buildozer
         uses: actions/cache@v4
         with:
@@ -68,17 +60,14 @@ jobs:
         run: |
           buildozer android clean || true
           rm -rf .buildozer bin || true
+          mkdir -p .buildozer bin
 
       - name: Build with Buildozer
         id: build
         uses: ArtemSBulgakov/buildozer-action@v1
         with:
-          # Directory that contains buildozer.spec:
           workdir: ./PolyRhythmMetronome/android
-          # Buildozer command chosen in the form:
           command: ${{ inputs.target }}
-          # Optional: pin buildozer version
-          # buildozer_version: stable
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
