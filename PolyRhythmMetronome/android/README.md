@@ -50,7 +50,11 @@ Then build in the android folder with buildozer -v android debug
 **Solution**: Check logcat for Python errors. Ensure device has Android 5.0+
 
 **Problem**: No sound
-**Solution**: Check device volume, ensure neither ear is muted
+**Solution**: 
+- Check device volume and ensure neither ear is muted
+- Verify the app shows one of: "[audio] Using Android AudioTrack", "[audio] Using simpleaudio", or "[audio] Using Kivy SoundLoader" in logs
+- The app automatically selects the best available audio backend (Android AudioTrack → simpleaudio → Kivy SoundLoader)
+- On Android, ensure pyjnius is included in the build (check buildozer.spec requirements)
 
 **Problem**: Can't save/load files
 **Solution**: Grant storage permissions in Android Settings > Apps > PolyRhythm Metronome

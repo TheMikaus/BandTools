@@ -124,7 +124,7 @@ AUTOSAVE_FILE = "metronome_autosave.json"
 BPM_PRESETS = [60, 80, 100, 120, 140, 160, 180, 200]
 
 # Subdivision options (notes per beat)
-SUBDIV_OPTIONS = ["1", "2", "4", "8", "16"]
+SUBDIV_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "16", "32", "64"]
 
 # Drum sound options
 DRUM_CHOICES = ["kick", "snare", "hihat", "crash", "tom", "ride"]
@@ -347,20 +347,42 @@ class SimpleMetronomeEngine:
         self.thread = None
         self._lock = threading.RLock()
         
-        # Try to import audio playback library with auto-install
+        # Try to import audio playback library
         self.audio_lib = None
-        try:
-            # Try to auto-install simpleaudio if not available
-            sa = ensure_pkg("simpleaudio")
-            self.audio_lib = 'simpleaudio'
-            self.sa = sa
-            print(f"[audio] Using simpleaudio for playback")
-        except ImportError as e:
-            print(f"[audio] Could not load simpleaudio: {e}")
+        
+        # On Android, try pyjnius AudioTrack first (most reliable)
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                AudioTrack = autoclass('android.media.AudioTrack')
+                AudioManager = autoclass('android.media.AudioManager')
+                AudioFormat = autoclass('android.media.AudioFormat')
+                
+                self.AudioTrack = AudioTrack
+                self.AudioManager = AudioManager
+                self.AudioFormat = AudioFormat
+                self.audio_lib = 'android'
+                print(f"[audio] Using Android AudioTrack for playback")
+            except Exception as e:
+                print(f"[audio] Could not load Android AudioTrack: {e}")
+        
+        # Try simpleaudio (desktop/some Android builds with it pre-installed)
+        if self.audio_lib is None:
+            try:
+                import simpleaudio as sa
+                self.sa = sa
+                self.audio_lib = 'simpleaudio'
+                print(f"[audio] Using simpleaudio for playback")
+            except ImportError as e:
+                print(f"[audio] Could not load simpleaudio: {e}")
+        
+        # Fallback to Kivy audio
+        if self.audio_lib is None:
             try:
                 from kivy.core.audio import SoundLoader
-                self.audio_lib = 'kivy'
                 self.SoundLoader = SoundLoader
+                self.audio_lib = 'kivy'
+                self.temp_audio_files = {}  # Cache for temporary audio files
                 print(f"[audio] Using Kivy SoundLoader for playback")
             except ImportError:
                 print("Warning: No audio playback library available")
@@ -403,25 +425,85 @@ class SimpleMetronomeEngine:
         if self.audio_lib is None:
             # No audio library available, skip playback
             return
-            
-        if self.audio_lib == 'simpleaudio':
+        
+        # Apply volume and clip
+        audio_data = audio_data * volume
+        audio_data = np.clip(audio_data, -1.0, 1.0)
+        
+        # Create stereo from mono
+        if channel == 'left':
+            stereo = np.column_stack([audio_data, audio_data * 0.0])
+        elif channel == 'right':
+            stereo = np.column_stack([audio_data * 0.0, audio_data])
+        else:  # center
+            stereo = np.column_stack([audio_data, audio_data])
+        
+        if self.audio_lib == 'android':
             try:
-                # Convert to int16 stereo
-                audio_data = audio_data * volume
-                audio_data = np.clip(audio_data, -1.0, 1.0)
+                # Convert to int16 for Android AudioTrack
+                audio_int16 = (stereo * 32767.0).astype(np.int16)
                 
-                # Create stereo from mono
-                if channel == 'left':
-                    stereo = np.column_stack([audio_data, audio_data * 0.0])
-                elif channel == 'right':
-                    stereo = np.column_stack([audio_data * 0.0, audio_data])
-                else:  # center
-                    stereo = np.column_stack([audio_data, audio_data])
+                # Create AudioTrack
+                buffer_size = len(audio_int16) * 2  # 2 bytes per sample
+                audio_track = self.AudioTrack(
+                    self.AudioManager.STREAM_MUSIC,
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT,
+                    buffer_size,
+                    self.AudioTrack.MODE_STATIC
+                )
                 
+                # Write audio data and play
+                audio_track.write(audio_int16.tobytes(), 0, buffer_size)
+                audio_track.play()
+            except Exception as e:
+                print(f"Android audio playback error: {e}")
+                
+        elif self.audio_lib == 'simpleaudio':
+            try:
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 play_obj = self.sa.play_buffer(audio_int16, 2, 2, SAMPLE_RATE)
             except Exception as e:
-                print(f"Audio playback error: {e}")
+                print(f"simpleaudio playback error: {e}")
+                
+        elif self.audio_lib == 'kivy':
+            try:
+                # Kivy SoundLoader requires file-based audio
+                # We'll save to a temporary WAV file and play it
+                import tempfile
+                import wave
+                
+                # Create a unique hash based on stereo audio data
+                # This allows caching the same sound for reuse
+                audio_hash = hash(stereo.tobytes())
+                
+                # Check cache
+                if audio_hash not in self.temp_audio_files:
+                    # Create temporary WAV file
+                    with tempfile.NamedTemporaryFile(mode='wb', suffix='.wav', delete=False) as f:
+                        temp_path = f.name
+                        
+                        # Write WAV file
+                        with wave.open(f, 'wb') as wav:
+                            wav.setnchannels(2)  # Stereo
+                            wav.setsampwidth(2)  # 16-bit
+                            wav.setframerate(SAMPLE_RATE)
+                            
+                            # Convert to int16 and write
+                            audio_int16 = (stereo * 32767.0).astype(np.int16)
+                            wav.writeframes(audio_int16.tobytes())
+                        
+                        self.temp_audio_files[audio_hash] = temp_path
+                
+                # Load and play the cached sound
+                sound = self.SoundLoader.load(self.temp_audio_files[audio_hash])
+                if sound:
+                    sound.play()
+                else:
+                    print(f"[audio] Failed to load sound file")
+            except Exception as e:
+                print(f"Kivy audio playback error: {e}")
     
     def _run(self):
         """Main metronome loop with multiple layers"""
@@ -490,9 +572,9 @@ class LayerWidget(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
         self.size_hint_y = None
-        self.height = '140dp'
+        self.height = '80dp'  # More compact
         self.padding = '5dp'
-        self.spacing = '5dp'
+        self.spacing = '3dp'
         
         self.layer = layer
         self.side = side
@@ -548,39 +630,41 @@ class LayerWidget(BoxLayout):
         self.bg_color.rgba = self.base_rgba
     
     def _build_ui(self):
-        # Top row: Mode, Subdiv, Mute, Delete
-        top_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        # Row 1: [Mode][modeValue] / [subdivision] [Mute] [X]
+        top_row = BoxLayout(size_hint_y=0.5, spacing='3dp')
         
         # Mode selector
-        mode_label = Label(text="Mode:", size_hint_x=0.2, font_size='14sp')
-        top_row.add_widget(mode_label)
-        
         self.mode_spinner = Spinner(
             text=self.layer.get("mode", "tone"),
             values=SOUND_MODES,
-            size_hint_x=0.3,
-            font_size='14sp'
+            size_hint_x=0.15,
+            font_size='12sp'
         )
         self.mode_spinner.bind(text=self._on_mode_change)
         top_row.add_widget(self.mode_spinner)
         
-        # Subdivision
-        subdiv_label = Label(text="÷", size_hint_x=0.1, font_size='14sp')
-        top_row.add_widget(subdiv_label)
+        # Mode value (frequency or drum)
+        self.mode_value_container = BoxLayout(size_hint_x=0.25, spacing='2dp')
+        self._build_mode_value()
+        top_row.add_widget(self.mode_value_container)
         
+        # Separator
+        top_row.add_widget(Label(text="/", size_hint_x=0.05, font_size='16sp'))
+        
+        # Subdivision
         self.subdiv_spinner = Spinner(
             text=str(self.layer.get("subdiv", 4)),
             values=SUBDIV_OPTIONS,
-            size_hint_x=0.2,
-            font_size='14sp'
+            size_hint_x=0.15,
+            font_size='12sp'
         )
         self.subdiv_spinner.bind(text=self._on_subdiv_change)
         top_row.add_widget(self.subdiv_spinner)
         
         # Mute button
         self.mute_button = ToggleButton(
-            text="MUTE",
-            size_hint_x=0.3,
+            text="M",
+            size_hint_x=0.15,
             font_size='12sp',
             state='down' if self.layer.get("mute", False) else 'normal'
         )
@@ -599,77 +683,126 @@ class LayerWidget(BoxLayout):
         
         self.add_widget(top_row)
         
-        # Color row
-        color_row = BoxLayout(size_hint_y=0.2, spacing='5dp')
-        color_label = Label(text="Color:", size_hint_x=0.2, font_size='14sp')
-        color_row.add_widget(color_label)
+        # Row 2: [Color] [Volume slider]
+        bottom_row = BoxLayout(size_hint_y=0.5, spacing='3dp')
         
-        self.color_input = TextInput(
-            text=self.layer.get("color", "#9CA3AF"),
-            multiline=False,
-            size_hint_x=0.8,
-            font_size='14sp'
+        # Color picker button
+        self.color_button = Button(
+            text="",
+            size_hint_x=0.15,
+            background_color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
         )
-        self.color_input.bind(text=self._on_color_change)
-        color_row.add_widget(self.color_input)
+        self.color_button.bind(on_press=self._open_color_picker)
+        bottom_row.add_widget(self.color_button)
         
-        self.add_widget(color_row)
-        
-        # Middle row: Frequency or Drum selector
-        self.middle_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
-        self._build_middle_row()
-        self.add_widget(self.middle_row)
-        
-        # Bottom row: Volume
-        bottom_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
-        vol_label = Label(text="Vol:", size_hint_x=0.2, font_size='14sp')
+        # Volume label
+        vol_label = Label(text="Vol:", size_hint_x=0.1, font_size='12sp')
         bottom_row.add_widget(vol_label)
         
+        # Volume slider
         self.vol_slider = Slider(
             min=0.0,
             max=1.5,
             value=self.layer.get("vol", 1.0),
-            size_hint_x=0.8
+            size_hint_x=0.75
         )
         self.vol_slider.bind(value=self._on_vol_change)
         bottom_row.add_widget(self.vol_slider)
         
         self.add_widget(bottom_row)
     
-    def _build_middle_row(self):
-        self.middle_row.clear_widgets()
+    def _build_mode_value(self):
+        """Build the mode value widget (frequency input or drum selector)"""
+        self.mode_value_container.clear_widgets()
         
         mode = self.layer.get("mode", "tone")
         
         if mode == "tone":
-            freq_label = Label(text="Freq (Hz):", size_hint_x=0.3, font_size='14sp')
-            self.middle_row.add_widget(freq_label)
-            
             self.freq_input = TextInput(
                 text=str(int(self.layer.get("freq", 880))),
                 multiline=False,
                 input_filter='int',
-                size_hint_x=0.7,
-                font_size='14sp'
+                font_size='12sp',
+                hint_text='Hz'
             )
             self.freq_input.bind(text=self._on_freq_change)
-            self.middle_row.add_widget(self.freq_input)
+            self.mode_value_container.add_widget(self.freq_input)
         else:  # drum mode
-            drum_label = Label(text="Drum:", size_hint_x=0.3, font_size='14sp')
-            self.middle_row.add_widget(drum_label)
-            
             self.drum_spinner = Spinner(
                 text=self.layer.get("drum", "snare"),
                 values=DRUM_CHOICES,
-                size_hint_x=0.7,
-                font_size='14sp'
+                font_size='12sp'
             )
             self.drum_spinner.bind(text=self._on_drum_change)
-            self.middle_row.add_widget(self.drum_spinner)
+            self.mode_value_container.add_widget(self.drum_spinner)
+    
+    def _hex_to_rgba(self, hex_color):
+        """Convert hex color to RGBA tuple for Kivy"""
+        try:
+            if hex_color.startswith('#'):
+                hex_color = hex_color[1:]
+            if len(hex_color) == 3:
+                hex_color = ''.join([c*2 for c in hex_color])
+            r = int(hex_color[0:2], 16) / 255.0
+            g = int(hex_color[2:4], 16) / 255.0
+            b = int(hex_color[4:6], 16) / 255.0
+            return (r, g, b, 1)
+        except (ValueError, IndexError):
+            return (0.6, 0.6, 0.6, 1)
+    
+    def _open_color_picker(self, instance):
+        """Open color picker popup"""
+        from kivy.uix.colorpicker import ColorPicker
+        
+        content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
+        
+        color_picker = ColorPicker(
+            color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
+        )
+        content.add_widget(color_picker)
+        
+        # Buttons
+        button_box = BoxLayout(size_hint_y=0.2, spacing='10dp')
+        
+        popup = Popup(title='Pick Color', content=content, size_hint=(0.9, 0.9))
+        
+        def on_ok(btn):
+            # Convert RGBA to hex
+            r, g, b, a = color_picker.color
+            hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
+            self.layer["color"] = hex_color
+            self.color_button.background_color = color_picker.color
+            
+            # Update background color
+            with self.canvas.before:
+                self.canvas.before.clear()
+                Color(r, g, b, 0.3)
+                self.rect = Rectangle(size=self.size, pos=self.pos)
+            
+            self.base_rgba = (r, g, b, 0.3)
+            
+            if self.on_change:
+                self.on_change()
+            popup.dismiss()
+        
+        def on_cancel(btn):
+            popup.dismiss()
+        
+        ok_btn = Button(text='OK', size_hint_x=0.5)
+        ok_btn.bind(on_press=on_ok)
+        button_box.add_widget(ok_btn)
+        
+        cancel_btn = Button(text='Cancel', size_hint_x=0.5)
+        cancel_btn.bind(on_press=on_cancel)
+        button_box.add_widget(cancel_btn)
+        
+        content.add_widget(button_box)
+        
+        popup.open()
     
     def _on_mode_change(self, spinner, value):
         self.layer["mode"] = value
-        self._build_middle_row()
+        self._build_mode_value()
         if self.on_change:
             self.on_change()
     
@@ -705,36 +838,7 @@ class LayerWidget(BoxLayout):
         if self.on_change:
             self.on_change()
     
-    def _on_color_change(self, input, value):
-        """Handle color input change"""
-        # Validate hex color format
-        if value.startswith('#') and len(value) in [4, 7]:
-            try:
-                # Try to parse as hex color
-                if len(value) == 4:
-                    # Short form #RGB -> #RRGGBB
-                    r, g, b = value[1], value[2], value[3]
-                    value = f"#{r}{r}{g}{g}{b}{b}"
-                
-                # Validate hex digits
-                int(value[1:], 16)
-                
-                self.layer["color"] = value
-                
-                # Update background color
-                r = int(value[1:3], 16) / 255.0
-                g = int(value[3:5], 16) / 255.0
-                b = int(value[5:7], 16) / 255.0
-                
-                with self.canvas.before:
-                    self.canvas.before.clear()
-                    Color(r, g, b, 0.3)
-                    self.rect = Rectangle(size=self.size, pos=self.pos)
-                
-                if self.on_change:
-                    self.on_change()
-            except (ValueError, IndexError):
-                pass  # Invalid color, ignore
+
 
 
 class LayerListWidget(BoxLayout):
@@ -929,47 +1033,45 @@ class MetronomeWidget(BoxLayout):
     
     def _build_controls(self):
         """Build play/stop and file operation controls"""
-        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='120dp', spacing='5dp')
+        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='140dp', spacing='5dp')
         
-        # Play/Stop button
+        # Play/Stop button - taller
         self.play_button = Button(
             text="PLAY",
-            font_size='20sp',
-            size_hint_y=0.4,
+            font_size='24sp',
+            size_hint_y=0.5,
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.play_button.bind(on_press=self.on_play_stop)
         controls.add_widget(self.play_button)
         
-        # Save/Load/New buttons
-        file_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        # File operations and logs: [NEW][LOAD][SAVE] space [LOGS]
+        file_box = BoxLayout(size_hint_y=0.5, spacing='5dp')
         
-        save_btn = Button(text="SAVE", font_size='16sp')
-        save_btn.bind(on_press=self.on_save)
-        file_box.add_widget(save_btn)
-        
-        load_btn = Button(text="LOAD", font_size='16sp')
-        load_btn.bind(on_press=self.on_load)
-        file_box.add_widget(load_btn)
-        
-        new_btn = Button(text="NEW", font_size='16sp')
+        new_btn = Button(text="NEW", font_size='14sp')
         new_btn.bind(on_press=self.on_new)
         file_box.add_widget(new_btn)
         
-        controls.add_widget(file_box)
+        load_btn = Button(text="LOAD", font_size='14sp')
+        load_btn.bind(on_press=self.on_load)
+        file_box.add_widget(load_btn)
         
-        # Logs button
-        logs_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        save_btn = Button(text="SAVE", font_size='14sp')
+        save_btn.bind(on_press=self.on_save)
+        file_box.add_widget(save_btn)
+        
+        # Spacer
+        file_box.add_widget(Label(text='', size_hint_x=0.3))
         
         logs_btn = Button(
-            text="VIEW LOGS",
-            font_size='16sp',
+            text="LOGS",
+            font_size='14sp',
             background_color=(0.3, 0.3, 0.8, 1)
         )
         logs_btn.bind(on_press=self.on_view_logs)
-        logs_box.add_widget(logs_btn)
+        file_box.add_widget(logs_btn)
         
-        controls.add_widget(logs_box)
+        controls.add_widget(file_box)
         
         return controls
     

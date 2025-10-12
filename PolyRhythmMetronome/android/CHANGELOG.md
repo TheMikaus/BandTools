@@ -2,6 +2,36 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [1.4.0] - UI Improvements and Enhanced Usability
+
+### Changed
+- **Subdivision Options**: Expanded from [1,2,4,8,16] to [2,3,4,5,6,7,8,16,32,64] for more rhythmic flexibility
+- **Layer Widget Layout**: Completely redesigned for compactness (140dp → 80dp height)
+  - Row 1: [Mode][Value] / [Subdivision] [Mute] [X]
+  - Row 2: [Color Picker] [Volume Slider]
+- **Color Input**: Replaced text input with visual color picker button for easier color selection
+- **Play/Stop Button**: Increased height and font size for better visibility and touch interaction
+- **Control Button Layout**: Reorganized to [NEW][LOAD][SAVE] spacer [LOGS] for clearer grouping
+
+### Added
+- **Visual Color Picker**: Interactive color picker popup with OK/Cancel buttons for layer colors
+
+## [1.3.0] - Audio Backend Overhaul
+
+### Fixed
+- **Audio Installation Permission Issue**: Removed runtime auto-installation of simpleaudio which failed on Android due to permission issues
+- **No Audio Playback on Android**: Implemented proper Android audio support using native AudioTrack API
+
+### Added
+- **Android AudioTrack Support**: Primary audio backend using pyjnius to access native Android audio APIs for lowest latency
+- **Kivy SoundLoader Implementation**: Complete fallback implementation with WAV file caching for platforms without AudioTrack or simpleaudio
+- **Three-Tier Audio System**: Automatic fallback chain: Android AudioTrack → simpleaudio → Kivy SoundLoader
+
+### Changed
+- **buildozer.spec**: Added pyjnius to requirements for Android AudioTrack support
+- **Audio Library Detection**: Now properly detects platform and chooses appropriate backend
+- **Audio Initialization**: Removed ensure_pkg() call for simpleaudio (should be pre-installed, not auto-installed at runtime)
+
 ## [1.2.0] - UI Improvements and Bug Fixes
 
 ### Fixed
