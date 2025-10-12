@@ -1,0 +1,39 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cache Buildozer global dir
+        uses: actions/cache@v3
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+      - name: Cache project .buildozer dir
+        uses: actions/cache@v3
+        with:
+          path: .buildozer
+          key: build-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+
+      - name: Run Buildozer action
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: build
+        with:
+          command: android debug
+          buildozer_version: stable
+          # optional: you could set spec path, environment variables, etc.
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-apk
+          path: ${{ steps.build.outputs.filename }}
