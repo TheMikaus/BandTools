@@ -2,14 +2,25 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
-## [1.5.0] - Audio Playback Bug Fix and Color Enhancements
+## [1.5.0] - Audio Playback Bug Fix and Major Enhancements
 
 ### Fixed
 - **Tone Audio Playback on Android**: Fixed critical buffer size calculation bug in AudioTrack implementation. Now uses `getMinBufferSize()` to ensure buffer meets Android system requirements, preventing "Invalid audio buffer size" errors. The fix ensures compatibility across all Android devices.
 
 ### Added
 - **Separate Active/Inactive Colors**: Each layer now has two color pickers - one for the inactive background color and one for the active/flash color. This allows full customization of layer appearance during beats without breaking the flash functionality.
-- **Accent Volume Support**: Added `accent_vol` parameter to layers (default 1.6) for future accent beat implementation on first beat of measure.
+- **Accent Beat System**: Implemented automatic accent on first beat of each measure with adjustable accent volume multiplier (1.0-3.0x, default 1.6x). Each layer has independent accent control via slider in UI.
+- **Improved Drum Synthesis**: Completely redesigned drum sounds with richer, more realistic synthesis:
+  - **Kick**: Two-stage frequency sweep with punch and depth, enhanced beater click
+  - **Snare**: High-passed noise with multi-frequency body and crisp attack transient
+  - **Hi-hat**: Metallic shimmer with band-limited noise and high-frequency oscillations
+  - **Crash**: Complex shimmer with slow modulated decay and multiple frequency components
+  - **Tom**: Frequency-swept resonance with harmonics for fuller tone
+  - **Ride**: Bell-like ping with multiple harmonics and sustained wash
+
+### Changed
+- **Layer Widget Height**: Increased from 80dp to 100dp to accommodate accent volume control
+- **UI Layout**: Added third row with accent volume slider for fine-tuning first-beat emphasis
 
 ## [1.4.0] - UI Improvements and Enhanced Usability
 
