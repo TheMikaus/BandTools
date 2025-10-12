@@ -65,7 +65,9 @@ jobs:
         with:
           workdir: ./PolyRhythmMetronome/android
           command: ${{ inputs.target }}
-          docker_options: "--user 1000:1000"
+        env:
+          USER_ID: "1000"
+          GROUP_ID: "1000"
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
