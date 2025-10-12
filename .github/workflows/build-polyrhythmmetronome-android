@@ -1,36 +1,33 @@
-name: Build PolyRhythmMetronomeAPK (Manual)
+name: Build PolyRhythmMetronome (Manual)
 
 on:
   workflow_dispatch:
     inputs:
       target:
         description: "Buildozer command"
-        type: bool
-        required: false
+        type: choice
+        required: true
         default: android debug
-
-      create_release:
-        description: 'Create a release after build'
-        required: false
-        default: android debug
-        type: boolean
-
+        options:
+          - android debug
+          - android release
+          - android release aab
       spec_path:
-        description: "Path to buildozer.spec (usually ./buildozer.spec)"
+        description: "Path to buildozer.spec"
         type: string
         required: true
         default: ./PolyRhythmMetronome/android/buildozer.spec
-
       clean:
         description: "Clean before build?"
         type: boolean
         default: false
-
+      create_release:
+        description: "Create a GitHub Release after build?"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
-  packages: write
-
 
 concurrency:
   group: build-android-${{ github.ref }}
@@ -39,12 +36,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Optional: cache Buildozer dirs for faster repeats
+      # Optional caches
       - name: Cache global .buildozer
         uses: actions/cache@v4
         with:
@@ -56,8 +52,8 @@ jobs:
           path: .buildozer
           key: proj-buildozer-${{ runner.os }}-${{ hashFiles(inputs.spec_path) }}
 
-      - name: (Optional) Clean
-        if: inputs.clean == 'true'
+      - name: Optional clean
+        if: ${{ fromJson(inputs.clean) }}
         run: |
           buildozer android clean || true
           rm -rf .buildozer bin || true
@@ -66,19 +62,28 @@ jobs:
         id: build
         uses: ArtemSBulgakov/buildozer-action@v1
         with:
-          # Run the exact command chosen in the dispatch form
+          # Directory that contains buildozer.spec:
+          workdir: ./PolyRhythmMetronome/android
+          # Buildozer command chosen in the form:
           command: ${{ inputs.target }}
-          # If your buildozer.spec is not at repo root, set the working dir:
-          workdir: .
-          # Optionally pin a specific Buildozer version:
+          # Optional: pin buildozer version
           # buildozer_version: stable
-          # You can also pass env vars via 'env_*' inputs if the action supports them
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
         with:
           name: android-build
           path: |
-            bin/*.apk
-            bin/*.aab
+            PolyRhythmMetronome/android/bin/*.apk
+            PolyRhythmMetronome/android/bin/*.aab
           if-no-files-found: warn
+
+      - name: Create GitHub Release (optional)
+        if: ${{ fromJson(inputs.create_release) }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Android build ${{ github.run_number }}
+          files: |
+            PolyRhythmMetronome/android/bin/*.apk
+            PolyRhythmMetronome/android/bin/*.aab
