@@ -77,7 +77,7 @@ jobs:
 
       - name: Build with Buildozer
         id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
+        uses: n8marti/buildozer-action@fix-user-doesnt-exist
         with:
           workdir: PolyRhythmMetronome/android
           command: ${{ inputs.target }}
