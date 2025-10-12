@@ -59,6 +59,13 @@ jobs:
           buildozer android clean || true
           rm -rf .buildozer bin || true
 
+      - name: Workaround for user issue
+        run: |
+          if ! id -u user >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash user
+          fi
+          sudo chown -R user:user "$GITHUB_WORKSPACE" "${HOME}/.buildozer" || true
+
       - name: Build with Buildozer
         id: build
         uses: ArtemSBulgakov/buildozer-action@v1
