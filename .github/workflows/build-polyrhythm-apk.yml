@@ -26,10 +26,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: build-android-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,11 +33,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Create cache dirs as root, then give them back to the runner user.
-      - name: Prep cache dirs (no chown to 'user')
+      # Make sure the dirs exist and are writable by *any* uid the container uses
+      - name: Prep cache dirs (permissive perms)
         run: |
-          sudo mkdir -p "${HOME}/.buildozer" ".buildozer" "bin"
-          sudo chown -R "$USER:$USER" "${HOME}/.buildozer" ".buildozer" "bin"
+          sudo mkdir -p "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
+          sudo chmod -R a+rwx "${HOME}/.buildozer" ".buildozer" "PolyRhythmMetronome/android/bin"
 
       - name: Cache global .buildozer
         uses: actions/cache@v4
@@ -59,15 +55,17 @@ jobs:
         if: ${{ fromJson(inputs.clean) }}
         run: |
           buildozer android clean || true
-          rm -rf .buildozer bin || true
-          mkdir -p .buildozer bin
+          rm -rf .buildozer PolyRhythmMetronome/android/bin || true
+          mkdir -p .buildozer PolyRhythmMetronome/android/bin
+          chmod -R a+rwx .buildozer PolyRhythmMetronome/android/bin
 
-      - name: Build with Buildozer
+      - name: Build with Buildozer (run container as uid 1000)
         id: build
         uses: ArtemSBulgakov/buildozer-action@v1
         with:
           workdir: ./PolyRhythmMetronome/android
           command: ${{ inputs.target }}
+          docker_options: "--user 1000:1000"
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
