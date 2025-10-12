@@ -179,6 +179,33 @@ If the APK upload step fails, check the build logs to see where the APK was crea
         path: PolyRhythmMetronome/android/bin/*.apk
 ```
 
+### Build Fails - "chown: invalid user: 'user'"
+
+This error occurs when using older versions of the `ArtemSBulgakov/buildozer-action` that have a bug with file ownership.
+
+**Solution**: Use manual buildozer installation instead of the action (already implemented in the repository):
+```yaml
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openjdk-11-jdk git zip unzip autoconf libtool pkg-config
+        sudo apt-get install -y zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
+    
+    - name: Install Python dependencies
+      run: |
+        pip install buildozer cython
+    
+    - name: Build with Buildozer
+      working-directory: PolyRhythmMetronome/android
+      run: |
+        buildozer -v android debug
+```
+
 ## Alternative: Use GitHub Codespaces
 
 If you want an interactive development environment:
