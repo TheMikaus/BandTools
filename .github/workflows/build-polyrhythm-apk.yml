@@ -59,11 +59,12 @@ jobs:
           chmod -R 777 .buildozer PolyRhythmMetronome/android/bin
 
       - name: Build with Buildozer
-        id: build
+        id: buildozer
         uses: ArtemSBulgakov/buildozer-action@master
         with:
           workdir: PolyRhythmMetronome/android
           command: ${{ inputs.target }}
+          buildozer_version: stable
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
