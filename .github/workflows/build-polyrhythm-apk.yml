@@ -30,22 +30,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Create custom user and change ownership
-        run: |
-          # The `run` keyword executes scripts in the virtual machine environment.
-          # Here we create a new user named `custom-builder` and a group.
-          sudo useradd -m user
-          sudo groupadd user-group
-          sudo usermod -a -G user-group user
-          
-          # We need to change the ownership of the workspace directory
-          # so our new user can check out the code.
-          sudo chown -R user:user-group $GITHUB_WORKSPACE
-        shell: bash
       - name: Checkout
-        env:
-          HOME: /home/custom-builder
-          USER: custom-builder
         run: |
           # Use `sudo` to execute the checkout command as our new user.
           sudo -u custom-builder -i actions/checkout@v4
