@@ -1,39 +1,77 @@
-name: Build Android APK
+name: Build PolyRhythmMetronomeAPK (Manual)
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Buildozer command"
+        type: choice
+        required: true
+        default: android debug
+        options:
+          - android debug
+          - android release
+          - android release aab
+      spec_path:
+        description: "Path to buildozer.spec (usually ./buildozer.spec)"
+        type: string
+        required: true
+        default: ./buildozer.spec
+      clean:
+        description: "Clean before build?"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
 
-      - name: Cache Buildozer global dir
-        uses: actions/cache@v3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Optional: cache Buildozer dirs for faster repeats
+      - name: Cache global .buildozer
+        uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-      - name: Cache project .buildozer dir
-        uses: actions/cache@v3
+          key: global-buildozer-${{ runner.os }}-${{ hashFiles(inputs.spec_path) }}
+      - name: Cache project .buildozer
+        uses: actions/cache@v4
         with:
           path: .buildozer
-          key: build-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: proj-buildozer-${{ runner.os }}-${{ hashFiles(inputs.spec_path) }}
 
-      - name: Run Buildozer action
-        uses: ArtemSBulgakov/buildozer-action@v1
+      - name: (Optional) Clean
+        if: inputs.clean == 'true'
+        run: |
+          buildozer android clean || true
+          rm -rf .buildozer bin || true
+
+      - name: Build with Buildozer
         id: build
+        uses: ArtemSBulgakov/buildozer-action@v1
         with:
-          command: android debug
-          buildozer_version: stable
-          # optional: you could set spec path, environment variables, etc.
+          # Run the exact command chosen in the dispatch form
+          command: ${{ inputs.target }}
+          # If your buildozer.spec is not at repo root, set the working dir:
+          workdir: .
+          # Optionally pin a specific Buildozer version:
+          # buildozer_version: stable
+          # You can also pass env vars via 'env_*' inputs if the action supports them
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload artifacts (APK/AAB)
+        uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: ${{ steps.build.outputs.filename }}
+          name: android-build
+          path: |
+            bin/*.apk
+            bin/*.aab
+          if-no-files-found: warn
