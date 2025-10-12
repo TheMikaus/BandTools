@@ -183,83 +183,142 @@ class DrumSynth:
         return data
     
     def _make_kick(self):
-        """Generate kick drum sound"""
+        """Generate improved kick drum sound with punch and depth"""
+        sr = self.sample_rate
+        dur = 0.35
+        n = int(sr * dur)
+        t = np.arange(n, dtype=np.float32) / sr
+        
+        # Two-stage frequency sweep for more realistic kick
+        # Stage 1: Quick drop for punch (150Hz to 60Hz)
+        f0, f1 = 150.0, 60.0
+        k = np.log(f1 / f0) / (dur * 0.3)
+        phase1 = 2 * np.pi * (f0 * (np.expm1(k * t) / k))
+        tone1 = np.sin(phase1) * np.exp(-t / 0.08)
+        
+        # Stage 2: Lower fundamental for depth (60Hz to 45Hz)
+        f2, f3 = 60.0, 45.0
+        k2 = np.log(f3 / f2) / dur
+        phase2 = 2 * np.pi * (f2 * (np.expm1(k2 * t) / k2))
+        tone2 = np.sin(phase2) * np.exp(-t / 0.18)
+        
+        # Attack click for beater impact
+        click = np.exp(-t / 0.005) * 0.3
+        
+        # Combine elements with envelope
+        env = np.exp(-t / 0.20).astype(np.float32)
+        kick = (0.5 * tone1 + 0.4 * tone2 + click) * env
+        
+        return kick.astype(np.float32)
+    
+    def _make_snare(self):
+        """Generate improved snare drum sound with crisp snap"""
         sr = self.sample_rate
         dur = 0.25
         n = int(sr * dur)
         t = np.arange(n, dtype=np.float32) / sr
         
-        # Frequency sweep from 120Hz to 50Hz
-        f0, f1 = 120.0, 50.0
-        k = np.log(f1 / f0) / dur
-        phase = 2 * np.pi * (f0 * (np.expm1(k * t) / k))
-        
-        tone = np.sin(phase).astype(np.float32)
-        env = np.exp(-t / 0.15).astype(np.float32)
-        click = np.exp(-t / 0.01)
-        
-        return (0.9 * tone * env + 0.05 * click).astype(np.float32)
-    
-    def _make_snare(self):
-        """Generate snare drum sound"""
-        sr = self.sample_rate
-        dur = 0.3
-        n = int(sr * dur)
-        t = np.arange(n, dtype=np.float32) / sr
-        
+        # High-passed noise for snare wire sound
         noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
-        env_n = np.exp(-t / 0.12).astype(np.float32)
-        body = np.sin(2 * np.pi * 190 * t).astype(np.float32) * np.exp(-t / 0.1)
+        # Simple high-pass by differencing
+        noise_hp = np.diff(noise, prepend=0)
+        env_n = np.exp(-t / 0.10).astype(np.float32)
         
-        return (0.8 * noise * env_n + 0.25 * body).astype(np.float32)
+        # Multi-frequency body for richer tone
+        body1 = np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.08)
+        body2 = np.sin(2 * np.pi * 330 * t) * np.exp(-t / 0.06)
+        
+        # Sharp attack transient
+        attack = np.exp(-t / 0.003) * 0.4
+        
+        # Combine elements
+        snare = (0.6 * noise_hp * env_n + 0.2 * body1 + 0.15 * body2 + attack)
+        
+        return snare.astype(np.float32)
     
     def _make_hihat(self):
-        """Generate hi-hat sound"""
+        """Generate improved hi-hat sound with metallic character"""
         sr = self.sample_rate
         dur = 0.08
         n = int(sr * dur)
         t = np.arange(n, dtype=np.float32) / sr
         
+        # Band-limited noise for metallic character
         noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
-        env = np.exp(-t / 0.03).astype(np.float32)
+        # Add high-frequency oscillations for shimmer
+        metallic = np.sin(2 * np.pi * 8000 * t) * np.sin(2 * np.pi * 11000 * t)
         
-        return (noise * env).astype(np.float32)
+        # Fast decay envelope
+        env = np.exp(-t / 0.025).astype(np.float32)
+        
+        hihat = (0.7 * noise + 0.3 * metallic) * env
+        
+        return hihat.astype(np.float32)
     
     def _make_crash(self):
-        """Generate crash cymbal sound"""
+        """Generate improved crash cymbal sound with shimmer"""
         sr = self.sample_rate
-        dur = 1.2
+        dur = 1.5
         n = int(sr * dur)
         t = np.arange(n, dtype=np.float32) / sr
         
+        # Complex noise for metallic character
         noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
-        env = np.exp(-t / 0.6).astype(np.float32)
         
-        return (0.6 * noise * env).astype(np.float32)
+        # Add multiple high-frequency components for shimmer
+        shimmer1 = np.sin(2 * np.pi * 3500 * t) * np.sin(2 * np.pi * 1.3 * t)
+        shimmer2 = np.sin(2 * np.pi * 7000 * t) * np.sin(2 * np.pi * 2.1 * t)
+        
+        # Slow decay with slight modulation
+        env = np.exp(-t / 0.7) * (1 + 0.1 * np.sin(2 * np.pi * 3 * t))
+        
+        crash = (0.5 * noise + 0.25 * shimmer1 + 0.25 * shimmer2) * env
+        
+        return crash.astype(np.float32)
     
     def _make_tom(self):
-        """Generate tom drum sound"""
+        """Generate improved tom drum sound with resonance"""
         sr = self.sample_rate
-        dur = 0.4
+        dur = 0.5
         n = int(sr * dur)
         t = np.arange(n, dtype=np.float32) / sr
         
-        tone = np.sin(2 * np.pi * 160.0 * t).astype(np.float32)
-        env = np.exp(-t / 0.25).astype(np.float32)
+        # Frequency sweep for realistic tom pitch bend
+        f0, f1 = 200.0, 160.0
+        k = np.log(f1 / f0) / (dur * 0.2)
+        phase = 2 * np.pi * (f0 * (np.expm1(k * t) / k))
+        fundamental = np.sin(phase)
         
-        return (tone * env).astype(np.float32)
+        # Add harmonics for richer tone
+        harmonic2 = np.sin(2 * phase) * 0.3
+        harmonic3 = np.sin(3 * phase) * 0.15
+        
+        # Envelope with slight ring
+        env = np.exp(-t / 0.30).astype(np.float32)
+        
+        tom = (fundamental + harmonic2 + harmonic3) * env
+        
+        return tom.astype(np.float32)
     
     def _make_ride(self):
-        """Generate ride cymbal sound"""
+        """Generate improved ride cymbal sound with bell-like ping"""
         sr = self.sample_rate
-        dur = 0.9
+        dur = 1.0
         n = int(sr * dur)
         t = np.arange(n, dtype=np.float32) / sr
         
-        ping = np.sin(2 * np.pi * 900 * t).astype(np.float32) * np.exp(-t / 0.4)
-        noise = np.random.uniform(-1, 1, size=n).astype(np.float32) * np.exp(-t / 0.8) * 0.2
+        # Bell-like ping with harmonics
+        ping1 = np.sin(2 * np.pi * 850 * t) * np.exp(-t / 0.35)
+        ping2 = np.sin(2 * np.pi * 1700 * t) * np.exp(-t / 0.25) * 0.4
+        ping3 = np.sin(2 * np.pi * 2550 * t) * np.exp(-t / 0.20) * 0.2
         
-        return (0.8 * ping + noise).astype(np.float32)
+        # Sustained wash
+        noise = np.random.uniform(-1, 1, size=n).astype(np.float32)
+        wash = noise * np.exp(-t / 0.9) * 0.15
+        
+        ride = ping1 + ping2 + ping3 + wash
+        
+        return ride.astype(np.float32)
 
 # ---------------- Rhythm State (Data Model) ---------------- #
 
@@ -268,7 +327,7 @@ def new_uid():
     return uuid.uuid4().hex
 
 
-def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", uid=None):
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
     """Create a layer dictionary"""
     return {
         "uid": uid or new_uid(),
@@ -278,7 +337,9 @@ def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="sna
         "mute": bool(mute),
         "mode": mode,
         "drum": drum,
-        "color": color
+        "color": color,
+        "flash_color": flash_color or color,  # Default to same as color for backward compatibility
+        "accent_vol": float(accent_vol)  # Volume multiplier for first beat of measure
     }
 
 
@@ -326,6 +387,8 @@ class RhythmState:
                 x.setdefault("mode", "tone")
                 x.setdefault("drum", "snare")
                 x.setdefault("color", "#9CA3AF")
+                x.setdefault("flash_color", x.get("color", "#9CA3AF"))  # Default to color if not set
+                x.setdefault("accent_vol", 1.6)
                 x.setdefault("uid", new_uid())
                 return x
             
@@ -443,8 +506,21 @@ class SimpleMetronomeEngine:
                 # Convert to int16 for Android AudioTrack
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 
-                # Create AudioTrack
-                buffer_size = len(audio_int16) * 2  # 2 bytes per sample
+                # Get the actual data size in bytes
+                audio_bytes = audio_int16.tobytes()
+                data_size = len(audio_bytes)
+                
+                # Get minimum buffer size required by AudioTrack
+                min_buffer_size = self.AudioTrack.getMinBufferSize(
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT
+                )
+                
+                # Use the larger of minimum required or actual data size
+                buffer_size = max(min_buffer_size, data_size)
+                
+                # Create AudioTrack with appropriate buffer size
                 audio_track = self.AudioTrack(
                     self.AudioManager.STREAM_MUSIC,
                     SAMPLE_RATE,
@@ -455,7 +531,7 @@ class SimpleMetronomeEngine:
                 )
                 
                 # Write audio data and play
-                audio_track.write(audio_int16.tobytes(), 0, buffer_size)
+                audio_track.write(audio_bytes, 0, data_size)
                 audio_track.play()
             except Exception as e:
                 print(f"Android audio playback error: {e}")
@@ -506,7 +582,7 @@ class SimpleMetronomeEngine:
                 print(f"Kivy audio playback error: {e}")
     
     def _run(self):
-        """Main metronome loop with multiple layers"""
+        """Main metronome loop with multiple layers and accent support"""
         with self.state._lock:
             bpm = self.state.bpm
             beats_per_measure = self.state.beats_per_measure
@@ -523,9 +599,16 @@ class SimpleMetronomeEngine:
             left_intervals = [calc_interval(layer["subdiv"]) for layer in left_layers]
             right_intervals = [calc_interval(layer["subdiv"]) for layer in right_layers]
         
+        # Calculate measure duration for accent detection
+        measure_duration = (60.0 / bpm) * beats_per_measure
+        
         start_time = time.time()
         left_next_times = [0.0] * len(left_layers)
         right_next_times = [0.0] * len(right_layers)
+        
+        # Track beat counts for accent detection
+        left_beat_counts = [0] * len(left_layers)
+        right_beat_counts = [0] * len(right_layers)
         
         while self.running:
             current_time = time.time() - start_time
@@ -533,32 +616,52 @@ class SimpleMetronomeEngine:
             # Check left layers
             for i, layer in enumerate(left_layers):
                 if not layer.get("mute", False) and current_time >= left_next_times[i]:
-                    # Play audio
+                    # Determine if this is an accent beat (first beat of measure)
+                    is_accent = (left_beat_counts[i] % beats_per_measure) == 0
+                    
+                    # Get audio data
                     audio_data = self._get_audio_data(layer)
-                    volume = float(layer.get("vol", 1.0))
+                    
+                    # Apply volume with accent if it's first beat
+                    base_volume = float(layer.get("vol", 1.0))
+                    accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
+                    volume = base_volume * accent_multiplier
+                    
                     self._play_sound(audio_data, volume, 'left')
                     
                     # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
-                        color = layer.get("color", "#3B82F6")
-                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('left', u, c), 0)
+                        flash_color = layer.get("flash_color", layer.get("color", "#3B82F6"))
+                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('left', u, c), 0)
+                    
                     left_next_times[i] += left_intervals[i]
+                    left_beat_counts[i] += 1
             
             # Check right layers
             for i, layer in enumerate(right_layers):
                 if not layer.get("mute", False) and current_time >= right_next_times[i]:
-                    # Play audio
+                    # Determine if this is an accent beat (first beat of measure)
+                    is_accent = (right_beat_counts[i] % beats_per_measure) == 0
+                    
+                    # Get audio data
                     audio_data = self._get_audio_data(layer)
-                    volume = float(layer.get("vol", 1.0))
+                    
+                    # Apply volume with accent if it's first beat
+                    base_volume = float(layer.get("vol", 1.0))
+                    accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
+                    volume = base_volume * accent_multiplier
+                    
                     self._play_sound(audio_data, volume, 'right')
                     
                     # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
-                        color = layer.get("color", "#EF4444")
-                        Clock.schedule_once(lambda dt, u=uid, c=color: self.on_beat_callback('right', u, c), 0)
+                        flash_color = layer.get("flash_color", layer.get("color", "#EF4444"))
+                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('right', u, c), 0)
+                    
                     right_next_times[i] += right_intervals[i]
+                    right_beat_counts[i] += 1
             
             # Small sleep to avoid busy waiting
             time.sleep(0.001)
@@ -572,9 +675,9 @@ class LayerWidget(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
         self.size_hint_y = None
-        self.height = '80dp'  # More compact
+        self.height = '100dp'  # Slightly taller for accent control
         self.padding = '5dp'
-        self.spacing = '3dp'
+        self.spacing = '2dp'
         
         self.layer = layer
         self.side = side
@@ -605,7 +708,8 @@ class LayerWidget(BoxLayout):
     def flash(self, color=None, duration=0.12):
         """Flash the layer widget with the specified color"""
         if color is None:
-            color = self.layer.get("color", "#9CA3AF")
+            # Use flash_color if available, otherwise use regular color
+            color = self.layer.get("flash_color", self.layer.get("color", "#9CA3AF"))
         
         # Parse hex color
         try:
@@ -683,20 +787,29 @@ class LayerWidget(BoxLayout):
         
         self.add_widget(top_row)
         
-        # Row 2: [Color] [Volume slider]
+        # Row 2: [InactiveColor] [ActiveColor] [Volume slider]
         bottom_row = BoxLayout(size_hint_y=0.5, spacing='3dp')
         
-        # Color picker button
+        # Inactive color picker button
         self.color_button = Button(
             text="",
-            size_hint_x=0.15,
+            size_hint_x=0.1,
             background_color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
         )
-        self.color_button.bind(on_press=self._open_color_picker)
+        self.color_button.bind(on_press=lambda x: self._open_color_picker("inactive"))
         bottom_row.add_widget(self.color_button)
         
+        # Active/Flash color picker button
+        self.flash_color_button = Button(
+            text="",
+            size_hint_x=0.1,
+            background_color=self._hex_to_rgba(self.layer.get("flash_color", self.layer.get("color", "#9CA3AF")))
+        )
+        self.flash_color_button.bind(on_press=lambda x: self._open_color_picker("active"))
+        bottom_row.add_widget(self.flash_color_button)
+        
         # Volume label
-        vol_label = Label(text="Vol:", size_hint_x=0.1, font_size='12sp')
+        vol_label = Label(text="Vol:", size_hint_x=0.08, font_size='12sp')
         bottom_row.add_widget(vol_label)
         
         # Volume slider
@@ -704,12 +817,31 @@ class LayerWidget(BoxLayout):
             min=0.0,
             max=1.5,
             value=self.layer.get("vol", 1.0),
-            size_hint_x=0.75
+            size_hint_x=0.72
         )
         self.vol_slider.bind(value=self._on_vol_change)
         bottom_row.add_widget(self.vol_slider)
         
         self.add_widget(bottom_row)
+        
+        # Row 3: [Accent label] [Accent slider]
+        accent_row = BoxLayout(size_hint_y=0.33, spacing='3dp')
+        
+        # Accent label
+        accent_label = Label(text="Accent:", size_hint_x=0.2, font_size='11sp')
+        accent_row.add_widget(accent_label)
+        
+        # Accent volume slider (multiplier for first beat)
+        self.accent_slider = Slider(
+            min=1.0,
+            max=3.0,
+            value=self.layer.get("accent_vol", 1.6),
+            size_hint_x=0.8
+        )
+        self.accent_slider.bind(value=self._on_accent_change)
+        accent_row.add_widget(self.accent_slider)
+        
+        self.add_widget(accent_row)
     
     def _build_mode_value(self):
         """Build the mode value widget (frequency input or drum selector)"""
@@ -750,36 +882,50 @@ class LayerWidget(BoxLayout):
         except (ValueError, IndexError):
             return (0.6, 0.6, 0.6, 1)
     
-    def _open_color_picker(self, instance):
-        """Open color picker popup"""
+    def _open_color_picker(self, color_type):
+        """Open color picker popup for inactive or active color"""
         from kivy.uix.colorpicker import ColorPicker
         
         content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
         
+        # Get current color based on type
+        if color_type == "active":
+            current_color = self.layer.get("flash_color", self.layer.get("color", "#9CA3AF"))
+        else:
+            current_color = self.layer.get("color", "#9CA3AF")
+        
         color_picker = ColorPicker(
-            color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
+            color=self._hex_to_rgba(current_color)
         )
         content.add_widget(color_picker)
         
         # Buttons
         button_box = BoxLayout(size_hint_y=0.2, spacing='10dp')
         
-        popup = Popup(title='Pick Color', content=content, size_hint=(0.9, 0.9))
+        title = 'Pick Active Color' if color_type == "active" else 'Pick Inactive Color'
+        popup = Popup(title=title, content=content, size_hint=(0.9, 0.9))
         
         def on_ok(btn):
             # Convert RGBA to hex
             r, g, b, a = color_picker.color
             hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
-            self.layer["color"] = hex_color
-            self.color_button.background_color = color_picker.color
             
-            # Update background color
-            with self.canvas.before:
-                self.canvas.before.clear()
-                Color(r, g, b, 0.3)
-                self.rect = Rectangle(size=self.size, pos=self.pos)
-            
-            self.base_rgba = (r, g, b, 0.3)
+            if color_type == "active":
+                # Update flash color
+                self.layer["flash_color"] = hex_color
+                self.flash_color_button.background_color = color_picker.color
+            else:
+                # Update inactive color and background
+                self.layer["color"] = hex_color
+                self.color_button.background_color = color_picker.color
+                
+                # Update background color
+                with self.canvas.before:
+                    self.canvas.before.clear()
+                    Color(r, g, b, 0.3)
+                    self.rect = Rectangle(size=self.size, pos=self.pos)
+                
+                self.base_rgba = (r, g, b, 0.3)
             
             if self.on_change:
                 self.on_change()
@@ -835,6 +981,11 @@ class LayerWidget(BoxLayout):
     
     def _on_vol_change(self, slider, value):
         self.layer["vol"] = value
+        if self.on_change:
+            self.on_change()
+    
+    def _on_accent_change(self, slider, value):
+        self.layer["accent_vol"] = value
         if self.on_change:
             self.on_change()
     
