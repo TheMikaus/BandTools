@@ -31,9 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        run: |
-          # Use `sudo` to execute the checkout command as our new user.
-          sudo -u custom-builder -i actions/checkout@v4
+      - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version calculation
 
       # Make sure the dirs exist and are writable
       - name: Prep cache dirs
