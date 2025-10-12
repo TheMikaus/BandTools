@@ -29,12 +29,12 @@ For each beat:
 **Purpose**: Core audio timing and playback engine
 
 **Key Methods**:
-- `__init__()`: Initializes audio library (tries simpleaudio, falls back to Kivy)
+- `__init__()`: Initializes audio library (tries Android AudioTrack, then simpleaudio, then Kivy)
 - `start()`: Spawns metronome thread
 - `stop()`: Terminates playback
 - `_run()`: Main timing loop (runs in separate thread)
 - `_get_audio_data()`: Retrieves tone or drum audio samples
-- `_play_sound()`: Plays audio through speakers/headphones
+- `_play_sound()`: Plays audio through speakers/headphones using available backend
 
 **Threading**:
 - Uses Python threading for timing loop
@@ -44,16 +44,28 @@ For each beat:
 
 #### 2. Audio Libraries
 
-**Primary: simpleaudio**
-- Preferred for Android/desktop compatibility
+The engine supports three audio backends with automatic fallback:
+
+**Primary: Android AudioTrack (via pyjnius)**
+- Native Android audio API
+- Direct PCM buffer playback
+- Lowest latency on Android devices
+- Requires pyjnius (included in buildozer by default)
+- Only available when running on Android platform
+
+**Secondary: simpleaudio**
+- Desktop/some Android builds
 - Plays raw PCM audio buffers
 - Low latency
 - Simple API
+- Must be pre-installed (no runtime installation)
 
 **Fallback: Kivy SoundLoader**
-- Used if simpleaudio unavailable
+- Used if neither AudioTrack nor simpleaudio available
 - Higher level API
-- Requires file-based audio (not implemented yet)
+- File-based audio (writes temporary WAV files)
+- Slightly higher latency due to file I/O
+- Always available with Kivy
 
 **Graceful Degradation**:
 - If no audio library available, playback is skipped
@@ -277,11 +289,12 @@ assert kick is not None and len(kick) > 0
 ## Debugging Audio Issues
 
 ### No Sound
-1. Check `engine.audio_lib` value
-2. Verify simpleaudio installed: `pip list | grep simpleaudio`
+1. Check `engine.audio_lib` value (should be 'android', 'simpleaudio', or 'kivy')
+2. On Android: Verify pyjnius is in buildozer requirements
 3. Check device volume and audio output
-4. Look for playback errors in console
+4. Look for playback errors in console/logcat
 5. Test with simple tone layer first
+6. On Android: Check app has audio permissions
 
 ### Timing Issues
 1. Verify BPM is reasonable (60-200)
@@ -306,9 +319,11 @@ assert kick is not None and len(kick) > 0
 ## References
 
 ### Libraries
-- [simpleaudio](https://simpleaudio.readthedocs.io/) - Audio playback
+- [Android AudioTrack](https://developer.android.com/reference/android/media/AudioTrack) - Native Android audio
+- [pyjnius](https://pyjnius.readthedocs.io/) - Python-Java bridge for Android APIs
+- [simpleaudio](https://simpleaudio.readthedocs.io/) - Desktop audio playback
 - [NumPy](https://numpy.org/) - Array operations
-- [Kivy Audio](https://kivy.org/doc/stable/api-kivy.core.audio.html) - Fallback
+- [Kivy Audio](https://kivy.org/doc/stable/api-kivy.core.audio.html) - Fallback audio
 
 ### Audio Concepts
 - [PCM Audio](https://en.wikipedia.org/wiki/Pulse-code_modulation) - Digital audio encoding
@@ -321,6 +336,14 @@ assert kick is not None and len(kick) > 0
 
 ## Changelog
 
+### v1.3.0 (Audio Backend Improvements)
+- **Fixed**: Removed runtime auto-install of simpleaudio (not possible on Android)
+- **Added**: Android AudioTrack support via pyjnius (primary backend for Android)
+- **Implemented**: Kivy SoundLoader fallback with WAV file caching
+- **Added**: pyjnius to buildozer requirements
+- **Improved**: Three-tier audio backend system with automatic fallback
+- Audio backends now try: Android AudioTrack → simpleaudio → Kivy SoundLoader
+
 ### v1.1.0 (Initial Implementation)
 - Added simpleaudio integration
 - Implemented _play_sound() method
@@ -331,5 +354,5 @@ assert kick is not None and len(kick) > 0
 ---
 
 **Last Updated**: 2025-10-12  
-**Version**: 1.1.0  
+**Version**: 1.3.0  
 **Author**: Copilot AI / TheMikaus

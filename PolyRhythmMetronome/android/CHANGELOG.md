@@ -2,6 +2,22 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [1.3.0] - Audio Backend Overhaul
+
+### Fixed
+- **Audio Installation Permission Issue**: Removed runtime auto-installation of simpleaudio which failed on Android due to permission issues
+- **No Audio Playback on Android**: Implemented proper Android audio support using native AudioTrack API
+
+### Added
+- **Android AudioTrack Support**: Primary audio backend using pyjnius to access native Android audio APIs for lowest latency
+- **Kivy SoundLoader Implementation**: Complete fallback implementation with WAV file caching for platforms without AudioTrack or simpleaudio
+- **Three-Tier Audio System**: Automatic fallback chain: Android AudioTrack → simpleaudio → Kivy SoundLoader
+
+### Changed
+- **buildozer.spec**: Added pyjnius to requirements for Android AudioTrack support
+- **Audio Library Detection**: Now properly detects platform and chooses appropriate backend
+- **Audio Initialization**: Removed ensure_pkg() call for simpleaudio (should be pre-installed, not auto-installed at runtime)
+
 ## [1.2.0] - UI Improvements and Bug Fixes
 
 ### Fixed

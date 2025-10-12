@@ -347,20 +347,42 @@ class SimpleMetronomeEngine:
         self.thread = None
         self._lock = threading.RLock()
         
-        # Try to import audio playback library with auto-install
+        # Try to import audio playback library
         self.audio_lib = None
-        try:
-            # Try to auto-install simpleaudio if not available
-            sa = ensure_pkg("simpleaudio")
-            self.audio_lib = 'simpleaudio'
-            self.sa = sa
-            print(f"[audio] Using simpleaudio for playback")
-        except ImportError as e:
-            print(f"[audio] Could not load simpleaudio: {e}")
+        
+        # On Android, try pyjnius AudioTrack first (most reliable)
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                AudioTrack = autoclass('android.media.AudioTrack')
+                AudioManager = autoclass('android.media.AudioManager')
+                AudioFormat = autoclass('android.media.AudioFormat')
+                
+                self.AudioTrack = AudioTrack
+                self.AudioManager = AudioManager
+                self.AudioFormat = AudioFormat
+                self.audio_lib = 'android'
+                print(f"[audio] Using Android AudioTrack for playback")
+            except Exception as e:
+                print(f"[audio] Could not load Android AudioTrack: {e}")
+        
+        # Try simpleaudio (desktop/some Android builds with it pre-installed)
+        if self.audio_lib is None:
+            try:
+                import simpleaudio as sa
+                self.sa = sa
+                self.audio_lib = 'simpleaudio'
+                print(f"[audio] Using simpleaudio for playback")
+            except ImportError as e:
+                print(f"[audio] Could not load simpleaudio: {e}")
+        
+        # Fallback to Kivy audio
+        if self.audio_lib is None:
             try:
                 from kivy.core.audio import SoundLoader
-                self.audio_lib = 'kivy'
                 self.SoundLoader = SoundLoader
+                self.audio_lib = 'kivy'
+                self.temp_audio_files = {}  # Cache for temporary audio files
                 print(f"[audio] Using Kivy SoundLoader for playback")
             except ImportError:
                 print("Warning: No audio playback library available")
@@ -403,25 +425,85 @@ class SimpleMetronomeEngine:
         if self.audio_lib is None:
             # No audio library available, skip playback
             return
-            
-        if self.audio_lib == 'simpleaudio':
+        
+        # Apply volume and clip
+        audio_data = audio_data * volume
+        audio_data = np.clip(audio_data, -1.0, 1.0)
+        
+        # Create stereo from mono
+        if channel == 'left':
+            stereo = np.column_stack([audio_data, audio_data * 0.0])
+        elif channel == 'right':
+            stereo = np.column_stack([audio_data * 0.0, audio_data])
+        else:  # center
+            stereo = np.column_stack([audio_data, audio_data])
+        
+        if self.audio_lib == 'android':
             try:
-                # Convert to int16 stereo
-                audio_data = audio_data * volume
-                audio_data = np.clip(audio_data, -1.0, 1.0)
+                # Convert to int16 for Android AudioTrack
+                audio_int16 = (stereo * 32767.0).astype(np.int16)
                 
-                # Create stereo from mono
-                if channel == 'left':
-                    stereo = np.column_stack([audio_data, audio_data * 0.0])
-                elif channel == 'right':
-                    stereo = np.column_stack([audio_data * 0.0, audio_data])
-                else:  # center
-                    stereo = np.column_stack([audio_data, audio_data])
+                # Create AudioTrack
+                buffer_size = len(audio_int16) * 2  # 2 bytes per sample
+                audio_track = self.AudioTrack(
+                    self.AudioManager.STREAM_MUSIC,
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT,
+                    buffer_size,
+                    self.AudioTrack.MODE_STATIC
+                )
                 
+                # Write audio data and play
+                audio_track.write(audio_int16.tobytes(), 0, buffer_size)
+                audio_track.play()
+            except Exception as e:
+                print(f"Android audio playback error: {e}")
+                
+        elif self.audio_lib == 'simpleaudio':
+            try:
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 play_obj = self.sa.play_buffer(audio_int16, 2, 2, SAMPLE_RATE)
             except Exception as e:
-                print(f"Audio playback error: {e}")
+                print(f"simpleaudio playback error: {e}")
+                
+        elif self.audio_lib == 'kivy':
+            try:
+                # Kivy SoundLoader requires file-based audio
+                # We'll save to a temporary WAV file and play it
+                import tempfile
+                import wave
+                import struct
+                
+                # Create a unique filename
+                audio_hash = hash(audio_data.tobytes())
+                
+                # Check cache
+                if audio_hash not in self.temp_audio_files:
+                    # Create temporary WAV file
+                    with tempfile.NamedTemporaryFile(mode='wb', suffix='.wav', delete=False) as f:
+                        temp_path = f.name
+                        
+                        # Write WAV file
+                        with wave.open(f, 'wb') as wav:
+                            wav.setnchannels(2)  # Stereo
+                            wav.setsampwidth(2)  # 16-bit
+                            wav.setframerate(SAMPLE_RATE)
+                            
+                            # Convert to int16 and write
+                            audio_int16 = (stereo * 32767.0).astype(np.int16)
+                            wav.writeframes(audio_int16.tobytes())
+                        
+                        self.temp_audio_files[audio_hash] = temp_path
+                
+                # Load and play the cached sound
+                sound = self.SoundLoader.load(self.temp_audio_files[audio_hash])
+                if sound:
+                    sound.play()
+                else:
+                    print(f"[audio] Failed to load sound file")
+            except Exception as e:
+                print(f"Kivy audio playback error: {e}")
     
     def _run(self):
         """Main metronome loop with multiple layers"""
