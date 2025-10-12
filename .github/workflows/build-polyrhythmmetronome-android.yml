@@ -1,4 +1,4 @@
-name: Build PolyRhythmMetronome (Manual)
+name: Build PolyRhythmMetronome APK
 
 on:
   workflow_dispatch:
