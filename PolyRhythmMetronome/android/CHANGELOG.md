@@ -2,6 +2,21 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [1.1.0] - Bug Fixes and Enhancements
+
+### Fixed
+- **Audio Playback**: Fixed critical bug where Play button did not play audio - engine now properly plays sounds using simpleaudio library
+- **Layer Deletion**: Removed forced minimum layer requirement - users can now remove all layers from left and/or right channels
+
+### Added
+- **Color Picker**: Each layer now has a color input field to specify custom flash colors (hex format: #RRGGBB or #RGB)
+- **Visual Flashing**: Screen now flashes with the layer's color on each beat, synchronized to the specific beat division (quarter notes, eighth notes, etc.)
+- **Drum Sound Support**: Full drum sound synthesis now working with audio playback (kick, snare, hihat, crash, tom, ride)
+
+### Changed
+- **BPM Button Size**: Increased BPM preset button font size from 14sp to 20sp for better touch interaction
+- **Layer Widget Height**: Increased from 120dp to 140dp to accommodate color picker
+
 ## [1.0.0] - Initial Release
 
 ### Added

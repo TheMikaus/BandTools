@@ -50,6 +50,7 @@ try:
     kivy = ensure_pkg("kivy")
     from kivy.app import App
     from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.floatlayout import FloatLayout
     from kivy.uix.gridlayout import GridLayout
     from kivy.uix.scrollview import ScrollView
     from kivy.uix.button import Button
@@ -293,12 +294,6 @@ class RhythmState:
             
             self.left = [make_layer(**normalize(x)) for x in data.get("left", [])]
             self.right = [make_layer(**normalize(x)) for x in data.get("right", [])]
-            
-            # Ensure at least one layer per ear
-            if not self.left:
-                self.left.append(make_layer(subdiv=4, freq=880.0, vol=1.0, color="#3B82F6"))
-            if not self.right:
-                self.right.append(make_layer(subdiv=4, freq=440.0, vol=1.0, color="#EF4444"))
 
 # ---------------- Metronome Engine ---------------- #
 
@@ -315,15 +310,28 @@ class SimpleMetronomeEngine:
         self.thread = None
         self._lock = threading.RLock()
         
+        # Try to import audio playback library
+        self.audio_lib = None
+        try:
+            import simpleaudio as sa
+            self.audio_lib = 'simpleaudio'
+            self.sa = sa
+        except ImportError:
+            try:
+                from kivy.core.audio import SoundLoader
+                self.audio_lib = 'kivy'
+                self.SoundLoader = SoundLoader
+            except ImportError:
+                print("Warning: No audio playback library available")
+                self.audio_lib = None
+        
     def start(self):
         """Start the metronome"""
         if self.running:
             return
         
-        with self.state._lock:
-            if not self.state.left and not self.state.right:
-                print("No layers to play")
-                return
+        # Allow starting even with no layers - just won't play any sounds
+        # This lets users add layers while running
         
         self.running = True
         
@@ -348,6 +356,31 @@ class SimpleMetronomeEngine:
         else:  # tone mode
             freq = float(layer.get("freq", 880.0))
             return self.tone_gen.generate_beep(freq, duration_ms=50)
+    
+    def _play_sound(self, audio_data, volume=1.0, channel='center'):
+        """Play audio data using available library"""
+        if self.audio_lib is None:
+            # No audio library available, skip playback
+            return
+            
+        if self.audio_lib == 'simpleaudio':
+            try:
+                # Convert to int16 stereo
+                audio_data = audio_data * volume
+                audio_data = np.clip(audio_data, -1.0, 1.0)
+                
+                # Create stereo from mono
+                if channel == 'left':
+                    stereo = np.column_stack([audio_data, audio_data * 0.0])
+                elif channel == 'right':
+                    stereo = np.column_stack([audio_data * 0.0, audio_data])
+                else:  # center
+                    stereo = np.column_stack([audio_data, audio_data])
+                
+                audio_int16 = (stereo * 32767.0).astype(np.int16)
+                play_obj = self.sa.play_buffer(audio_int16, 2, 2, SAMPLE_RATE)
+            except Exception as e:
+                print(f"Audio playback error: {e}")
     
     def _run(self):
         """Main metronome loop with multiple layers"""
@@ -377,6 +410,12 @@ class SimpleMetronomeEngine:
             # Check left layers
             for i, layer in enumerate(left_layers):
                 if not layer.get("mute", False) and current_time >= left_next_times[i]:
+                    # Play audio
+                    audio_data = self._get_audio_data(layer)
+                    volume = float(layer.get("vol", 1.0))
+                    self._play_sound(audio_data, volume, 'left')
+                    
+                    # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
                         color = layer.get("color", "#3B82F6")
@@ -386,6 +425,12 @@ class SimpleMetronomeEngine:
             # Check right layers
             for i, layer in enumerate(right_layers):
                 if not layer.get("mute", False) and current_time >= right_next_times[i]:
+                    # Play audio
+                    audio_data = self._get_audio_data(layer)
+                    volume = float(layer.get("vol", 1.0))
+                    self._play_sound(audio_data, volume, 'right')
+                    
+                    # Trigger visual callback
                     if self.on_beat_callback:
                         uid = layer.get("uid")
                         color = layer.get("color", "#EF4444")
@@ -404,7 +449,7 @@ class LayerWidget(BoxLayout):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
         self.size_hint_y = None
-        self.height = '120dp'
+        self.height = '140dp'
         self.padding = '5dp'
         self.spacing = '5dp'
         
@@ -432,7 +477,7 @@ class LayerWidget(BoxLayout):
     
     def _build_ui(self):
         # Top row: Mode, Subdiv, Mute, Delete
-        top_row = BoxLayout(size_hint_y=0.4, spacing='5dp')
+        top_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
         
         # Mode selector
         mode_label = Label(text="Mode:", size_hint_x=0.2, font_size='14sp')
@@ -481,6 +526,22 @@ class LayerWidget(BoxLayout):
         top_row.add_widget(delete_button)
         
         self.add_widget(top_row)
+        
+        # Color row
+        color_row = BoxLayout(size_hint_y=0.2, spacing='5dp')
+        color_label = Label(text="Color:", size_hint_x=0.2, font_size='14sp')
+        color_row.add_widget(color_label)
+        
+        self.color_input = TextInput(
+            text=self.layer.get("color", "#9CA3AF"),
+            multiline=False,
+            size_hint_x=0.8,
+            font_size='14sp'
+        )
+        self.color_input.bind(text=self._on_color_change)
+        color_row.add_widget(self.color_input)
+        
+        self.add_widget(color_row)
         
         # Middle row: Frequency or Drum selector
         self.middle_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
@@ -571,6 +632,37 @@ class LayerWidget(BoxLayout):
         self.layer["vol"] = value
         if self.on_change:
             self.on_change()
+    
+    def _on_color_change(self, input, value):
+        """Handle color input change"""
+        # Validate hex color format
+        if value.startswith('#') and len(value) in [4, 7]:
+            try:
+                # Try to parse as hex color
+                if len(value) == 4:
+                    # Short form #RGB -> #RRGGBB
+                    r, g, b = value[1], value[2], value[3]
+                    value = f"#{r}{r}{g}{g}{b}{b}"
+                
+                # Validate hex digits
+                int(value[1:], 16)
+                
+                self.layer["color"] = value
+                
+                # Update background color
+                r = int(value[1:3], 16) / 255.0
+                g = int(value[3:5], 16) / 255.0
+                b = int(value[5:7], 16) / 255.0
+                
+                with self.canvas.before:
+                    self.canvas.before.clear()
+                    Color(r, g, b, 0.3)
+                    self.rect = Rectangle(size=self.size, pos=self.pos)
+                
+                if self.on_change:
+                    self.on_change()
+            except (ValueError, IndexError):
+                pass  # Invalid color, ignore
 
 
 class LayerListWidget(BoxLayout):
@@ -641,11 +733,10 @@ class LayerListWidget(BoxLayout):
     
     def _on_delete_layer(self, layer):
         layers = self.state.left if self.side == "left" else self.state.right
-        if len(layers) > 1:  # Keep at least one layer
-            if layer in layers:
-                layers.remove(layer)
-                self.refresh()
-                self._notify_change()
+        if layer in layers:
+            layers.remove(layer)
+            self.refresh()
+            self._notify_change()
     
     def _notify_change(self):
         if self.on_change:
@@ -664,6 +755,10 @@ class MetronomeWidget(BoxLayout):
         # Initialize state and engine
         self.state = RhythmState()
         self.engine = SimpleMetronomeEngine(self.state, on_beat_callback=self.on_beat)
+        
+        # Flash tracking
+        self.flash_overlay = None
+        self.flash_scheduled = None
         
         # Load autosave if exists
         self._load_autosave()
@@ -686,7 +781,12 @@ class MetronomeWidget(BoxLayout):
         header = self._build_header()
         self.add_widget(header)
         
-        # Layer lists (side by side or stacked based on orientation)
+        # Layer lists (side by side or stacked based on orientation) with flash overlay
+        layers_container = BoxLayout(orientation='vertical', spacing='10dp')
+        
+        # Create a float layout for overlay
+        float_layout = FloatLayout()
+        
         layers_section = BoxLayout(orientation='horizontal', spacing='10dp')
         
         # Left layers
@@ -699,11 +799,28 @@ class MetronomeWidget(BoxLayout):
         self.right_list.on_change = self._autosave
         layers_section.add_widget(self.right_list)
         
-        self.add_widget(layers_section)
+        float_layout.add_widget(layers_section)
+        
+        # Flash overlay
+        self.flash_overlay = BoxLayout(orientation='horizontal', size_hint=(1, 1))
+        with self.flash_overlay.canvas.before:
+            self.flash_color = Color(1, 1, 1, 0)  # Transparent initially
+            self.flash_rect = Rectangle(size=self.flash_overlay.size, pos=self.flash_overlay.pos)
+        self.flash_overlay.bind(size=self._update_flash_rect, pos=self._update_flash_rect)
+        float_layout.add_widget(self.flash_overlay)
+        
+        layers_container.add_widget(float_layout)
+        self.add_widget(layers_container)
         
         # Control buttons
         controls = self._build_controls()
         self.add_widget(controls)
+    
+    def _update_flash_rect(self, *args):
+        """Update flash overlay rectangle"""
+        if hasattr(self, 'flash_rect'):
+            self.flash_rect.size = self.flash_overlay.size
+            self.flash_rect.pos = self.flash_overlay.pos
     
     def _build_header(self):
         """Build title and BPM controls"""
@@ -740,7 +857,7 @@ class MetronomeWidget(BoxLayout):
         # BPM presets
         preset_grid = GridLayout(cols=4, size_hint_y=0.4, spacing='5dp')
         for bpm in BPM_PRESETS:
-            btn = Button(text=str(bpm), font_size='14sp')
+            btn = Button(text=str(bpm), font_size='20sp')
             btn.bind(on_press=lambda x, b=bpm: self.set_bpm(b))
             preset_grid.add_widget(btn)
         
@@ -805,9 +922,28 @@ class MetronomeWidget(BoxLayout):
             self.play_button.background_color = (0.8, 0.2, 0.2, 1)
     
     def on_beat(self, side, uid, color):
-        """Called when a beat occurs"""
-        # Could flash the layer that triggered the beat
-        pass
+        """Called when a beat occurs - flash the screen with the layer's color"""
+        # Parse hex color
+        try:
+            r = int(color[1:3], 16) / 255.0
+            g = int(color[3:5], 16) / 255.0
+            b = int(color[5:7], 16) / 255.0
+            
+            # Set flash color with alpha
+            self.flash_color.rgba = (r, g, b, 0.3)
+            
+            # Cancel any pending flash clear
+            if self.flash_scheduled:
+                self.flash_scheduled.cancel()
+            
+            # Schedule flash to clear after duration
+            self.flash_scheduled = Clock.schedule_once(self._clear_flash, FLASH_DURATION)
+        except (ValueError, IndexError):
+            pass  # Invalid color, skip flash
+    
+    def _clear_flash(self, dt):
+        """Clear the flash overlay"""
+        self.flash_color.rgba = (1, 1, 1, 0)
     
     def on_new(self, instance):
         """Create new rhythm pattern"""
