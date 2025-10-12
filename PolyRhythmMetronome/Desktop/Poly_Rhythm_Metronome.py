@@ -42,6 +42,8 @@ try: sd = ensure_pkg("sounddevice")
 except ImportError: sd = None
 try: sa = ensure_pkg("simpleaudio")
 except ImportError: sa = None
+try: pydub = ensure_pkg("pydub")
+except ImportError: pydub = None
 
 # ---------------- Constants ---------------- #
 
@@ -93,10 +95,37 @@ class WaveCache:
         if not path: return None
         key = os.path.abspath(path)
         if key in self._c: return self._c[key]
-        if not os.path.exists(key): raise FileNotFoundError(f"WAV not found: {key}")
-        data, sr = self._read_wav_any(key)
+        if not os.path.exists(key): raise FileNotFoundError(f"Audio file not found: {key}")
+        # Check if it's an MP3 file
+        if key.lower().endswith('.mp3'):
+            data, sr = self._read_mp3(key)
+        else:
+            data, sr = self._read_wav_any(key)
         if sr != self.sr: data = self._resample_linear(data, sr, self.sr)
         self._c[key] = data.astype(np.float32, copy=False); return self._c[key]
+    @staticmethod
+    def _read_mp3(path):
+        """Read MP3 file using pydub"""
+        if pydub is None:
+            raise ImportError("pydub is required for MP3 support. Install with: pip install pydub")
+        try:
+            from pydub import AudioSegment
+            audio = AudioSegment.from_mp3(path)
+            # Convert to mono
+            if audio.channels > 1:
+                audio = audio.set_channels(1)
+            # Get raw data
+            samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+            # Normalize based on sample width
+            if audio.sample_width == 1:
+                samples = (samples - 128.0) / 128.0
+            elif audio.sample_width == 2:
+                samples = samples / 32768.0
+            elif audio.sample_width == 4:
+                samples = samples / 2147483648.0
+            return samples, audio.frame_rate
+        except Exception as e:
+            raise RuntimeError(f"Failed to read MP3 file {path}: {e}")
     @staticmethod
     def _read_wav_any(path):
         with wave.open(path, 'rb') as wf:
@@ -120,6 +149,79 @@ class WaveCache:
         if new_len <= 1: return np.zeros(1, dtype=np.float32)
         xp = np.linspace(0.0,1.0,len(x),dtype=np.float32); xnew = np.linspace(0.0,1.0,new_len,dtype=np.float32)
         return np.interp(xnew, xp, x.astype(np.float32, copy=False)).astype(np.float32)
+
+class Mp3TickCache:
+    """Manage MP3 tick sounds from the ticks folder"""
+    def __init__(self, sr=SAMPLE_RATE, ticks_dir="ticks"):
+        self.sr = sr
+        self.ticks_dir = ticks_dir
+        self._wave_cache = WaveCache(sr)
+        self._pairs = {}  # name -> (path1, path2) or (path, None)
+        self._scan_ticks_folder()
+    
+    def _scan_ticks_folder(self):
+        """Scan the ticks folder for MP3 files and identify pairs"""
+        if not os.path.exists(self.ticks_dir):
+            return
+        
+        mp3_files = {}
+        for filename in os.listdir(self.ticks_dir):
+            if filename.lower().endswith('.mp3'):
+                full_path = os.path.join(self.ticks_dir, filename)
+                name_without_ext = os.path.splitext(filename)[0]
+                mp3_files[name_without_ext] = full_path
+        
+        # Identify pairs (files ending in _1 and _2)
+        processed = set()
+        for name in mp3_files:
+            if name in processed:
+                continue
+            if name.endswith('_1'):
+                base_name = name[:-2]
+                pair_name = base_name + '_2'
+                if pair_name in mp3_files:
+                    # Found a pair
+                    self._pairs[base_name] = (mp3_files[name], mp3_files[pair_name])
+                    processed.add(name)
+                    processed.add(pair_name)
+                else:
+                    # Single file with _1 suffix
+                    self._pairs[name] = (mp3_files[name], None)
+                    processed.add(name)
+            elif name.endswith('_2'):
+                # Check if corresponding _1 exists (shouldn't happen if _1 was processed first)
+                base_name = name[:-2]
+                pair_name = base_name + '_1'
+                if pair_name not in mp3_files:
+                    # Orphan _2 file
+                    self._pairs[name] = (mp3_files[name], None)
+                    processed.add(name)
+            else:
+                # Regular single file
+                self._pairs[name] = (mp3_files[name], None)
+                processed.add(name)
+    
+    def get_available_ticks(self):
+        """Return list of available tick names"""
+        return sorted(self._pairs.keys())
+    
+    def get(self, name: str, is_accent: bool = False):
+        """Get the tick sound for the given name. If it's a pair, return the appropriate one."""
+        if name not in self._pairs:
+            return None
+        
+        path1, path2 = self._pairs[name]
+        if path2 is not None:
+            # It's a pair - use path1 for accent, path2 for regular
+            path = path1 if is_accent else path2
+        else:
+            # Single file
+            path = path1
+        
+        try:
+            return self._wave_cache.get(path)
+        except Exception:
+            return None
 
 class DrumSynth:
     def __init__(self, sr=SAMPLE_RATE): self.sr, self._c = sr, {}
@@ -160,10 +262,41 @@ def float_to_int16(stereo: np.ndarray) -> np.ndarray:
 # ---------------- Data model ---------------- #
 
 def new_uid(): return uuid.uuid4().hex
-def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", wav_path="", drum="snare", color="#9CA3AF", uid=None):
+
+def random_dark_color():
+    """Generate a random dark color suitable for inactive layer background"""
+    import random
+    # Generate RGB values in the range 40-120 to ensure dark but visible colors
+    r = random.randint(40, 120)
+    g = random.randint(40, 120)
+    b = random.randint(40, 120)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def brighten_color(hex_color, factor=2.0):
+    """Create a brighter version of a hex color for flash effect"""
+    try:
+        # Remove # if present
+        hex_color = hex_color.lstrip('#')
+        # Parse RGB
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        # Brighten by factor, capping at 255
+        r = min(255, int(r * factor))
+        g = min(255, int(g * factor))
+        b = min(255, int(b * factor))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    except Exception:
+        # Fallback to original color if parsing fails
+        return hex_color
+
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", wav_path="", drum="snare", mp3_tick="", color="#9CA3AF", flash_color=None, uid=None):
+    # Auto-generate flash_color if not provided
+    if flash_color is None:
+        flash_color = brighten_color(color)
     return {"uid": uid or new_uid(),
             "subdiv": int(subdiv), "freq": float(freq), "vol": float(vol), "mute": bool(mute),
-            "mode": mode, "wav_path": wav_path, "drum": drum, "color": color}
+            "mode": mode, "wav_path": wav_path, "drum": drum, "mp3_tick": mp3_tick, "color": color, "flash_color": flash_color}
 
 class RhythmState:
     def __init__(self):
@@ -179,7 +312,11 @@ class RhythmState:
             self.accent_factor=float(d.get("accent_factor",DEFAULT_ACCENT_FACTOR)); self.flash_enabled=bool(d.get("flash_enabled",False))
             def normalize(x):
                 x=dict(x); x.setdefault("mode","tone"); x.setdefault("wav_path",""); x.setdefault("drum","snare")
-                x.setdefault("color","#9CA3AF"); x.setdefault("uid", new_uid()); return x
+                x.setdefault("mp3_tick",""); x.setdefault("color","#9CA3AF"); x.setdefault("uid", new_uid())
+                # Set flash_color if not present
+                if "flash_color" not in x:
+                    x["flash_color"] = brighten_color(x["color"])
+                return x
             self.left=[make_layer(**normalize(x)) for x in d.get("left",[])]
             self.right=[make_layer(**normalize(x)) for x in d.get("right",[])]
 
@@ -190,7 +327,7 @@ class StreamEngine:
         self.rhythm=rhythm_state; self.ui_after=ui_after_callable; self.event_notify=event_notify
         self.stream=None
         self.running=False
-        self.tones=ToneCache(); self.waves=WaveCache(); self.drums=DrumSynth()
+        self.tones=ToneCache(); self.waves=WaveCache(); self.drums=DrumSynth(); self.mp3_ticks=Mp3TickCache()
         self._lock=threading.RLock()
         self.left_layers=[]; self.right_layers=[]; self.L_intervals=[]; self.R_intervals=[]; self.L_next=[]; self.R_next=[]
         self.measure_samples=0; self.sample_counter=0; self.accent_factor=DEFAULT_ACCENT_FACTOR; self.flash_enabled=False
@@ -274,6 +411,12 @@ class StreamEngine:
     def _amp_and_source(self, lay, accent: bool):
         amp = BASE_AMP * float(lay["vol"]) * (self.accent_factor if accent else 1.0)
         mode = lay.get("mode","tone")
+        if mode=="mp3_tick" and lay.get("mp3_tick"):
+            try: 
+                data = self.mp3_ticks.get(lay["mp3_tick"], is_accent=accent)
+                if data is not None:
+                    return amp, data
+            except Exception: pass
         if mode=="file" and lay.get("wav_path"):
             try: return amp, self.waves.get(lay["wav_path"])
             except Exception: pass
@@ -296,7 +439,7 @@ class StreamEngine:
                             amp,data=self._amp_and_source(lay, accent)
                             self.active.append({"data":data,"idx":0,"amp":amp,"channel":channel})
                             if self.flash_enabled and self.event_notify is not None:
-                                self.event_notify("L" if channel==0 else "R", lay.get("uid"), lay.get("color","#9CA3AF"))
+                                self.event_notify("L" if channel==0 else "R", lay.get("uid"), lay.get("flash_color", lay.get("color","#9CA3AF")))
                         next_times[i]=t_sec+iv
             with self._lock:
                 L_layers,R_layers = self.left_layers, self.right_layers
@@ -334,7 +477,7 @@ class StreamEngine:
                                     if self.measure_samples>0:
                                         r=ev_sample%self.measure_samples; accent=(r<=TOL_SAMPLES or (self.measure_samples-r)<=TOL_SAMPLES)
                                     amp,data=self._amp_and_source(lay, accent)
-                                    left_events.append((amp,data,lay.get("uid"),lay.get("color","#9CA3AF")))
+                                    left_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
                             self.L_next[i]=t_ev+self.L_intervals[i]
                     for i,t_ev in enumerate(self.R_next):
                         if abs(t_ev-next_t)<TOL:
@@ -345,7 +488,7 @@ class StreamEngine:
                                     if self.measure_samples>0:
                                         r=ev_sample%self.measure_samples; accent=(r<=TOL_SAMPLES or (self.measure_samples-r)<=TOL_SAMPLES)
                                     amp,data=self._amp_and_source(lay, accent)
-                                    right_events.append((amp,data,lay.get("uid"),lay.get("color","#9CA3AF")))
+                                    right_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
                             self.R_next[i]=t_ev+self.R_intervals[i]
                 target=start+next_t
                 while True:
@@ -356,12 +499,12 @@ class StreamEngine:
                 for amp,data,*_ in left_events+right_events: max_len=max(max_len, data.shape[0])
                 if max_len==0: time.sleep(0.0005); continue
                 frame=np.zeros((max_len,2), dtype=np.float32)
-                for amp,data,uid,color in left_events:
+                for amp,data,uid,flash_color in left_events:
                     L=min(max_len, data.shape[0]); frame[:L,0]+=amp*data[:L]
-                    if self.flash_enabled and self.event_notify is not None: self.event_notify("L", uid, color)
-                for amp,data,uid,color in right_events:
+                    if self.flash_enabled and self.event_notify is not None: self.event_notify("L", uid, flash_color)
+                for amp,data,uid,flash_color in right_events:
                     L=min(max_len, data.shape[0]); frame[:L,1]+=amp*data[:L]
-                    if self.flash_enabled and self.event_notify is not None: self.event_notify("R", uid, color)
+                    if self.flash_enabled and self.event_notify is not None: self.event_notify("R", uid, flash_color)
                 int16=(np.clip(frame,-1.0,1.0)*32767.0).astype(np.int16)
                 try: h=sa.play_buffer(int16,2,2,sr)
                 except TypeError: h=sa.play_buffer(int16.tobytes(),2,2,sr)
@@ -383,7 +526,7 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
     def make_side(layers): intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]; return intervals,[0.0 for _ in layers]
     L_intv,L_next = make_side(left_layers); R_intv,R_next = make_side(right_layers)
     total=int(SAMPLE_RATE*duration_sec); stereo=np.zeros((total,2),dtype=np.float32)
-    tone_cache=ToneCache(); wave_cache=WaveCache(); drum=DrumSynth()
+    tone_cache=ToneCache(); wave_cache=WaveCache(); drum=DrumSynth(); mp3_ticks=Mp3TickCache()
     def add_data(start_idx,data,amp,ch):
         if start_idx>=total: return
         end_idx=min(total,start_idx+data.shape[0]); L=end_idx-start_idx
@@ -395,6 +538,12 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
             r=ev_sample%meas_samples; accent_now=(r<=TOL_SAMPLES or (meas_samples-r)<=TOL_SAMPLES)
         amp=BASE_AMP*float(lay["vol"])*(accent if accent_now else 1.0)
         mode=lay.get("mode","tone")
+        if mode=="mp3_tick" and lay.get("mp3_tick"):
+            try: 
+                data = mp3_ticks.get(lay["mp3_tick"], is_accent=accent_now)
+                if data is not None:
+                    return amp, data
+            except Exception: pass
         if mode=="file" and lay.get("wav_path"):
             try: return amp, wave_cache.get(lay["wav_path"])
             except Exception: pass
@@ -429,6 +578,11 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
 
 AUTOSAVE_FILE="metronome_autosave.json"
 DRUM_CHOICES=["kick","snare","hihat","crash","tom","ride"]
+
+def get_mp3_tick_choices():
+    """Get list of available MP3 ticks from the ticks folder"""
+    mp3_cache = Mp3TickCache()
+    return mp3_cache.get_available_ticks()
 
 class ScrollList(ttk.Frame):
     """
@@ -500,6 +654,8 @@ class ScrollList(ttk.Frame):
             elif layer.get("mode") == "file":
                 p = layer.get("wav_path","")
                 parts.append(os.path.basename(p) if p else "(wav)")
+            elif layer.get("mode") == "mp3_tick":
+                parts.append(layer.get("mp3_tick",""))
             else:
                 parts.append(layer.get("drum","snare"))
             parts.append(f"vol {layer['vol']:.2f}")
@@ -530,11 +686,11 @@ class ScrollList(ttk.Frame):
         else:
             self.selected_index = None
 
-    def flash_uid(self, uid, color, duration_ms=FLASH_MS):
+    def flash_uid(self, uid, flash_color, duration_ms=FLASH_MS):
         row = self.uid_to_row.get(uid)
         if not row: return
-        orig = row["frame"]["bg"]
-        row["frame"].configure(bg=color); row["label"].configure(background=color)
+        orig = row["base_bg"]
+        row["frame"].configure(bg=flash_color); row["label"].configure(background=flash_color)
         row["frame"].after(duration_ms, lambda: (row["frame"].configure(bg=orig),
                                                  row["label"].configure(background=orig)))
 
@@ -597,9 +753,10 @@ class App(ttk.Frame):
         ttk.Radiobutton(mode_box,text="Tone",variable=self.var_mode,value="tone",command=self._on_mode_change).pack(side="left")
         ttk.Radiobutton(mode_box,text="WAV",variable=self.var_mode,value="file",command=self._on_mode_change).pack(side="left")
         ttk.Radiobutton(mode_box,text="Drum",variable=self.var_mode,value="drum",command=self._on_mode_change).pack(side="left")
+        ttk.Radiobutton(mode_box,text="MP3",variable=self.var_mode,value="mp3_tick",command=self._on_mode_change).pack(side="left")
 
         ttk.Label(newlay,text="Color").grid(row=0,column=6,sticky="e")
-        self.var_color=tk.StringVar(value="#9CA3AF")
+        self.var_color=tk.StringVar(value=random_dark_color())
         ttk.Button(newlay,text="Pick",command=self._pick_new_color,width=5).grid(row=0,column=7,sticky="w")
 
         # Row 1: mode-specific
@@ -616,6 +773,14 @@ class App(ttk.Frame):
         self.var_drum=tk.StringVar(value="snare")
         self.combo_drum=ttk.Combobox(newlay,textvariable=self.var_drum,values=DRUM_CHOICES,state="disabled",width=10)
         self.combo_drum.grid(row=1,column=6,sticky="w")
+        
+        ttk.Label(newlay,text="MP3 Tick").grid(row=1,column=7,sticky="e",padx=(8,0))
+        self.var_mp3_tick=tk.StringVar(value="")
+        mp3_choices = get_mp3_tick_choices()
+        self.combo_mp3_tick=ttk.Combobox(newlay,textvariable=self.var_mp3_tick,values=mp3_choices,state="disabled",width=12)
+        self.combo_mp3_tick.grid(row=1,column=8,sticky="w")
+        if mp3_choices:
+            self.var_mp3_tick.set(mp3_choices[0])
 
         # Row 2: add buttons
         add_box=ttk.Frame(newlay); add_box.grid(row=2,column=0,columnspan=8,sticky="ew",pady=(4,2))
@@ -647,12 +812,12 @@ class App(ttk.Frame):
         self.after(30,self._drain_flash_queue)
 
     # --- Flash queue ---
-    def _enqueue_flash(self, side, uid, color): self.flash_queue.append((side,uid,color))
+    def _enqueue_flash(self, side, uid, flash_color): self.flash_queue.append((side,uid,flash_color))
     def _drain_flash_queue(self):
         while self.flash_queue:
-            side,uid,color=self.flash_queue.popleft()
+            side,uid,flash_color=self.flash_queue.popleft()
             if self.state.flash_enabled:
-                (self.left_list.flash_uid if side=="L" else self.right_list.flash_uid)(uid,color,FLASH_MS)
+                (self.left_list.flash_uid if side=="L" else self.right_list.flash_uid)(uid,flash_color,FLASH_MS)
         self.after(30,self._drain_flash_queue)
 
     # --- Autosave ---
@@ -670,11 +835,13 @@ class App(ttk.Frame):
     def _on_mode_change(self):
         m=self.var_mode.get()
         if m=="tone":
-            self.entry_freq.configure(state="normal"); self.entry_wav.configure(state="disabled"); self.combo_drum.configure(state="disabled")
+            self.entry_freq.configure(state="normal"); self.entry_wav.configure(state="disabled"); self.combo_drum.configure(state="disabled"); self.combo_mp3_tick.configure(state="disabled")
         elif m=="file":
-            self.entry_freq.configure(state="disabled"); self.entry_wav.configure(state="normal"); self.combo_drum.configure(state="disabled")
-        else:
-            self.entry_freq.configure(state="disabled"); self.entry_wav.configure(state="disabled"); self.combo_drum.configure(state="readonly")
+            self.entry_freq.configure(state="disabled"); self.entry_wav.configure(state="normal"); self.combo_drum.configure(state="disabled"); self.combo_mp3_tick.configure(state="disabled")
+        elif m=="drum":
+            self.entry_freq.configure(state="disabled"); self.entry_wav.configure(state="disabled"); self.combo_drum.configure(state="readonly"); self.combo_mp3_tick.configure(state="disabled")
+        elif m=="mp3_tick":
+            self.entry_freq.configure(state="disabled"); self.entry_wav.configure(state="disabled"); self.combo_drum.configure(state="disabled"); self.combo_mp3_tick.configure(state="readonly")
     def _browse_wav(self):
         p=filedialog.askopenfilename(title="Choose WAV file", filetypes=[("WAV files","*.wav")])
         if p: self.var_wav.set(p)
@@ -695,14 +862,19 @@ class App(ttk.Frame):
         try:
             subdiv=int(self.var_subdiv.get()); vol=float(self.var_vol.get()); vol=0.0 if vol<0 else (1.0 if vol>1 else vol)
             mode=self.var_mode.get()
-            if mode=="tone": freq=float(self.var_freq.get()); wav_path=""; drum="snare"
+            if mode=="tone": freq=float(self.var_freq.get()); wav_path=""; drum="snare"; mp3_tick=""
             elif mode=="file":
                 wav_path=self.var_wav.get(); 
-                if not wav_path: raise ValueError("Please choose a WAV file (or use Tone/Drum).")
-                freq=0.0; drum="snare"
-            else: drum=self.var_drum.get() or "snare"; freq=0.0; wav_path=""
+                if not wav_path: raise ValueError("Please choose a WAV file (or use Tone/Drum/MP3).")
+                freq=0.0; drum="snare"; mp3_tick=""
+            elif mode=="drum": drum=self.var_drum.get() or "snare"; freq=0.0; wav_path=""; mp3_tick=""
+            elif mode=="mp3_tick": 
+                mp3_tick=self.var_mp3_tick.get() or ""
+                if not mp3_tick: raise ValueError("Please select an MP3 tick sound.")
+                freq=0.0; wav_path=""; drum="snare"
+            else: freq=0.0; wav_path=""; drum="snare"; mp3_tick=""
             color=self.var_color.get(); _=interval_seconds(float(self.var_bpm.get()), subdiv)
-            return subdiv, vol, mode, freq, wav_path, drum, color
+            return subdiv, vol, mode, freq, wav_path, drum, mp3_tick, color
         except Exception as e:
             messagebox.showerror("Invalid Layer", str(e)); return None
 
@@ -747,17 +919,21 @@ class App(ttk.Frame):
         if not self._update_global_from_inputs(): return
         vals=self._get_new_layer_vals(); 
         if not vals: return
-        subdiv, vol, mode, freq, wav_path, drum, color=vals
+        subdiv, vol, mode, freq, wav_path, drum, mp3_tick, color=vals
         with self.state._lock:
-            self.state.left.append(make_layer(subdiv=subdiv,freq=freq,vol=vol,mute=False,mode=mode,wav_path=wav_path,drum=drum,color=color))
+            self.state.left.append(make_layer(subdiv=subdiv,freq=freq,vol=vol,mute=False,mode=mode,wav_path=wav_path,drum=drum,mp3_tick=mp3_tick,color=color))
+        # Randomize color for next layer
+        self.var_color.set(random_dark_color())
         self.refresh_lists(); self._autosave(); self.engine.update_live_from_state()
     def add_to_right(self):
         if not self._update_global_from_inputs(): return
         vals=self._get_new_layer_vals(); 
         if not vals: return
-        subdiv, vol, mode, freq, wav_path, drum, color=vals
+        subdiv, vol, mode, freq, wav_path, drum, mp3_tick, color=vals
         with self.state._lock:
-            self.state.right.append(make_layer(subdiv=subdiv,freq=freq,vol=vol,mute=False,mode=mode,wav_path=wav_path,drum=drum,color=color))
+            self.state.right.append(make_layer(subdiv=subdiv,freq=freq,vol=vol,mute=False,mode=mode,wav_path=wav_path,drum=drum,mp3_tick=mp3_tick,color=color))
+        # Randomize color for next layer
+        self.var_color.set(random_dark_color())
         self.refresh_lists(); self._autosave(); self.engine.update_live_from_state()
     def move_left_to_right(self):
         with self.state._lock:
