@@ -23,6 +23,8 @@ import math
 import time
 import uuid
 from pathlib import Path
+from io import StringIO
+from datetime import datetime
 
 # ---------------- Auto-install missing packages ---------------- #
 
@@ -74,6 +76,41 @@ except ImportError as e:
 if platform == 'android':
     from android.permissions import request_permissions, Permission
     request_permissions([Permission.WRITE_EXTERNAL_STORAGE, Permission.READ_EXTERNAL_STORAGE])
+
+# ---------------- Log Capture ---------------- #
+
+class LogCapture:
+    """Captures stdout/stderr for display in the app"""
+    def __init__(self):
+        self.buffer = StringIO()
+        self.start_time = datetime.now()
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
+        
+    def write(self, text):
+        """Capture text to buffer and pass through to original"""
+        if text and text.strip():
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            line = f"[{timestamp}] {text}"
+            self.buffer.write(line)
+            if not line.endswith('\n'):
+                self.buffer.write('\n')
+        # Also write to original output
+        self.original_stdout.write(text)
+        
+    def flush(self):
+        """Flush both buffer and original stdout"""
+        self.buffer.flush()
+        self.original_stdout.flush()
+        
+    def get_logs(self):
+        """Get all captured logs"""
+        return self.buffer.getvalue()
+
+# Initialize log capture at module level
+log_capture = LogCapture()
+sys.stdout = log_capture
+sys.stderr = log_capture
 
 # ---------------- Constants ---------------- #
 
@@ -310,17 +347,21 @@ class SimpleMetronomeEngine:
         self.thread = None
         self._lock = threading.RLock()
         
-        # Try to import audio playback library
+        # Try to import audio playback library with auto-install
         self.audio_lib = None
         try:
-            import simpleaudio as sa
+            # Try to auto-install simpleaudio if not available
+            sa = ensure_pkg("simpleaudio")
             self.audio_lib = 'simpleaudio'
             self.sa = sa
-        except ImportError:
+            print(f"[audio] Using simpleaudio for playback")
+        except ImportError as e:
+            print(f"[audio] Could not load simpleaudio: {e}")
             try:
                 from kivy.core.audio import SoundLoader
                 self.audio_lib = 'kivy'
                 self.SoundLoader = SoundLoader
+                print(f"[audio] Using Kivy SoundLoader for playback")
             except ImportError:
                 print("Warning: No audio playback library available")
                 self.audio_lib = None
@@ -465,15 +506,46 @@ class LayerWidget(BoxLayout):
             r = int(color[1:3], 16) / 255.0
             g = int(color[3:5], 16) / 255.0
             b = int(color[5:7], 16) / 255.0
-            Color(r, g, b, 0.3)
+            self.bg_color = Color(r, g, b, 0.3)
             self.rect = Rectangle(size=self.size, pos=self.pos)
         self.bind(size=self._update_rect, pos=self._update_rect)
+        
+        # Track base color for flashing
+        self.base_rgba = (r, g, b, 0.3)
+        self.flash_scheduled = None
         
         self._build_ui()
     
     def _update_rect(self, *args):
         self.rect.size = self.size
         self.rect.pos = self.pos
+    
+    def flash(self, color=None, duration=0.12):
+        """Flash the layer widget with the specified color"""
+        if color is None:
+            color = self.layer.get("color", "#9CA3AF")
+        
+        # Parse hex color
+        try:
+            r = int(color[1:3], 16) / 255.0
+            g = int(color[3:5], 16) / 255.0
+            b = int(color[5:7], 16) / 255.0
+            
+            # Set flash color with full opacity
+            self.bg_color.rgba = (r, g, b, 0.8)
+            
+            # Cancel any pending flash clear
+            if self.flash_scheduled:
+                self.flash_scheduled.cancel()
+            
+            # Schedule flash to clear after duration
+            self.flash_scheduled = Clock.schedule_once(lambda dt: self._clear_flash(), duration)
+        except (ValueError, IndexError):
+            pass  # Invalid color, skip flash
+    
+    def _clear_flash(self):
+        """Restore the base background color"""
+        self.bg_color.rgba = self.base_rgba
     
     def _build_ui(self):
         # Top row: Mode, Subdiv, Mute, Delete
@@ -678,6 +750,9 @@ class LayerListWidget(BoxLayout):
         self.side = side
         self.on_change = None
         
+        # Track layer widgets by UID for flashing
+        self.uid_to_widget = {}
+        
         # Title
         title_box = BoxLayout(size_hint_y=None, height='40dp')
         title = Label(
@@ -711,6 +786,7 @@ class LayerListWidget(BoxLayout):
     
     def refresh(self):
         self.layers_container.clear_widgets()
+        self.uid_to_widget.clear()
         
         layers = self.state.left if self.side == "left" else self.state.right
         
@@ -722,6 +798,11 @@ class LayerListWidget(BoxLayout):
                 on_delete=self._on_delete_layer
             )
             self.layers_container.add_widget(layer_widget)
+            
+            # Track widget by UID for flashing
+            uid = layer.get("uid")
+            if uid:
+                self.uid_to_widget[uid] = layer_widget
     
     def _on_add_layer(self, button):
         layers = self.state.left if self.side == "left" else self.state.right
@@ -741,6 +822,12 @@ class LayerListWidget(BoxLayout):
     def _notify_change(self):
         if self.on_change:
             self.on_change()
+    
+    def flash_uid(self, uid, color):
+        """Flash the layer widget with the specified UID"""
+        widget = self.uid_to_widget.get(uid)
+        if widget:
+            widget.flash(color)
 
 
 class MetronomeWidget(BoxLayout):
@@ -755,10 +842,6 @@ class MetronomeWidget(BoxLayout):
         # Initialize state and engine
         self.state = RhythmState()
         self.engine = SimpleMetronomeEngine(self.state, on_beat_callback=self.on_beat)
-        
-        # Flash tracking
-        self.flash_overlay = None
-        self.flash_scheduled = None
         
         # Load autosave if exists
         self._load_autosave()
@@ -781,12 +864,7 @@ class MetronomeWidget(BoxLayout):
         header = self._build_header()
         self.add_widget(header)
         
-        # Layer lists (side by side or stacked based on orientation) with flash overlay
-        layers_container = BoxLayout(orientation='vertical', spacing='10dp')
-        
-        # Create a float layout for overlay
-        float_layout = FloatLayout()
-        
+        # Layer lists (side by side)
         layers_section = BoxLayout(orientation='horizontal', spacing='10dp')
         
         # Left layers
@@ -799,35 +877,19 @@ class MetronomeWidget(BoxLayout):
         self.right_list.on_change = self._autosave
         layers_section.add_widget(self.right_list)
         
-        float_layout.add_widget(layers_section)
-        
-        # Flash overlay
-        self.flash_overlay = BoxLayout(orientation='horizontal', size_hint=(1, 1))
-        with self.flash_overlay.canvas.before:
-            self.flash_color = Color(1, 1, 1, 0)  # Transparent initially
-            self.flash_rect = Rectangle(size=self.flash_overlay.size, pos=self.flash_overlay.pos)
-        self.flash_overlay.bind(size=self._update_flash_rect, pos=self._update_flash_rect)
-        float_layout.add_widget(self.flash_overlay)
-        
-        layers_container.add_widget(float_layout)
-        self.add_widget(layers_container)
+        self.add_widget(layers_section)
         
         # Control buttons
         controls = self._build_controls()
         self.add_widget(controls)
     
-    def _update_flash_rect(self, *args):
-        """Update flash overlay rectangle"""
-        if hasattr(self, 'flash_rect'):
-            self.flash_rect.size = self.flash_overlay.size
-            self.flash_rect.pos = self.flash_overlay.pos
-    
+
     def _build_header(self):
         """Build title and BPM controls"""
-        header = BoxLayout(orientation='vertical', size_hint_y=None, height='120dp', spacing='5dp')
+        header = BoxLayout(orientation='vertical', size_hint_y=None, height='140dp', spacing='2dp')
         
         # Title
-        title = Label(text="PolyRhythm Metronome", font_size='24sp', bold=True, size_hint_y=0.3)
+        title = Label(text="PolyRhythm Metronome", font_size='24sp', bold=True, size_hint_y=0.25)
         header.add_widget(title)
         
         # BPM row
@@ -854,8 +916,8 @@ class MetronomeWidget(BoxLayout):
         
         header.add_widget(bpm_row)
         
-        # BPM presets
-        preset_grid = GridLayout(cols=4, size_hint_y=0.4, spacing='5dp')
+        # BPM presets - all 8 buttons in one row, taller but thinner
+        preset_grid = GridLayout(cols=8, size_hint_y=0.45, spacing='2dp', height='50dp')
         for bpm in BPM_PRESETS:
             btn = Button(text=str(bpm), font_size='20sp')
             btn.bind(on_press=lambda x, b=bpm: self.set_bpm(b))
@@ -867,20 +929,20 @@ class MetronomeWidget(BoxLayout):
     
     def _build_controls(self):
         """Build play/stop and file operation controls"""
-        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='80dp', spacing='5dp')
+        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='120dp', spacing='5dp')
         
         # Play/Stop button
         self.play_button = Button(
             text="PLAY",
             font_size='20sp',
-            size_hint_y=0.5,
+            size_hint_y=0.4,
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.play_button.bind(on_press=self.on_play_stop)
         controls.add_widget(self.play_button)
         
-        # Save/Load buttons
-        file_box = BoxLayout(size_hint_y=0.5, spacing='5dp')
+        # Save/Load/New buttons
+        file_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
         
         save_btn = Button(text="SAVE", font_size='16sp')
         save_btn.bind(on_press=self.on_save)
@@ -895,6 +957,19 @@ class MetronomeWidget(BoxLayout):
         file_box.add_widget(new_btn)
         
         controls.add_widget(file_box)
+        
+        # Logs button
+        logs_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        
+        logs_btn = Button(
+            text="VIEW LOGS",
+            font_size='16sp',
+            background_color=(0.3, 0.3, 0.8, 1)
+        )
+        logs_btn.bind(on_press=self.on_view_logs)
+        logs_box.add_widget(logs_btn)
+        
+        controls.add_widget(logs_box)
         
         return controls
     
@@ -922,28 +997,12 @@ class MetronomeWidget(BoxLayout):
             self.play_button.background_color = (0.8, 0.2, 0.2, 1)
     
     def on_beat(self, side, uid, color):
-        """Called when a beat occurs - flash the screen with the layer's color"""
-        # Parse hex color
-        try:
-            r = int(color[1:3], 16) / 255.0
-            g = int(color[3:5], 16) / 255.0
-            b = int(color[5:7], 16) / 255.0
-            
-            # Set flash color with alpha
-            self.flash_color.rgba = (r, g, b, 0.3)
-            
-            # Cancel any pending flash clear
-            if self.flash_scheduled:
-                self.flash_scheduled.cancel()
-            
-            # Schedule flash to clear after duration
-            self.flash_scheduled = Clock.schedule_once(self._clear_flash, FLASH_DURATION)
-        except (ValueError, IndexError):
-            pass  # Invalid color, skip flash
-    
-    def _clear_flash(self, dt):
-        """Clear the flash overlay"""
-        self.flash_color.rgba = (1, 1, 1, 0)
+        """Called when a beat occurs - flash the specific layer row"""
+        # Flash the specific layer widget
+        if side == 'left':
+            self.left_list.flash_uid(uid, color)
+        else:
+            self.right_list.flash_uid(uid, color)
     
     def on_new(self, instance):
         """Create new rhythm pattern"""
@@ -1017,6 +1076,61 @@ class MetronomeWidget(BoxLayout):
         cancel_button = Button(text="Cancel")
         cancel_button.bind(on_press=popup.dismiss)
         button_box.add_widget(cancel_button)
+        
+        content.add_widget(button_box)
+        popup.open()
+    
+    def on_view_logs(self, instance):
+        """Handle view logs button press"""
+        content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
+        
+        # Get logs from the log capture
+        logs_text = log_capture.get_logs()
+        if not logs_text.strip():
+            logs_text = "No logs available yet."
+        
+        # Create scrollable text input to display logs
+        logs_display = TextInput(
+            text=logs_text,
+            multiline=True,
+            readonly=True,
+            size_hint=(1, 0.9),
+            font_size='12sp',
+            font_name='RobotoMono-Regular.ttf' if os.path.exists('RobotoMono-Regular.ttf') else 'DroidSansMono'
+        )
+        content.add_widget(logs_display)
+        
+        # Button box
+        button_box = BoxLayout(size_hint=(1, 0.1), spacing='10dp')
+        
+        popup = Popup(title="Application Logs", content=content, size_hint=(0.95, 0.9))
+        
+        def refresh_logs(instance):
+            """Refresh the log display"""
+            logs_display.text = log_capture.get_logs()
+        
+        def copy_logs(instance):
+            """Copy logs to clipboard (if available)"""
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(log_capture.get_logs())
+                # Show brief confirmation
+                copy_btn.text = "Copied!"
+                Clock.schedule_once(lambda dt: setattr(copy_btn, 'text', 'Copy'), 2)
+            except Exception as e:
+                print(f"Clipboard error: {e}")
+        
+        refresh_btn = Button(text="Refresh")
+        refresh_btn.bind(on_press=refresh_logs)
+        button_box.add_widget(refresh_btn)
+        
+        copy_btn = Button(text="Copy")
+        copy_btn.bind(on_press=copy_logs)
+        button_box.add_widget(copy_btn)
+        
+        close_button = Button(text="Close")
+        close_button.bind(on_press=popup.dismiss)
+        button_box.add_widget(close_button)
         
         content.add_widget(button_box)
         popup.open()

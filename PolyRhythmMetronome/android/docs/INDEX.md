@@ -9,7 +9,8 @@ User-facing documentation for end users and musicians.
 
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
-- [Color and Flash Guide](user_guides/color_and_flash_guide.md) - NEW in v1.1: Custom colors and visual feedback
+- [v1.2 Improvements Guide](user_guides/v1.2_improvements.md) - NEW: What's new in v1.2 with visual examples
+- [Color and Flash Guide](user_guides/color_and_flash_guide.md) - Custom colors and visual feedback (v1.1)
 - [FAQ](user_guides/FAQ.md) - Frequently asked questions
 - [Kindle Fire Kivy Launcher Guide](user_guides/KINDLE_FIRE_KIVY_LAUNCHER_GUIDE.md) - Complete setup for testing on Kindle Fire HD 10 with Kivy Launcher
 - [Local Development on Windows](user_guides/LOCAL_DEVELOPMENT_WINDOWS.md) - Build, test, and iterate locally on Windows
@@ -19,7 +20,8 @@ User-facing documentation for end users and musicians.
 Developer-focused documentation for understanding and modifying the code.
 
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
-- [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - NEW in v1.1: Audio playback system details
+- [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - Audio playback system details (v1.1)
+- [V1.2 Changes](technical/V1.2_CHANGES.md) - NEW: Technical details of v1.2 improvements and bug fixes
 - [Porting Analysis](technical/PORTING_ANALYSIS.md) - Desktop to Android porting decisions
 - [Build Guide](technical/BUILD_GUIDE.md) - Building and deploying
 - [Setup Script](technical/SETUP_SCRIPT.md) - Automated dependency setup technical details
@@ -28,7 +30,8 @@ Developer-focused documentation for understanding and modifying the code.
 Quality assurance and testing documentation.
 
 - [Test Plan](test_plans/TEST_PLAN.md) - Testing strategy and cases
-- [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - NEW: Comprehensive test plan for v1.1 bug fixes
+- [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - Comprehensive test plan for v1.1 bug fixes
+- [Bug Fixes v1.2 Test Plan](test_plans/bug_fixes_v1.2_test_plan.md) - NEW: Comprehensive test plan for v1.2 UI improvements and bug fixes
 - [Device Compatibility](test_plans/DEVICE_COMPATIBILITY.md) - Tested devices
 
 ## Quick Links
