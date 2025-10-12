@@ -28,7 +28,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
   group: build-android-${{ github.ref }}
@@ -41,6 +40,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Workaround for user issue
+        run: |
+          if ! id -u user >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash user
+          fi
+          sudo chown -R user:user "$GITHUB_WORKSPACE" "${HOME}/.buildozer" || true
+      
+      - name: Prep dirs (workspace & caches)
+        run: |
+          mkdir -p "${HOME}/.buildozer" ".buildozer" "bin"
+          
       # Optional caches
       - name: Cache global .buildozer
         uses: actions/cache@v4
@@ -58,13 +68,6 @@ jobs:
         run: |
           buildozer android clean || true
           rm -rf .buildozer bin || true
-
-      - name: Workaround for user issue
-        run: |
-          if ! id -u user >/dev/null 2>&1; then
-            sudo useradd -m -s /bin/bash user
-          fi
-          sudo chown -R user:user "$GITHUB_WORKSPACE" "${HOME}/.buildozer" || true
 
       - name: Build with Buildozer
         id: build
