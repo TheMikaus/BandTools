@@ -41,6 +41,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       # Optional caches
       - name: Cache global .buildozer
         uses: actions/cache@v4
@@ -50,25 +55,31 @@ jobs:
       - name: Cache project .buildozer
         uses: actions/cache@v4
         with:
-          path: .buildozer
+          path: PolyRhythmMetronome/android/.buildozer
           key: proj-buildozer-${{ runner.os }}-${{ hashFiles(inputs.spec_path) }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-11-jdk git zip unzip autoconf libtool pkg-config
+          sudo apt-get install -y zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install buildozer cython
 
       - name: Optional clean
         if: ${{ fromJson(inputs.clean) }}
+        working-directory: PolyRhythmMetronome/android
         run: |
           buildozer android clean || true
           rm -rf .buildozer bin || true
 
       - name: Build with Buildozer
         id: build
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          # Directory that contains buildozer.spec:
-          workdir: ./PolyRhythmMetronome/android
-          # Buildozer command chosen in the form:
-          command: ${{ inputs.target }}
-          # Optional: pin buildozer version
-          # buildozer_version: stable
+        working-directory: PolyRhythmMetronome/android
+        run: |
+          buildozer -v ${{ inputs.target }}
 
       - name: Upload artifacts (APK/AAB)
         uses: actions/upload-artifact@v4
