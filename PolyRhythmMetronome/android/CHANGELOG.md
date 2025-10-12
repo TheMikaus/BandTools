@@ -2,6 +2,20 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [1.4.0] - UI Improvements and Enhanced Usability
+
+### Changed
+- **Subdivision Options**: Expanded from [1,2,4,8,16] to [2,3,4,5,6,7,8,16,32,64] for more rhythmic flexibility
+- **Layer Widget Layout**: Completely redesigned for compactness (140dp → 80dp height)
+  - Row 1: [Mode][Value] / [Subdivision] [Mute] [X]
+  - Row 2: [Color Picker] [Volume Slider]
+- **Color Input**: Replaced text input with visual color picker button for easier color selection
+- **Play/Stop Button**: Increased height and font size for better visibility and touch interaction
+- **Control Button Layout**: Reorganized to [NEW][LOAD][SAVE] spacer [LOGS] for clearer grouping
+
+### Added
+- **Visual Color Picker**: Interactive color picker popup with OK/Cancel buttons for layer colors
+
 ## [1.3.0] - Audio Backend Overhaul
 
 ### Fixed
