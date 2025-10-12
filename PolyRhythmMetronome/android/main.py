@@ -444,7 +444,8 @@ class SimpleMetronomeEngine:
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 
                 # Create AudioTrack
-                buffer_size = len(audio_int16) * 2  # 2 bytes per sample
+                # Use audio_int16.size to get total elements (samples * channels)
+                buffer_size = audio_int16.size * 2  # total elements * 2 bytes per int16
                 audio_track = self.AudioTrack(
                     self.AudioManager.STREAM_MUSIC,
                     SAMPLE_RATE,

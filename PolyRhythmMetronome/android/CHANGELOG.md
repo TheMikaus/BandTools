@@ -2,6 +2,11 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [1.5.0] - Audio Playback Bug Fix
+
+### Fixed
+- **Tone Audio Playback on Android**: Fixed critical buffer size calculation bug in AudioTrack implementation that prevented tone sounds from playing correctly. The bug calculated buffer size using only the number of samples instead of total elements (samples × channels), causing tones (short duration) to fail while drums (long duration) worked. Changed from `len(audio_int16) * 2` to `audio_int16.size * 2` for correct byte count.
+
 ## [1.4.0] - UI Improvements and Enhanced Usability
 
 ### Changed
