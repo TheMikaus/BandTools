@@ -327,8 +327,40 @@ def new_uid():
     return uuid.uuid4().hex
 
 
+def random_dark_color():
+    """Generate a random dark color suitable for inactive layer background"""
+    import random
+    # Generate RGB values in the range 40-120 to ensure dark but visible colors
+    r = random.randint(40, 120)
+    g = random.randint(40, 120)
+    b = random.randint(40, 120)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def brighten_color(hex_color, factor=2.0):
+    """Create a brighter version of a hex color for flash effect"""
+    try:
+        # Remove # if present
+        hex_color = hex_color.lstrip('#')
+        # Parse RGB
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        # Brighten by factor, capping at 255
+        r = min(255, int(r * factor))
+        g = min(255, int(g * factor))
+        b = min(255, int(b * factor))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    except Exception:
+        # Fallback to original color if parsing fails
+        return hex_color
+
+
 def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
     """Create a layer dictionary"""
+    # Auto-generate flash_color if not provided
+    if flash_color is None:
+        flash_color = brighten_color(color)
     return {
         "uid": uid or new_uid(),
         "subdiv": int(subdiv),
@@ -338,7 +370,7 @@ def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="sna
         "mode": mode,
         "drum": drum,
         "color": color,
-        "flash_color": flash_color or color,  # Default to same as color for backward compatibility
+        "flash_color": flash_color,
         "accent_vol": float(accent_vol)  # Volume multiplier for first beat of measure
     }
 
@@ -520,19 +552,31 @@ class SimpleMetronomeEngine:
                 # Use the larger of minimum required or actual data size
                 buffer_size = max(min_buffer_size, data_size)
                 
-                # Create AudioTrack with appropriate buffer size
+                # Create AudioTrack with MODE_STREAM for better compatibility
                 audio_track = self.AudioTrack(
                     self.AudioManager.STREAM_MUSIC,
                     SAMPLE_RATE,
                     self.AudioFormat.CHANNEL_OUT_STEREO,
                     self.AudioFormat.ENCODING_PCM_16BIT,
                     buffer_size,
-                    self.AudioTrack.MODE_STATIC
+                    self.AudioTrack.MODE_STREAM
                 )
+                
+                # Initialize the AudioTrack before writing
+                if hasattr(audio_track, 'getState'):
+                    state = audio_track.getState()
+                    if state != self.AudioTrack.STATE_INITIALIZED:
+                        print(f"Warning: AudioTrack not properly initialized (state: {state})")
+                        return
                 
                 # Write audio data and play
                 audio_track.write(audio_bytes, 0, data_size)
                 audio_track.play()
+                
+                # Schedule release after playback
+                # Calculate duration and schedule cleanup
+                duration_ms = int((len(audio_int16) / SAMPLE_RATE) * 1000) + 100
+                Clock.schedule_once(lambda dt: audio_track.release() if hasattr(audio_track, 'release') else None, duration_ms / 1000.0)
             except Exception as e:
                 print(f"Android audio playback error: {e}")
                 
@@ -1061,7 +1105,8 @@ class LayerListWidget(BoxLayout):
     
     def _on_add_layer(self, button):
         layers = self.state.left if self.side == "left" else self.state.right
-        color = "#3B82F6" if self.side == "left" else "#EF4444"
+        # Use random dark color for new layers
+        color = random_dark_color()
         new_layer = make_layer(subdiv=4, freq=880.0 if self.side == "left" else 440.0, vol=1.0, color=color)
         layers.append(new_layer)
         self.refresh()

@@ -2,6 +2,18 @@
 
 This file tracks changes made to the Android version of PolyRhythmMetronome.
 
+## [Unreleased]
+
+### Added
+- **Random Dark Colors**: New layers now automatically get assigned random dark colors for better visual distinction
+- **Auto Flash Colors**: Flash colors are automatically generated as brighter versions of layer inactive colors
+
+### Fixed
+- **AudioTrack Initialization**: Fixed "play called on uninitialized AudioTrack" error by:
+  - Switching from MODE_STATIC to MODE_STREAM for better compatibility
+  - Adding initialization state check before playback
+  - Scheduling proper cleanup after playback completes
+
 ## [1.5.0] - Audio Playback Bug Fix and Major Enhancements
 
 ### Fixed

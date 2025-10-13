@@ -4,6 +4,19 @@ This file tracks changes made to the PolyRhythmMetronome application.
 
 ## [Unreleased]
 
+### Added
+- **Random Dark Colors**: New layers now automatically get assigned random dark colors for better visual distinction
+- **Auto Flash Colors**: Flash colors are automatically generated as brighter versions of layer inactive colors
+- **MP3 Tick Support**: Added support for MP3 tick sounds from a `ticks` folder
+  - MP3 files can be used as metronome sounds
+  - Paired MP3 files (ending in _1 and _2) provide different sounds for accented vs regular beats
+  - Ticks folder is automatically included in builds
+- **Build Scripts**: Added PyInstaller spec file and build scripts (build.sh, build.bat) for easy executable creation
+
+### Changed
+- **Color System**: Layers now use separate colors for inactive and flash (active) states
+- **Audio File Support**: Extended WaveCache to support both WAV and MP3 files using pydub
+
 ### Fixed
 - **Improved Exception Logging**: Enhanced error logging in metronome_log.txt for better debugging
   - Added timestamps to all log entries (format: YYYY-MM-DD HH:MM:SS.mmm)

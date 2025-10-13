@@ -8,11 +8,13 @@ A stereo subdivision metronome with multi-layer support, visual flashing, and ad
 - **Multiple Sound Sources**: 
   - Tone generation (configurable frequency)
   - WAV file playback
+  - MP3 file playback (from ticks folder)
   - Drum synthesis (kick, snare, hihat, crash, tom, ride)
 - **Per-Layer Controls**:
   - Mute/unmute individual layers
   - Volume control
-  - Color coding for visual feedback
+  - Color coding for visual feedback (random dark colors assigned automatically)
+  - Separate flash colors (automatically brightened from inactive color)
   - Subdivision settings (1, 2, 4, 8, 16, 32, 64 notes per beat)
 - **Global Settings**:
   - BPM control
@@ -69,6 +71,31 @@ This detailed logging helps diagnose issues, especially when toggling mute state
 - numpy
 - sounddevice (preferred) or simpleaudio (fallback)
 - tkinter (usually included with Python)
+- pydub (optional, for MP3 support - requires ffmpeg or libav)
+
+## Building Executable
+
+To build a standalone executable:
+
+### Linux/Mac
+```bash
+./build.sh
+```
+
+### Windows
+```batch
+build.bat
+```
+
+The executable will be created in the `dist` folder. The build automatically includes the `ticks` folder for MP3 tick sounds.
+
+## MP3 Tick Sounds
+
+Place MP3 files in the `ticks` folder to use them as metronome sounds:
+- Single files: `click.mp3` - used for all beats
+- Paired files: `click_1.mp3` and `click_2.mp3` - _1 for accented beats, _2 for regular beats
+
+See `ticks/README.md` for more details.
 
 ## Development
 
