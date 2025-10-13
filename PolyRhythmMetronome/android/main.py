@@ -532,7 +532,7 @@ class WaveCache:
 
 
 class Mp3TickCache:
-    """Manage MP3 tick sounds from the ticks folder"""
+    """Manage MP3 and WAV tick sounds from the ticks folder"""
     
     def __init__(self, sr=SAMPLE_RATE, ticks_dir="ticks"):
         self.sr = sr
@@ -542,46 +542,53 @@ class Mp3TickCache:
         self._scan_ticks_folder()
     
     def _scan_ticks_folder(self):
-        """Scan the ticks folder for MP3 files and identify pairs"""
+        """Scan the ticks folder for MP3 and WAV files and identify pairs"""
+        # Create ticks directory if it doesn't exist
         if not os.path.exists(self.ticks_dir):
+            try:
+                os.makedirs(self.ticks_dir, exist_ok=True)
+                print(f"[audio] Created ticks directory: {self.ticks_dir}")
+            except Exception as e:
+                print(f"[audio] Could not create ticks directory: {e}")
             return
         
-        mp3_files = {}
+        audio_files = {}
         for filename in os.listdir(self.ticks_dir):
-            if filename.lower().endswith('.mp3'):
+            # Support both MP3 and WAV files
+            if filename.lower().endswith(('.mp3', '.wav')):
                 full_path = os.path.join(self.ticks_dir, filename)
                 name_without_ext = os.path.splitext(filename)[0]
-                mp3_files[name_without_ext] = full_path
+                audio_files[name_without_ext] = full_path
         
         # Identify pairs (files ending in _1 and _2)
         processed = set()
-        for name in mp3_files:
+        for name in audio_files:
             if name in processed:
                 continue
             
             if name.endswith('_1'):
                 base_name = name[:-2]
                 pair_name = base_name + '_2'
-                if pair_name in mp3_files:
+                if pair_name in audio_files:
                     # Found a pair
-                    self._pairs[base_name] = (mp3_files[name], mp3_files[pair_name])
+                    self._pairs[base_name] = (audio_files[name], audio_files[pair_name])
                     processed.add(name)
                     processed.add(pair_name)
                 else:
                     # Single file with _1 suffix
-                    self._pairs[name] = (mp3_files[name], None)
+                    self._pairs[name] = (audio_files[name], None)
                     processed.add(name)
             elif name.endswith('_2'):
                 # Check if corresponding _1 exists
                 base_name = name[:-2]
                 pair_name = base_name + '_1'
-                if pair_name not in mp3_files:
+                if pair_name not in audio_files:
                     # Orphan _2 file
-                    self._pairs[name] = (mp3_files[name], None)
+                    self._pairs[name] = (audio_files[name], None)
                     processed.add(name)
             else:
                 # Regular single file
-                self._pairs[name] = (mp3_files[name], None)
+                self._pairs[name] = (audio_files[name], None)
                 processed.add(name)
     
     def get_available_ticks(self):
@@ -608,7 +615,7 @@ class Mp3TickCache:
 
 
 def get_mp3_tick_choices():
-    """Get list of available MP3 ticks from the ticks folder"""
+    """Get list of available MP3/WAV ticks from the ticks folder"""
     mp3_cache = Mp3TickCache()
     return mp3_cache.get_available_ticks()
 
@@ -1244,16 +1251,17 @@ class LayerWidget(BoxLayout):
         mode = self.layer.get("mode", "tone")
         
         if mode == "tone":
-            # For tone mode, show both regular and accent frequencies
-            freq_box = BoxLayout(orientation='vertical', spacing='1dp')
+            # For tone mode, show both regular and accent frequencies side-by-side
+            freq_box = BoxLayout(orientation='horizontal', spacing='2dp')
             
             # Regular frequency
             self.freq_input = TextInput(
                 text=str(int(self.layer.get("freq", 880))),
                 multiline=False,
                 input_filter='int',
-                font_size='11sp',
-                hint_text='Hz'
+                font_size='10sp',
+                hint_text='Hz',
+                size_hint_x=0.5
             )
             self.freq_input.bind(text=self._on_freq_change)
             freq_box.add_widget(self.freq_input)
@@ -1263,8 +1271,9 @@ class LayerWidget(BoxLayout):
                 text=str(int(self.layer.get("accent_freq", self.layer.get("freq", 880)))),
                 multiline=False,
                 input_filter='int',
-                font_size='11sp',
-                hint_text='Acc Hz'
+                font_size='10sp',
+                hint_text='Acc',
+                size_hint_x=0.5
             )
             self.accent_freq_input.bind(text=self._on_accent_freq_change)
             freq_box.add_widget(self.accent_freq_input)
@@ -1329,23 +1338,29 @@ class LayerWidget(BoxLayout):
         popup = Popup(title='Pick Inactive Color', content=content, size_hint=(0.9, 0.9))
         
         def on_ok(btn):
-            # Convert RGBA to hex
+            # Convert RGBA to hex (round the values to ensure proper color matching)
             r, g, b, a = color_picker.color
-            hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
+            hex_color = '#{:02x}{:02x}{:02x}'.format(
+                int(round(r * 255)), 
+                int(round(g * 255)), 
+                int(round(b * 255))
+            )
             
             # Update inactive color and background
             self.layer["color"] = hex_color
             # Auto-generate flash color based on new inactive color
             self.layer["flash_color"] = brighten_color(hex_color)
-            self.color_button.background_color = color_picker.color
+            # Use the hex color converted back to RGBA to ensure consistency
+            self.color_button.background_color = self._hex_to_rgba(hex_color)
             
             # Update background color
+            rgba_from_hex = self._hex_to_rgba(hex_color)
             with self.canvas.before:
                 self.canvas.before.clear()
-                Color(r, g, b, 0.3)
+                Color(rgba_from_hex[0], rgba_from_hex[1], rgba_from_hex[2], 0.3)
                 self.rect = Rectangle(size=self.size, pos=self.pos)
             
-            self.base_rgba = (r, g, b, 0.3)
+            self.base_rgba = (rgba_from_hex[0], rgba_from_hex[1], rgba_from_hex[2], 0.3)
             
             if self.on_change:
                 self.on_change()
