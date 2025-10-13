@@ -23,9 +23,11 @@ Developer-focused documentation for understanding and modifying the code.
 
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
 - [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - Audio playback system details (v1.1)
+- [Per-Layer Threading](technical/PER_LAYER_THREADING.md) - NEW: v1.6.0 per-layer threading architecture explanation
+- [AudioTrack Reliability Fix](technical/AUDIOTRACK_RELIABILITY_FIX.md) - NEW: v1.6.0 tone playback consistency improvements
 - [MP3 MediaCodec Implementation](technical/MP3_MEDIACODEC_IMPLEMENTATION.md) - Native Android MP3 decoding technical details
 - [V1.2 Changes](technical/V1.2_CHANGES.md) - Technical details of v1.2 improvements and bug fixes
-- [UI Improvements v1.6](technical/UI_IMPROVEMENTS_V1.6.md) - NEW: Background colors, color distance, master volume, and overflow fix
+- [UI Improvements v1.6](technical/UI_IMPROVEMENTS_V1.6.md) - Background colors, color distance, master volume, and overflow fix
 - [Porting Analysis](technical/PORTING_ANALYSIS.md) - Desktop to Android porting decisions
 - [Build Guide](technical/BUILD_GUIDE.md) - Building and deploying
 - [Setup Script](technical/SETUP_SCRIPT.md) - Automated dependency setup technical details
@@ -34,11 +36,12 @@ Developer-focused documentation for understanding and modifying the code.
 Quality assurance and testing documentation.
 
 - [Test Plan](test_plans/TEST_PLAN.md) - Testing strategy and cases
+- [v1.6 Per-Layer Threading Test Plan](test_plans/v1.6_per_layer_threading_test_plan.md) - NEW: Comprehensive test plan for v1.6.0 per-layer threading and AudioTrack fixes
 - [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - Comprehensive test plan for v1.1 bug fixes
-- [Bug Fixes v1.2 Test Plan](test_plans/bug_fixes_v1.2_test_plan.md) - NEW: Comprehensive test plan for v1.2 UI improvements and bug fixes
+- [Bug Fixes v1.2 Test Plan](test_plans/bug_fixes_v1.2_test_plan.md) - Comprehensive test plan for v1.2 UI improvements and bug fixes
 - [Bug Fix v1.5 Test Plan](test_plans/bug_fix_v1.5_test_plan.md) - Tone playback buffer size fix
 - [MP3 Tick Test Plan](test_plans/MP3_TICK_TEST_PLAN.md) - MP3 tick sounds feature testing
-- [Feature Enhancements Test Plan](test_plans/feature_enhancements_test_plan.md) - NEW: Test plan for accent frequency, auto-restart, and UI improvements
+- [Feature Enhancements Test Plan](test_plans/feature_enhancements_test_plan.md) - Test plan for accent frequency, auto-restart, and UI improvements
 - [Device Compatibility](test_plans/DEVICE_COMPATIBILITY.md) - Tested devices
 
 ## Quick Links

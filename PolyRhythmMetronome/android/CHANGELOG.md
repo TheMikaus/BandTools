@@ -4,27 +4,39 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 
 ## [Unreleased]
 
-### Fixed
-- **Timing Accuracy**: Fixed subdivision 3 (triplets) having uneven note spacing when other layers are active
-  - Switched from `time.time()` to `time.perf_counter()` for microsecond-precision timing
-  - Implemented event-based scheduling that finds next event across ALL layers before sleeping
-  - Added smart sleep algorithm: sleeps longer when events are far away, minimal sleep when close
-  - Added TIME_TOLERANCE (0.1ms) to group simultaneous events and handle floating-point precision
-  - Muted layers now maintain timing state to prevent drift affecting active layers
-  - Timing is now consistent regardless of number of layers (active or muted)
-  - See [TIMING_FIX_SUMMARY.md](TIMING_FIX_SUMMARY.md) and [TIMING_DIAGRAM.md](TIMING_DIAGRAM.md) for detailed explanation
+## [1.6.0] - Per-Layer Threading and AudioTrack Reliability
 
-### Performance
-- **CPU Usage Optimized**: Reduced CPU usage by ~50% with smart sleep scheduling
-  - Wake frequency changed from fixed 1000/sec to adaptive (only when needed)
-  - CPU sleeps until next event instead of waking every 1ms
-  - Timing accuracy improved from ±1ms to ±0.1ms (10x better)
-  - No timing drift even with many layers
+### Added
+- **Subdivision 1 Support**: Added "1" to SUBDIV_OPTIONS for whole note support (2-second intervals at 60 BPM)
+  - Useful for slow practice tempos and long-form rhythmic patterns
+  - Completes the subdivision options from whole notes to 64th notes
+
+### Changed
+- **Per-Layer Threading Architecture**: Complete refactor from event-based single-thread to per-layer threading
+  - Each layer now runs on its own independent thread with dedicated timing
+  - Each thread sleeps for its subdivision interval, ensuring perfect timing independence
+  - Eliminates cross-layer timing dependencies that could cause subdivision 3 issues
+  - Simpler, more maintainable code architecture
+  - Natural load distribution across CPU cores for better performance
+  - See [PER_LAYER_THREADING.md](docs/technical/PER_LAYER_THREADING.md) for detailed architecture explanation
+
+### Fixed
+- **Tone Playback Reliability**: Fixed inconsistent tone playback in Android AudioTrack implementation
+  - Increased buffer size to 2x minimum to prevent buffer underruns
+  - Corrected play/write order: now calls `play()` before `write()` for MODE_STREAM
+  - Added write error checking with proper error handling and cleanup
+  - Improved cleanup sequence: `stop()` then `release()` following Android best practices
+  - Enhanced initialization state checking with failed object cleanup
+  - Extended cleanup delay to ensure complete playback before resource release
+  - See [AUDIOTRACK_RELIABILITY_FIX.md](docs/technical/AUDIOTRACK_RELIABILITY_FIX.md) for technical details
+- **Subdivision 3 Timing**: Per-layer threading completely eliminates timing issues with subdivision 3
+  - Each layer's timing is now completely independent
+  - No cross-layer interference even with muted layers
+  - Consistent 0.667s intervals at 120 BPM regardless of other layers
 
 ### Documentation
-- Added [TIMING_FIX_SUMMARY.md](TIMING_FIX_SUMMARY.md) explaining the timing fix in detail
-- Added [TIMING_DIAGRAM.md](TIMING_DIAGRAM.md) with visual comparisons of old vs new timing
-- Updated [AUDIO_IMPLEMENTATION.md](docs/technical/AUDIO_IMPLEMENTATION.md) with new timing loop algorithm
+- Added [PER_LAYER_THREADING.md](docs/technical/PER_LAYER_THREADING.md) explaining new threading architecture
+- Added [AUDIOTRACK_RELIABILITY_FIX.md](docs/technical/AUDIOTRACK_RELIABILITY_FIX.md) documenting AudioTrack improvements
 
 ### Added
 - **Accent Frequency Control**: Added ability to set different frequencies for accent beats in tone mode
