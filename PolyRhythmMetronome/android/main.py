@@ -690,11 +690,14 @@ def brighten_color(hex_color, factor=2.0):
         return hex_color
 
 
-def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", mp3_tick="", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", mp3_tick="", color="#9CA3AF", flash_color=None, accent_vol=1.6, accent_freq=None, uid=None):
     """Create a layer dictionary"""
     # Auto-generate flash_color if not provided
     if flash_color is None:
         flash_color = brighten_color(color)
+    # Default accent_freq to same as regular freq if not specified
+    if accent_freq is None:
+        accent_freq = freq
     return {
         "uid": uid or new_uid(),
         "subdiv": int(subdiv),
@@ -706,7 +709,8 @@ def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="sna
         "mp3_tick": mp3_tick,
         "color": color,
         "flash_color": flash_color,
-        "accent_vol": float(accent_vol)  # Volume multiplier for first beat of measure
+        "accent_vol": float(accent_vol),  # Volume multiplier for first beat of measure
+        "accent_freq": float(accent_freq)  # Frequency for accent beats in tone mode
     }
 
 
@@ -760,6 +764,7 @@ class RhythmState:
                 x.setdefault("color", "#9CA3AF")
                 x.setdefault("flash_color", x.get("color", "#9CA3AF"))  # Default to color if not set
                 x.setdefault("accent_vol", 1.6)
+                x.setdefault("accent_freq", x.get("freq", 880.0))  # Default to same as regular freq
                 x.setdefault("uid", new_uid())
                 return x
             
@@ -860,7 +865,11 @@ class SimpleMetronomeEngine:
             drum_name = layer.get("drum", "snare")
             return self.drum_synth.get(drum_name)
         else:  # tone mode (fallback)
-            freq = float(layer.get("freq", 880.0))
+            # Use accent_freq for accent beats if available, otherwise use regular freq
+            if is_accent and "accent_freq" in layer:
+                freq = float(layer.get("accent_freq", 880.0))
+            else:
+                freq = float(layer.get("freq", 880.0))
             return self.tone_gen.generate_beep(freq, duration_ms=50)
     
     def _play_sound(self, audio_data, volume=1.0, channel='center'):
@@ -1181,26 +1190,17 @@ class LayerWidget(BoxLayout):
         
         self.add_widget(top_row)
         
-        # Row 2: [InactiveColor] [ActiveColor] [Volume slider]
+        # Row 2: [InactiveColor] [Volume slider]
         bottom_row = BoxLayout(size_hint_y=0.5, spacing='3dp')
         
-        # Inactive color picker button
+        # Inactive color picker button (flash color is auto-generated)
         self.color_button = Button(
             text="",
-            size_hint_x=0.1,
+            size_hint_x=0.12,
             background_color=self._hex_to_rgba(self.layer.get("color", "#9CA3AF"))
         )
         self.color_button.bind(on_press=lambda x: self._open_color_picker("inactive"))
         bottom_row.add_widget(self.color_button)
-        
-        # Active/Flash color picker button
-        self.flash_color_button = Button(
-            text="",
-            size_hint_x=0.1,
-            background_color=self._hex_to_rgba(self.layer.get("flash_color", self.layer.get("color", "#9CA3AF")))
-        )
-        self.flash_color_button.bind(on_press=lambda x: self._open_color_picker("active"))
-        bottom_row.add_widget(self.flash_color_button)
         
         # Volume label
         vol_label = Label(text="Vol:", size_hint_x=0.08, font_size='12sp')
@@ -1211,7 +1211,7 @@ class LayerWidget(BoxLayout):
             min=0.0,
             max=1.5,
             value=self.layer.get("vol", 1.0),
-            size_hint_x=0.72
+            size_hint_x=0.8
         )
         self.vol_slider.bind(value=self._on_vol_change)
         bottom_row.add_widget(self.vol_slider)
@@ -1244,15 +1244,32 @@ class LayerWidget(BoxLayout):
         mode = self.layer.get("mode", "tone")
         
         if mode == "tone":
+            # For tone mode, show both regular and accent frequencies
+            freq_box = BoxLayout(orientation='vertical', spacing='1dp')
+            
+            # Regular frequency
             self.freq_input = TextInput(
                 text=str(int(self.layer.get("freq", 880))),
                 multiline=False,
                 input_filter='int',
-                font_size='12sp',
+                font_size='11sp',
                 hint_text='Hz'
             )
             self.freq_input.bind(text=self._on_freq_change)
-            self.mode_value_container.add_widget(self.freq_input)
+            freq_box.add_widget(self.freq_input)
+            
+            # Accent frequency
+            self.accent_freq_input = TextInput(
+                text=str(int(self.layer.get("accent_freq", self.layer.get("freq", 880)))),
+                multiline=False,
+                input_filter='int',
+                font_size='11sp',
+                hint_text='Acc Hz'
+            )
+            self.accent_freq_input.bind(text=self._on_accent_freq_change)
+            freq_box.add_widget(self.accent_freq_input)
+            
+            self.mode_value_container.add_widget(freq_box)
         elif mode == "drum":
             self.drum_spinner = Spinner(
                 text=self.layer.get("drum", "snare"),
@@ -1293,16 +1310,13 @@ class LayerWidget(BoxLayout):
             return (0.6, 0.6, 0.6, 1)
     
     def _open_color_picker(self, color_type):
-        """Open color picker popup for inactive or active color"""
+        """Open color picker popup for inactive color"""
         from kivy.uix.colorpicker import ColorPicker
         
         content = BoxLayout(orientation='vertical', spacing='10dp', padding='10dp')
         
-        # Get current color based on type
-        if color_type == "active":
-            current_color = self.layer.get("flash_color", self.layer.get("color", "#9CA3AF"))
-        else:
-            current_color = self.layer.get("color", "#9CA3AF")
+        # Get current inactive color
+        current_color = self.layer.get("color", "#9CA3AF")
         
         color_picker = ColorPicker(
             color=self._hex_to_rgba(current_color)
@@ -1312,30 +1326,26 @@ class LayerWidget(BoxLayout):
         # Buttons
         button_box = BoxLayout(size_hint_y=0.2, spacing='10dp')
         
-        title = 'Pick Active Color' if color_type == "active" else 'Pick Inactive Color'
-        popup = Popup(title=title, content=content, size_hint=(0.9, 0.9))
+        popup = Popup(title='Pick Inactive Color', content=content, size_hint=(0.9, 0.9))
         
         def on_ok(btn):
             # Convert RGBA to hex
             r, g, b, a = color_picker.color
             hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
             
-            if color_type == "active":
-                # Update flash color
-                self.layer["flash_color"] = hex_color
-                self.flash_color_button.background_color = color_picker.color
-            else:
-                # Update inactive color and background
-                self.layer["color"] = hex_color
-                self.color_button.background_color = color_picker.color
-                
-                # Update background color
-                with self.canvas.before:
-                    self.canvas.before.clear()
-                    Color(r, g, b, 0.3)
-                    self.rect = Rectangle(size=self.size, pos=self.pos)
-                
-                self.base_rgba = (r, g, b, 0.3)
+            # Update inactive color and background
+            self.layer["color"] = hex_color
+            # Auto-generate flash color based on new inactive color
+            self.layer["flash_color"] = brighten_color(hex_color)
+            self.color_button.background_color = color_picker.color
+            
+            # Update background color
+            with self.canvas.before:
+                self.canvas.before.clear()
+                Color(r, g, b, 0.3)
+                self.rect = Rectangle(size=self.size, pos=self.pos)
+            
+            self.base_rgba = (r, g, b, 0.3)
             
             if self.on_change:
                 self.on_change()
@@ -1379,6 +1389,15 @@ class LayerWidget(BoxLayout):
         try:
             if value:
                 self.layer["freq"] = float(value)
+                if self.on_change:
+                    self.on_change()
+        except ValueError:
+            pass
+    
+    def _on_accent_freq_change(self, input, value):
+        try:
+            if value:
+                self.layer["accent_freq"] = float(value)
                 if self.on_change:
                     self.on_change()
         except ValueError:
@@ -1564,12 +1583,12 @@ class MetronomeWidget(BoxLayout):
         
         # Left layers
         self.left_list = LayerListWidget(self.state, "left", size_hint_x=0.5)
-        self.left_list.on_change = self._autosave
+        self.left_list.on_change = self._on_layers_changed
         layers_section.add_widget(self.left_list)
         
         # Right layers
         self.right_list = LayerListWidget(self.state, "right", size_hint_x=0.5)
-        self.right_list.on_change = self._autosave
+        self.right_list.on_change = self._on_layers_changed
         layers_section.add_widget(self.right_list)
         
         self.add_widget(layers_section)
@@ -1726,6 +1745,16 @@ class MetronomeWidget(BoxLayout):
             self.left_list.flash_uid(uid, color)
         else:
             self.right_list.flash_uid(uid, color)
+    
+    def _on_layers_changed(self):
+        """Called when layers are added, deleted, or muted - restart if playing"""
+        # Save the changes
+        self._autosave()
+        
+        # If the metronome is running, restart it with the new configuration
+        if self.engine.running:
+            self.engine.stop()
+            self.engine.start()
     
     def on_new(self, instance):
         """Create new rhythm pattern"""

@@ -5,6 +5,17 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 ## [Unreleased]
 
 ### Added
+- **Accent Frequency Control**: Added ability to set different frequencies for accent beats in tone mode
+  - New `accent_freq` parameter in layer data model (defaults to regular freq)
+  - UI shows two frequency inputs in tone mode: regular Hz and Acc Hz (accent)
+  - Accent beats (first beat of measure) now play at accent frequency instead of regular frequency
+  - Enables musical intervals on downbeats (e.g., octave higher, perfect fifth)
+  - Fully documented in new [Accent Frequency Guide](docs/user_guides/accent_frequency_guide.md)
+- **Auto-Restart on Layer Changes**: Metronome now automatically restarts when layers are modified during playback
+  - Adding a layer triggers restart with new configuration
+  - Deleting a layer triggers restart
+  - Muting/unmuting a layer triggers restart
+  - No more manual stop/start required for layer changes
 - **Native MP3 Tick Support**: Implemented MP3 metronome tick sounds using Android's native MediaCodec API
   - No ffmpeg or external codec libraries required
   - Uses Android MediaExtractor and MediaCodec for hardware-accelerated MP3 decoding
@@ -23,11 +34,22 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
   - Improves visual distinction between layers
 
 ### Changed
+- **Flash Color Picker Removed**: Removed secondary color picker button for flash colors
+  - Flash color is now always auto-generated (brighter version of base color)
+  - Simplifies UI and reduces user decisions
+  - Flash color updates automatically when base color changes
+  - Volume slider has more space (0.8 size_hint_x instead of 0.72)
+- **Tone Mode UI**: Enhanced to show both regular and accent frequencies
+  - Two stacked frequency input fields when mode is "tone"
+  - Top field: Regular frequency (Hz)
+  - Bottom field: Accent frequency (Acc Hz)
+  - Slightly smaller font (11sp) to fit both fields
 - **UI Background Colors**: Improved visual hierarchy with distinct background shades
   - Main panel background: lighter gray (RGB 0.22, 0.22, 0.22)
   - Layer list background: darker gray (RGB 0.15, 0.15, 0.15)
   - Individual layers: retain their custom color at 0.3 alpha
 - **Header Height**: Increased from 140dp to 180dp to accommodate master volume control
+- **LayerListWidget Callbacks**: Changed to call `_on_layers_changed()` which handles both autosave and engine restart
 
 ### Fixed
 - **AudioTrack Initialization**: Fixed "play called on uninitialized AudioTrack" error by:
@@ -37,6 +59,11 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 - **RuntimeWarning Overflow**: Fixed overflow warning in tom drum synthesis (line 289)
   - Added clipping to safe range (-88 to 88) before np.expm1() for float32 safety
   - Prevents potential overflow warnings during audio generation
+
+### Documentation
+- Added [Accent Frequency Guide](docs/user_guides/accent_frequency_guide.md) with musical examples
+- Added [Feature Enhancements Test Plan](docs/test_plans/feature_enhancements_test_plan.md) with 19 test cases
+- Updated [Documentation Index](docs/INDEX.md) with new guides
 
 ## [1.5.0] - Audio Playback Bug Fix and Major Enhancements
 
