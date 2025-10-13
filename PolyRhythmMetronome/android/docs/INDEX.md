@@ -9,7 +9,8 @@ User-facing documentation for end users and musicians.
 
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
-- [MP3 Tick Sounds Guide](user_guides/MP3_TICK_SOUNDS.md) - NEW: Using custom MP3 metronome sounds
+- [Accent Frequency Guide](user_guides/accent_frequency_guide.md) - NEW: Using different pitches for accent beats in tone mode
+- [MP3 Tick Sounds Guide](user_guides/MP3_TICK_SOUNDS.md) - Using custom MP3 metronome sounds
 - [v1.2 Improvements Guide](user_guides/v1.2_improvements.md) - What's new in v1.2 with visual examples
 - [Color and Flash Guide](user_guides/color_and_flash_guide.md) - Custom colors and visual feedback (v1.1)
 - [FAQ](user_guides/FAQ.md) - Frequently asked questions
@@ -35,6 +36,9 @@ Quality assurance and testing documentation.
 - [Test Plan](test_plans/TEST_PLAN.md) - Testing strategy and cases
 - [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - Comprehensive test plan for v1.1 bug fixes
 - [Bug Fixes v1.2 Test Plan](test_plans/bug_fixes_v1.2_test_plan.md) - NEW: Comprehensive test plan for v1.2 UI improvements and bug fixes
+- [Bug Fix v1.5 Test Plan](test_plans/bug_fix_v1.5_test_plan.md) - Tone playback buffer size fix
+- [MP3 Tick Test Plan](test_plans/MP3_TICK_TEST_PLAN.md) - MP3 tick sounds feature testing
+- [Feature Enhancements Test Plan](test_plans/feature_enhancements_test_plan.md) - NEW: Test plan for accent frequency, auto-restart, and UI improvements
 - [Device Compatibility](test_plans/DEVICE_COMPATIBILITY.md) - Tested devices
 
 ## Quick Links
