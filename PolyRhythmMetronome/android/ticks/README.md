@@ -1,18 +1,27 @@
-# MP3 Tick Sounds
+# Tick Sounds (MP3/WAV)
 
-Place MP3 files in this folder to use as metronome tick sounds.
+Place MP3 or WAV files in this folder to use as metronome tick sounds.
+
+## Baseline Ticks Included
+
+The following baseline tick sounds are included with the app:
+- **click.wav** - Simple click sound for all beats
+- **woodblock** (paired) - Natural woodblock sound with accent/regular distinction
+- **cowbell** (paired) - Metallic cowbell sound with accent/regular distinction  
+- **hiclick** (paired) - High-pitched clicks with accent/regular distinction
 
 ## Single Files
-- Place a single MP3 file (e.g., `click.mp3`) to use the same sound for all beats
+- Place a single audio file (e.g., `click.mp3` or `beep.wav`) to use the same sound for all beats
 
 ## Paired Files (Accent vs Regular)
-- Place two files with `_1` and `_2` suffixes (e.g., `woodblock_1.mp3` and `woodblock_2.mp3`)
+- Place two files with `_1` and `_2` suffixes (e.g., `woodblock_1.wav` and `woodblock_2.wav`)
 - The `_1` file will play on accented beats (first beat of measure)
 - The `_2` file will play on regular beats
 
 ## Examples
-- `click.mp3` → "click" (single sound for all beats)
-- `woodblock_1.mp3` + `woodblock_2.mp3` → "woodblock" (paired sounds)
+- `click.wav` → "click" (single sound for all beats)
+- `woodblock_1.wav` + `woodblock_2.wav` → "woodblock" (paired sounds)
+- `mybeat.mp3` → "mybeat" (single MP3 for all beats)
 
 The app will scan this folder on startup and make all ticks available in the MP3 mode dropdown.
 
