@@ -130,7 +130,7 @@ SUBDIV_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "16", "32", "64"]
 DRUM_CHOICES = ["kick", "snare", "hihat", "crash", "tom", "ride"]
 
 # Sound mode options
-SOUND_MODES = ["tone", "drum"]
+SOUND_MODES = ["tone", "drum", "mp3_tick"]
 
 # ---------------- Audio Generation ---------------- #
 
@@ -320,6 +320,297 @@ class DrumSynth:
         
         return ride.astype(np.float32)
 
+
+# ---------------- Audio File Loading (MP3 support via Android MediaCodec) ---------------- #
+
+class WaveCache:
+    """Cache for loading and resampling audio files, including MP3 via Android MediaCodec"""
+    
+    def __init__(self, sr=SAMPLE_RATE):
+        self.sr = sr
+        self._c = {}
+    
+    def get(self, path: str):
+        """Load an audio file and return normalized float32 samples"""
+        if not path:
+            return None
+        
+        key = os.path.abspath(path)
+        if key in self._c:
+            return self._c[key]
+        
+        if not os.path.exists(key):
+            raise FileNotFoundError(f"Audio file not found: {key}")
+        
+        # Check if it's an MP3 file
+        if key.lower().endswith('.mp3'):
+            data, sr = self._read_mp3(key)
+        else:
+            data, sr = self._read_wav_any(key)
+        
+        # Resample if needed
+        if sr != self.sr:
+            data = self._resample_linear(data, sr, self.sr)
+        
+        self._c[key] = data.astype(np.float32, copy=False)
+        return self._c[key]
+    
+    @staticmethod
+    def _read_mp3(path):
+        """Read MP3 file using Android MediaCodec (native, no ffmpeg needed)"""
+        if platform != 'android':
+            raise RuntimeError("Android MediaCodec MP3 decoding only works on Android")
+        
+        try:
+            from jnius import autoclass
+            
+            # Import Android media classes
+            MediaExtractor = autoclass('android.media.MediaExtractor')
+            MediaCodec = autoclass('android.media.MediaCodec')
+            MediaFormat = autoclass('android.media.MediaFormat')
+            ByteBuffer = autoclass('java.nio.ByteBuffer')
+            
+            # Create extractor and set data source
+            extractor = MediaExtractor()
+            extractor.setDataSource(path)
+            
+            # Find audio track
+            num_tracks = extractor.getTrackCount()
+            audio_track_index = -1
+            audio_format = None
+            
+            for i in range(num_tracks):
+                format = extractor.getTrackFormat(i)
+                mime = format.getString(MediaFormat.KEY_MIME)
+                if mime.startswith('audio/'):
+                    audio_track_index = i
+                    audio_format = format
+                    break
+            
+            if audio_track_index < 0:
+                raise RuntimeError(f"No audio track found in {path}")
+            
+            # Select the audio track
+            extractor.selectTrack(audio_track_index)
+            
+            # Get audio properties
+            sample_rate = audio_format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            channel_count = audio_format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            
+            # Create decoder
+            mime = audio_format.getString(MediaFormat.KEY_MIME)
+            decoder = MediaCodec.createDecoderByType(mime)
+            decoder.configure(audio_format, None, None, 0)
+            decoder.start()
+            
+            # Decode audio
+            decoded_samples = []
+            input_eof = False
+            output_eof = False
+            timeout_us = 10000  # 10ms timeout
+            
+            while not output_eof:
+                # Feed input
+                if not input_eof:
+                    input_buffer_index = decoder.dequeueInputBuffer(timeout_us)
+                    if input_buffer_index >= 0:
+                        input_buffer = decoder.getInputBuffer(input_buffer_index)
+                        sample_size = extractor.readSampleData(input_buffer, 0)
+                        
+                        if sample_size < 0:
+                            # End of input
+                            decoder.queueInputBuffer(input_buffer_index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            input_eof = True
+                        else:
+                            presentation_time_us = extractor.getSampleTime()
+                            decoder.queueInputBuffer(input_buffer_index, 0, sample_size, presentation_time_us, 0)
+                            extractor.advance()
+                
+                # Get output
+                buffer_info = autoclass('android.media.MediaCodec$BufferInfo')()
+                output_buffer_index = decoder.dequeueOutputBuffer(buffer_info, timeout_us)
+                
+                if output_buffer_index >= 0:
+                    output_buffer = decoder.getOutputBuffer(output_buffer_index)
+                    
+                    if buffer_info.size > 0:
+                        # Read PCM data from output buffer
+                        # Create a byte array to hold the data
+                        byte_array = bytearray(buffer_info.size)
+                        output_buffer.position(buffer_info.offset)
+                        
+                        # Read bytes from ByteBuffer
+                        for i in range(buffer_info.size):
+                            byte_array[i] = output_buffer.get() & 0xFF
+                        
+                        # Convert bytes to int16 samples (assuming 16-bit PCM)
+                        samples = np.frombuffer(byte_array, dtype=np.int16)
+                        decoded_samples.append(samples)
+                    
+                    decoder.releaseOutputBuffer(output_buffer_index, False)
+                    
+                    if (buffer_info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0:
+                        output_eof = True
+                elif output_buffer_index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED:
+                    # Output format changed (not critical for our use case)
+                    pass
+            
+            # Clean up
+            decoder.stop()
+            decoder.release()
+            extractor.release()
+            
+            # Concatenate all decoded samples
+            if not decoded_samples:
+                raise RuntimeError(f"No audio data decoded from {path}")
+            
+            audio_data = np.concatenate(decoded_samples)
+            
+            # Convert to mono if stereo
+            if channel_count > 1:
+                audio_data = audio_data.reshape(-1, channel_count).mean(axis=1)
+            
+            # Normalize to float32 in range [-1.0, 1.0]
+            audio_data = audio_data.astype(np.float32) / 32768.0
+            
+            return audio_data, sample_rate
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to read MP3 file {path}: {e}")
+    
+    @staticmethod
+    def _read_wav_any(path):
+        """Read WAV file"""
+        import wave
+        
+        with wave.open(path, 'rb') as wf:
+            ch = wf.getnchannels()
+            sw = wf.getsampwidth()
+            fr = wf.getframerate()
+            nf = wf.getnframes()
+            raw = wf.readframes(nf)
+        
+        # Convert based on sample width
+        if sw == 1:
+            data = np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
+            data = (data - 128.0) / 128.0
+        elif sw == 2:
+            data = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        elif sw == 4:
+            arr = np.frombuffer(raw, dtype=np.int32)
+            if np.max(np.abs(arr)) < 1e6:
+                data = np.frombuffer(raw, dtype=np.float32)
+            else:
+                data = arr.astype(np.float32) / 2147483648.0
+        else:
+            raise ValueError("Only 8/16/32-bit or float32 WAV supported.")
+        
+        # Convert to mono if needed
+        if ch > 1:
+            data = data.reshape(-1, ch).mean(axis=1)
+        
+        return data.astype(np.float32, copy=False), fr
+    
+    @staticmethod
+    def _resample_linear(x, sr_from, sr_to):
+        """Simple linear resampling"""
+        if sr_from == sr_to or len(x) == 0:
+            return x
+        
+        dur = len(x) / float(sr_from)
+        new_len = int(round(dur * sr_to))
+        
+        if new_len <= 1:
+            return np.zeros(1, dtype=np.float32)
+        
+        xp = np.linspace(0.0, 1.0, len(x), dtype=np.float32)
+        xnew = np.linspace(0.0, 1.0, new_len, dtype=np.float32)
+        
+        return np.interp(xnew, xp, x.astype(np.float32, copy=False)).astype(np.float32)
+
+
+class Mp3TickCache:
+    """Manage MP3 tick sounds from the ticks folder"""
+    
+    def __init__(self, sr=SAMPLE_RATE, ticks_dir="ticks"):
+        self.sr = sr
+        self.ticks_dir = ticks_dir
+        self._wave_cache = WaveCache(sr)
+        self._pairs = {}  # name -> (path1, path2) or (path, None)
+        self._scan_ticks_folder()
+    
+    def _scan_ticks_folder(self):
+        """Scan the ticks folder for MP3 files and identify pairs"""
+        if not os.path.exists(self.ticks_dir):
+            return
+        
+        mp3_files = {}
+        for filename in os.listdir(self.ticks_dir):
+            if filename.lower().endswith('.mp3'):
+                full_path = os.path.join(self.ticks_dir, filename)
+                name_without_ext = os.path.splitext(filename)[0]
+                mp3_files[name_without_ext] = full_path
+        
+        # Identify pairs (files ending in _1 and _2)
+        processed = set()
+        for name in mp3_files:
+            if name in processed:
+                continue
+            
+            if name.endswith('_1'):
+                base_name = name[:-2]
+                pair_name = base_name + '_2'
+                if pair_name in mp3_files:
+                    # Found a pair
+                    self._pairs[base_name] = (mp3_files[name], mp3_files[pair_name])
+                    processed.add(name)
+                    processed.add(pair_name)
+                else:
+                    # Single file with _1 suffix
+                    self._pairs[name] = (mp3_files[name], None)
+                    processed.add(name)
+            elif name.endswith('_2'):
+                # Check if corresponding _1 exists
+                base_name = name[:-2]
+                pair_name = base_name + '_1'
+                if pair_name not in mp3_files:
+                    # Orphan _2 file
+                    self._pairs[name] = (mp3_files[name], None)
+                    processed.add(name)
+            else:
+                # Regular single file
+                self._pairs[name] = (mp3_files[name], None)
+                processed.add(name)
+    
+    def get_available_ticks(self):
+        """Return list of available tick names"""
+        return sorted(self._pairs.keys())
+    
+    def get(self, name: str, is_accent: bool = False):
+        """Get the tick sound for the given name. If it's a pair, return the appropriate one."""
+        if name not in self._pairs:
+            return None
+        
+        path1, path2 = self._pairs[name]
+        if path2 is not None:
+            # It's a pair - use path1 for accent, path2 for regular
+            path = path1 if is_accent else path2
+        else:
+            # Single file
+            path = path1
+        
+        try:
+            return self._wave_cache.get(path)
+        except Exception:
+            return None
+
+
+def get_mp3_tick_choices():
+    """Get list of available MP3 ticks from the ticks folder"""
+    mp3_cache = Mp3TickCache()
+    return mp3_cache.get_available_ticks()
+
+
 # ---------------- Rhythm State (Data Model) ---------------- #
 
 def new_uid():
@@ -356,7 +647,7 @@ def brighten_color(hex_color, factor=2.0):
         return hex_color
 
 
-def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
+def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="snare", mp3_tick="", color="#9CA3AF", flash_color=None, accent_vol=1.6, uid=None):
     """Create a layer dictionary"""
     # Auto-generate flash_color if not provided
     if flash_color is None:
@@ -369,6 +660,7 @@ def make_layer(subdiv=4, freq=880.0, vol=1.0, mute=False, mode="tone", drum="sna
         "mute": bool(mute),
         "mode": mode,
         "drum": drum,
+        "mp3_tick": mp3_tick,
         "color": color,
         "flash_color": flash_color,
         "accent_vol": float(accent_vol)  # Volume multiplier for first beat of measure
@@ -418,6 +710,7 @@ class RhythmState:
                 x = dict(x)
                 x.setdefault("mode", "tone")
                 x.setdefault("drum", "snare")
+                x.setdefault("mp3_tick", "")
                 x.setdefault("color", "#9CA3AF")
                 x.setdefault("flash_color", x.get("color", "#9CA3AF"))  # Default to color if not set
                 x.setdefault("accent_vol", 1.6)
@@ -437,6 +730,7 @@ class SimpleMetronomeEngine:
         self.on_beat_callback = on_beat_callback
         self.tone_gen = ToneGenerator()
         self.drum_synth = DrumSynth()
+        self.mp3_ticks = Mp3TickCache()
         
         self.running = False
         self.thread = None
@@ -504,14 +798,22 @@ class SimpleMetronomeEngine:
             self.thread.join(timeout=1.0)
             self.thread = None
     
-    def _get_audio_data(self, layer):
+    def _get_audio_data(self, layer, is_accent=False):
         """Get audio data for a layer based on its mode"""
         mode = layer.get("mode", "tone")
+        
+        if mode == "mp3_tick" and layer.get("mp3_tick"):
+            try:
+                data = self.mp3_ticks.get(layer["mp3_tick"], is_accent=is_accent)
+                if data is not None:
+                    return data
+            except Exception as e:
+                print(f"[audio] Failed to load MP3 tick: {e}")
         
         if mode == "drum":
             drum_name = layer.get("drum", "snare")
             return self.drum_synth.get(drum_name)
-        else:  # tone mode
+        else:  # tone mode (fallback)
             freq = float(layer.get("freq", 880.0))
             return self.tone_gen.generate_beep(freq, duration_ms=50)
     
@@ -664,7 +966,7 @@ class SimpleMetronomeEngine:
                     is_accent = (left_beat_counts[i] % beats_per_measure) == 0
                     
                     # Get audio data
-                    audio_data = self._get_audio_data(layer)
+                    audio_data = self._get_audio_data(layer, is_accent=is_accent)
                     
                     # Apply volume with accent if it's first beat
                     base_volume = float(layer.get("vol", 1.0))
@@ -689,7 +991,7 @@ class SimpleMetronomeEngine:
                     is_accent = (right_beat_counts[i] % beats_per_measure) == 0
                     
                     # Get audio data
-                    audio_data = self._get_audio_data(layer)
+                    audio_data = self._get_audio_data(layer, is_accent=is_accent)
                     
                     # Apply volume with accent if it's first beat
                     base_volume = float(layer.get("vol", 1.0))
@@ -888,7 +1190,7 @@ class LayerWidget(BoxLayout):
         self.add_widget(accent_row)
     
     def _build_mode_value(self):
-        """Build the mode value widget (frequency input or drum selector)"""
+        """Build the mode value widget (frequency input, drum selector, or mp3 tick selector)"""
         self.mode_value_container.clear_widgets()
         
         mode = self.layer.get("mode", "tone")
@@ -903,7 +1205,7 @@ class LayerWidget(BoxLayout):
             )
             self.freq_input.bind(text=self._on_freq_change)
             self.mode_value_container.add_widget(self.freq_input)
-        else:  # drum mode
+        elif mode == "drum":
             self.drum_spinner = Spinner(
                 text=self.layer.get("drum", "snare"),
                 values=DRUM_CHOICES,
@@ -911,6 +1213,22 @@ class LayerWidget(BoxLayout):
             )
             self.drum_spinner.bind(text=self._on_drum_change)
             self.mode_value_container.add_widget(self.drum_spinner)
+        elif mode == "mp3_tick":
+            mp3_choices = get_mp3_tick_choices()
+            current_mp3 = self.layer.get("mp3_tick", "")
+            if not mp3_choices:
+                mp3_choices = ["(no ticks)"]
+                current_mp3 = mp3_choices[0]
+            elif current_mp3 not in mp3_choices and mp3_choices:
+                current_mp3 = mp3_choices[0]
+            
+            self.mp3_spinner = Spinner(
+                text=current_mp3,
+                values=mp3_choices,
+                font_size='12sp'
+            )
+            self.mp3_spinner.bind(text=self._on_mp3_change)
+            self.mode_value_container.add_widget(self.mp3_spinner)
     
     def _hex_to_rgba(self, hex_color):
         """Convert hex color to RGBA tuple for Kivy"""
@@ -1020,6 +1338,11 @@ class LayerWidget(BoxLayout):
     
     def _on_drum_change(self, spinner, value):
         self.layer["drum"] = value
+        if self.on_change:
+            self.on_change()
+    
+    def _on_mp3_change(self, spinner, value):
+        self.layer["mp3_tick"] = value
         if self.on_change:
             self.on_change()
     
