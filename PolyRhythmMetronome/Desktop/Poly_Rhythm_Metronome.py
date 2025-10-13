@@ -331,7 +331,7 @@ class StreamEngine:
         self._lock=threading.RLock()
         self.left_layers=[]; self.right_layers=[]; self.L_intervals=[]; self.R_intervals=[]; self.L_next=[]; self.R_next=[]
         self.measure_samples=0; self.sample_counter=0; self.accent_factor=DEFAULT_ACCENT_FACTOR; self.flash_enabled=False
-        self.active=[]; self._sa_start_time=None
+        self.active=[]; self._sa_start_time=None; self._sa_handles=deque(maxlen=512)
     def _log_exception(self, context_msg: str):
         """Log exception with timestamp and context information."""
         try:
@@ -380,6 +380,13 @@ class StreamEngine:
             self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
     def start(self):
         if self.running: return
+        # Clear audio buffer and stop any leftover simpleaudio playback handles
+        self.active.clear()
+        while self._sa_handles:
+            try:
+                h = self._sa_handles.popleft()
+                if h and hasattr(h, 'stop'): h.stop()
+            except Exception: pass
         with self.rhythm._lock:
             bpm=float(self.rhythm.bpm); beats=int(self.rhythm.beats_per_measure)
             self.accent_factor=float(self.rhythm.accent_factor); self.flash_enabled=bool(self.rhythm.flash_enabled)
@@ -389,7 +396,7 @@ class StreamEngine:
         self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE))
         def mk_side(layers): intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]; return intervals,[0.0 for _ in layers]
         self.L_intervals,self.L_next = mk_side(self.left_layers); self.R_intervals,self.R_next = mk_side(self.right_layers)
-        self.sample_counter=0; self.active.clear()
+        self.sample_counter=0
         if sd is not None:
             try:
                 self.stream=sd.OutputStream(samplerate=SAMPLE_RATE, channels=2, dtype='float32', callback=self._callback, blocksize=0)
@@ -408,6 +415,12 @@ class StreamEngine:
             except Exception: pass
             self.stream=None
         with self._lock: self.active.clear()
+        # Stop all simpleaudio playback handles
+        while self._sa_handles:
+            try:
+                h = self._sa_handles.popleft()
+                if h and hasattr(h, 'stop'): h.stop()
+            except Exception: pass
     def _amp_and_source(self, lay, accent: bool):
         amp = BASE_AMP * float(lay["vol"]) * (self.accent_factor if accent else 1.0)
         mode = lay.get("mode","tone")
@@ -460,7 +473,7 @@ class StreamEngine:
             outdata[:]=0; return
     def _sa_loop(self):
         try:
-            sr=SAMPLE_RATE; handles=deque(maxlen=512); start=self._sa_start_time or time.perf_counter()
+            sr=SAMPLE_RATE; start=self._sa_start_time or time.perf_counter()
             while self.running:
                 with self._lock:
                     candidates=[]; 
@@ -508,7 +521,7 @@ class StreamEngine:
                 int16=(np.clip(frame,-1.0,1.0)*32767.0).astype(np.int16)
                 try: h=sa.play_buffer(int16,2,2,sr)
                 except TypeError: h=sa.play_buffer(int16.tobytes(),2,2,sr)
-                handles.append(h); time.sleep(0.0005)
+                self._sa_handles.append(h); time.sleep(0.0005)
         except Exception:
             self._log_exception("Exception in simpleaudio loop")
             self._notify_error("Audio engine stopped due to an error.")
