@@ -58,6 +58,14 @@ jobs:
           mkdir -p .buildozer PolyRhythmMetronome/android/bin
           chmod -R 777 .buildozer PolyRhythmMetronome/android/bin
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:   
+          api-level: 33 # Or the desired API level
+          ndk: 25.2.9519653 # Or the desired NDK version
+          build-tools: 33.0.2 # Or the desired build tools version
+
+
       - name: Build with Buildozer
         id: buildozer
         uses: n8marti/buildozer-action@fix-user-doesnt-exist
