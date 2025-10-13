@@ -140,24 +140,34 @@ def calc_interval(subdiv):
 
 #### Timing Loop
 ```python
-start_time = time.time()
+start_time = time.perf_counter()
 next_times = [0.0] * num_layers
 
 while running:
-    current_time = time.time() - start_time
+    # Find next event across ALL layers
+    next_event = min(next_times)
+    current_time = time.perf_counter() - start_time
     
-    for i, layer in enumerate(layers):
-        if current_time >= next_times[i]:
-            play_beat(layer)
-            next_times[i] += intervals[i]
-    
-    time.sleep(0.001)  # 1ms
+    # Smart sleep until event time
+    wait = next_event - current_time
+    if wait > 0.005:
+        time.sleep(wait - 0.003)  # Sleep most, leave 3ms for precision
+    elif wait > 0:
+        time.sleep(0.0001)  # Minimal sleep for precision
+    else:
+        # Process all events at this time
+        for i, layer in enumerate(layers):
+            if abs(next_times[i] - next_event) < TOLERANCE:
+                play_beat(layer)
+                next_times[i] += intervals[i]
 ```
 
 **Precision**:
-- Uses `time.time()` for monotonic timing
-- 1ms sleep provides ~1000 timing checks per second
-- Sufficient for subdivisions up to 32nd notes at high BPM
+- Uses `time.perf_counter()` for high-precision monotonic timing
+- Smart sleep reduces CPU while maintaining accuracy
+- Events within 0.1ms tolerance fire together
+- Guarantees consistent timing regardless of layer count
+- Muted layers maintain timing state to avoid drift
 
 ## Performance Considerations
 
@@ -168,10 +178,11 @@ while running:
 - NumPy arrays use memory-mapped operations
 
 ### CPU Usage
-- Timing loop: <1% CPU (sleep-based)
+- Timing loop: <1% CPU (smart sleep-based scheduling)
 - Audio synthesis: One-time on first use (cached)
 - Playback: Handled by OS audio system
 - Thread overhead: Minimal (single daemon thread)
+- Optimized for minimal CPU usage while maintaining precision
 
 ### Latency
 - Target: <50ms from beat time to audio output
@@ -301,7 +312,7 @@ assert kick is not None and len(kick) > 0
 2. Check for high CPU usage
 3. Ensure timing loop is running (check thread)
 4. Test with single layer first
-5. Reduce number of layers
+5. Timing is now consistent regardless of layer count (fixed in v1.4.0)
 
 ### Distortion/Clipping
 1. Reduce layer volumes (<1.0)
@@ -336,6 +347,15 @@ assert kick is not None and len(kick) > 0
 
 ## Changelog
 
+### v1.4.0 (Timing and Performance Improvements)
+- **Fixed**: Subdivision 3 (triplets) now have evenly spaced notes regardless of other layers
+- **Improved**: Switched to `time.perf_counter()` for high-precision timing
+- **Optimized**: Smart sleep algorithm reduces CPU usage while maintaining accuracy
+- **Fixed**: Beats now stay on time regardless of number of layers (including muted layers)
+- **Added**: Event tolerance window (0.1ms) for truly simultaneous events
+- **Performance**: Timing loop only wakes when needed, reducing overhead
+- **Documentation**: Updated timing implementation details
+
 ### v1.3.0 (Audio Backend Improvements)
 - **Fixed**: Removed runtime auto-install of simpleaudio (not possible on Android)
 - **Added**: Android AudioTrack support via pyjnius (primary backend for Android)
@@ -353,6 +373,6 @@ assert kick is not None and len(kick) > 0
 
 ---
 
-**Last Updated**: 2025-10-12  
-**Version**: 1.3.0  
+**Last Updated**: 2025-10-13  
+**Version**: 1.4.0  
 **Author**: Copilot AI / TheMikaus
