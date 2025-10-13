@@ -124,7 +124,7 @@ AUTOSAVE_FILE = "metronome_autosave.json"
 BPM_PRESETS = [60, 80, 100, 120, 140, 160, 180, 200]
 
 # Subdivision options (notes per beat)
-SUBDIV_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "16", "32", "64"]
+SUBDIV_OPTIONS = ["1", "2", "3", "4", "5", "6", "7", "8", "16", "32", "64"]
 
 # Drum sound options
 DRUM_CHOICES = ["kick", "snare", "hihat", "crash", "tom", "ride"]
@@ -781,7 +781,12 @@ class RhythmState:
 # ---------------- Metronome Engine ---------------- #
 
 class SimpleMetronomeEngine:
-    """Audio engine for Android with multiple layers and drum support"""
+    """Audio engine for Android with multiple layers and drum support
+    
+    Uses per-layer threading where each layer runs on its own thread and sleeps
+    for its subdivision interval. This ensures accurate timing for each layer
+    independently of other layers.
+    """
     
     def __init__(self, rhythm_state, on_beat_callback=None):
         self.state = rhythm_state
@@ -791,7 +796,7 @@ class SimpleMetronomeEngine:
         self.mp3_ticks = Mp3TickCache()
         
         self.running = False
-        self.thread = None
+        self.threads = []  # List of layer threads
         self._lock = threading.RLock()
         
         # Try to import audio playback library
@@ -836,7 +841,7 @@ class SimpleMetronomeEngine:
                 self.audio_lib = None
         
     def start(self):
-        """Start the metronome"""
+        """Start the metronome with per-layer threading"""
         if self.running:
             return
         
@@ -844,17 +849,45 @@ class SimpleMetronomeEngine:
         # This lets users add layers while running
         
         self.running = True
+        self.threads = []
         
-        # Start the metronome thread
-        self.thread = threading.Thread(target=self._run, daemon=True)
-        self.thread.start()
+        # Get current layers
+        with self.state._lock:
+            left_layers = [dict(layer) for layer in self.state.left]
+            right_layers = [dict(layer) for layer in self.state.right]
+            bpm = self.state.bpm
+            beats_per_measure = self.state.beats_per_measure
+        
+        # Start a thread for each left layer
+        for i, layer in enumerate(left_layers):
+            thread = threading.Thread(
+                target=self._run_layer,
+                args=(layer, 'left', bpm, beats_per_measure),
+                daemon=True
+            )
+            thread.start()
+            self.threads.append(thread)
+        
+        # Start a thread for each right layer
+        for i, layer in enumerate(right_layers):
+            thread = threading.Thread(
+                target=self._run_layer,
+                args=(layer, 'right', bpm, beats_per_measure),
+                daemon=True
+            )
+            thread.start()
+            self.threads.append(thread)
     
     def stop(self):
-        """Stop the metronome"""
+        """Stop the metronome and all layer threads"""
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=1.0)
-            self.thread = None
+        
+        # Wait for all threads to complete
+        for thread in self.threads:
+            if thread and thread.is_alive():
+                thread.join(timeout=1.0)
+        
+        self.threads = []
     
     def _get_audio_data(self, layer, is_accent=False):
         """Get audio data for a layer based on its mode"""
@@ -914,7 +947,8 @@ class SimpleMetronomeEngine:
                 )
                 
                 # Use the larger of minimum required or actual data size
-                buffer_size = max(min_buffer_size, data_size)
+                # Add extra buffer to prevent underruns
+                buffer_size = max(min_buffer_size * 2, data_size * 2)
                 
                 # Create AudioTrack with MODE_STREAM for better compatibility
                 audio_track = self.AudioTrack(
@@ -931,16 +965,40 @@ class SimpleMetronomeEngine:
                     state = audio_track.getState()
                     if state != self.AudioTrack.STATE_INITIALIZED:
                         print(f"Warning: AudioTrack not properly initialized (state: {state})")
+                        # Try to release the failed track
+                        try:
+                            audio_track.release()
+                        except:
+                            pass
                         return
                 
-                # Write audio data and play
-                audio_track.write(audio_bytes, 0, data_size)
+                # Play first, then write for MODE_STREAM
                 audio_track.play()
                 
-                # Schedule release after playback
-                # Calculate duration and schedule cleanup
-                duration_ms = int((len(audio_int16) / SAMPLE_RATE) * 1000) + 100
-                Clock.schedule_once(lambda dt: audio_track.release() if hasattr(audio_track, 'release') else None, duration_ms / 1000.0)
+                # Write audio data in chunks if needed to avoid buffer issues
+                bytes_written = audio_track.write(audio_bytes, 0, data_size)
+                
+                if bytes_written < 0:
+                    print(f"Warning: AudioTrack write failed with error code: {bytes_written}")
+                    audio_track.stop()
+                    audio_track.release()
+                    return
+                
+                # Schedule stop and release after playback
+                # Calculate duration and schedule cleanup with extra buffer time
+                duration_ms = int((len(audio_int16) / SAMPLE_RATE) * 1000) + 150
+                
+                def cleanup_audio_track(dt):
+                    try:
+                        if hasattr(audio_track, 'stop'):
+                            audio_track.stop()
+                        if hasattr(audio_track, 'release'):
+                            audio_track.release()
+                    except Exception as cleanup_err:
+                        # Silently ignore cleanup errors
+                        pass
+                
+                Clock.schedule_once(cleanup_audio_track, duration_ms / 1000.0)
             except Exception as e:
                 print(f"Android audio playback error: {e}")
                 
@@ -989,129 +1047,75 @@ class SimpleMetronomeEngine:
             except Exception as e:
                 print(f"Kivy audio playback error: {e}")
     
-    def _run(self):
-        """Main metronome loop with multiple layers and accent support
+    def _run_layer(self, layer, channel, bpm, beats_per_measure):
+        """Run a single layer on its own thread
         
-        Uses high-precision timing to ensure accurate beat placement regardless
-        of the number of layers. Inspired by Desktop version's _sa_loop approach.
+        Each layer thread independently:
+        1. Calculates its interval based on subdivision
+        2. Sleeps for that interval
+        3. Plays its sound
+        4. Repeats
+        
+        This ensures accurate timing per layer and prevents layers from
+        affecting each other's timing.
         """
-        with self.state._lock:
-            bpm = self.state.bpm
-            beats_per_measure = self.state.beats_per_measure
-            
-            # Calculate intervals for each layer
-            left_layers = [dict(layer) for layer in self.state.left]
-            right_layers = [dict(layer) for layer in self.state.right]
-            
-            # Calculate interval in seconds for each layer
-            def calc_interval(subdiv):
-                notes_per_beat = subdiv / 4.0
-                return 60.0 / (bpm * notes_per_beat)
-            
-            left_intervals = [calc_interval(layer["subdiv"]) for layer in left_layers]
-            right_intervals = [calc_interval(layer["subdiv"]) for layer in right_layers]
+        # Calculate interval for this layer
+        subdiv = layer.get("subdiv", 4)
+        notes_per_beat = subdiv / 4.0
+        interval = 60.0 / (bpm * notes_per_beat)
         
-        # Use high-precision timer for better accuracy
+        # Start timing
         start_time = time.perf_counter()
-        left_next_times = [0.0] * len(left_layers)
-        right_next_times = [0.0] * len(right_layers)
+        beat_count = 0
+        next_beat_time = 0.0
         
-        # Track beat counts for accent detection
-        left_beat_counts = [0] * len(left_layers)
-        right_beat_counts = [0] * len(right_layers)
-        
-        # Timing tolerance (events within this window are considered simultaneous)
-        TIME_TOLERANCE = 1e-4  # 0.1ms
+        # Get master volume once at start
+        with self.state._lock:
+            master_volume = float(self.state.master_volume)
         
         while self.running:
-            # Find the next event time across ALL layers (including muted ones for timing consistency)
-            candidates = []
-            
-            for i in range(len(left_layers)):
-                candidates.append(left_next_times[i])
-            
-            for i in range(len(right_layers)):
-                candidates.append(right_next_times[i])
-            
-            if not candidates:
-                time.sleep(0.001)
-                continue
-            
-            # Get the earliest event time
-            next_event_time = min(candidates)
             current_time = time.perf_counter() - start_time
             
-            # Wait until the next event with smart sleeping
-            wait_time = next_event_time - current_time
+            # Wait until next beat time
+            wait_time = next_beat_time - current_time
             if wait_time > 0:
-                # For longer waits, use a longer sleep to reduce CPU usage
-                if wait_time > 0.005:  # More than 5ms away
-                    time.sleep(wait_time - 0.003)  # Sleep most of the time, leave 3ms for precision
-                else:
-                    # For short waits, use minimal sleep for better precision
-                    time.sleep(0.0001)  # 0.1ms
-                continue
+                # Sleep for the subdivision interval
+                time.sleep(wait_time)
             
-            # Process all events that should fire now (within tolerance)
-            # This ensures simultaneous events are truly simultaneous
+            # Check if we should still be running
+            if not self.running:
+                break
             
-            # Check left layers
-            for i, layer in enumerate(left_layers):
-                if abs(left_next_times[i] - next_event_time) < TIME_TOLERANCE:
-                    # Time to fire this layer
-                    if not layer.get("mute", False):
-                        # Determine if this is an accent beat (first beat of measure)
-                        is_accent = (left_beat_counts[i] % beats_per_measure) == 0
-                        
-                        # Get audio data
-                        audio_data = self._get_audio_data(layer, is_accent=is_accent)
-                        
-                        # Apply volume with accent if it's first beat and master volume
-                        base_volume = float(layer.get("vol", 1.0))
-                        accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                        master_volume = float(self.state.master_volume)
-                        volume = base_volume * accent_multiplier * master_volume
-                        
-                        self._play_sound(audio_data, volume, 'left')
-                        
-                        # Trigger visual callback
-                        if self.on_beat_callback:
-                            uid = layer.get("uid")
-                            flash_color = layer.get("flash_color", layer.get("color", "#3B82F6"))
-                            Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('left', u, c), 0)
+            # Play sound if not muted
+            if not layer.get("mute", False):
+                # Determine if this is an accent beat (first beat of measure)
+                is_accent = (beat_count % beats_per_measure) == 0
+                
+                # Get audio data
+                try:
+                    audio_data = self._get_audio_data(layer, is_accent=is_accent)
                     
-                    # Update next time for this layer (even if muted, to keep timing consistent)
-                    left_next_times[i] += left_intervals[i]
-                    left_beat_counts[i] += 1
-            
-            # Check right layers
-            for i, layer in enumerate(right_layers):
-                if abs(right_next_times[i] - next_event_time) < TIME_TOLERANCE:
-                    # Time to fire this layer
-                    if not layer.get("mute", False):
-                        # Determine if this is an accent beat (first beat of measure)
-                        is_accent = (right_beat_counts[i] % beats_per_measure) == 0
-                        
-                        # Get audio data
-                        audio_data = self._get_audio_data(layer, is_accent=is_accent)
-                        
-                        # Apply volume with accent if it's first beat and master volume
-                        base_volume = float(layer.get("vol", 1.0))
-                        accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                        master_volume = float(self.state.master_volume)
-                        volume = base_volume * accent_multiplier * master_volume
-                        
-                        self._play_sound(audio_data, volume, 'right')
-                        
-                        # Trigger visual callback
-                        if self.on_beat_callback:
-                            uid = layer.get("uid")
-                            flash_color = layer.get("flash_color", layer.get("color", "#EF4444"))
-                            Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('right', u, c), 0)
+                    # Apply volume with accent if it's first beat and master volume
+                    base_volume = float(layer.get("vol", 1.0))
+                    accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
+                    volume = base_volume * accent_multiplier * master_volume
                     
-                    # Update next time for this layer (even if muted, to keep timing consistent)
-                    right_next_times[i] += right_intervals[i]
-                    right_beat_counts[i] += 1
+                    self._play_sound(audio_data, volume, channel)
+                    
+                    # Trigger visual callback
+                    if self.on_beat_callback:
+                        uid = layer.get("uid")
+                        default_color = "#3B82F6" if channel == 'left' else "#EF4444"
+                        flash_color = layer.get("flash_color", layer.get("color", default_color))
+                        Clock.schedule_once(
+                            lambda dt, u=uid, c=flash_color: self.on_beat_callback(channel, u, c), 0
+                        )
+                except Exception as e:
+                    print(f"[layer {channel}] Error playing sound: {e}")
+            
+            # Update for next beat
+            beat_count += 1
+            next_beat_time += interval
 
 # ---------------- UI Components ---------------- #
 
