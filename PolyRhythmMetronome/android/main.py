@@ -286,7 +286,9 @@ class DrumSynth:
         # Frequency sweep for realistic tom pitch bend
         f0, f1 = 200.0, 160.0
         k = np.log(f1 / f0) / (dur * 0.2)
-        phase = 2 * np.pi * (f0 * (np.expm1(k * t) / k))
+        # Clip k*t to avoid overflow in expm1 (values > 700 cause overflow)
+        kt_clipped = np.clip(k * t, -700, 700)
+        phase = 2 * np.pi * (f0 * (np.expm1(kt_clipped) / k))
         fundamental = np.sin(phase)
         
         # Add harmonics for richer tone
@@ -618,14 +620,55 @@ def new_uid():
     return uuid.uuid4().hex
 
 
-def random_dark_color():
-    """Generate a random dark color suitable for inactive layer background"""
+def color_distance(color1, color2):
+    """Calculate Euclidean distance between two hex colors"""
+    try:
+        # Parse first color
+        c1 = color1.lstrip('#')
+        r1 = int(c1[0:2], 16)
+        g1 = int(c1[2:4], 16)
+        b1 = int(c1[4:6], 16)
+        
+        # Parse second color
+        c2 = color2.lstrip('#')
+        r2 = int(c2[0:2], 16)
+        g2 = int(c2[2:4], 16)
+        b2 = int(c2[4:6], 16)
+        
+        # Calculate Euclidean distance
+        return ((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) ** 0.5
+    except Exception:
+        return 0
+
+
+def random_dark_color(previous_color=None, min_distance=80):
+    """Generate a random dark color suitable for inactive layer background
+    
+    Args:
+        previous_color: Previous color to avoid (hex string)
+        min_distance: Minimum Euclidean distance from previous color (default 80)
+    """
     import random
-    # Generate RGB values in the range 40-120 to ensure dark but visible colors
-    r = random.randint(40, 120)
-    g = random.randint(40, 120)
-    b = random.randint(40, 120)
-    return f"#{r:02x}{g:02x}{b:02x}"
+    
+    max_attempts = 20
+    for attempt in range(max_attempts):
+        # Generate RGB values in the range 40-120 to ensure dark but visible colors
+        r = random.randint(40, 120)
+        g = random.randint(40, 120)
+        b = random.randint(40, 120)
+        new_color = f"#{r:02x}{g:02x}{b:02x}"
+        
+        # If no previous color, return immediately
+        if previous_color is None:
+            return new_color
+        
+        # Check distance from previous color
+        distance = color_distance(new_color, previous_color)
+        if distance >= min_distance:
+            return new_color
+    
+    # If we couldn't find a distant color after max_attempts, return the last one
+    return new_color
 
 
 def brighten_color(hex_color, factor=2.0):
@@ -675,6 +718,7 @@ class RhythmState:
         self.beats_per_measure = 4
         self.accent_factor = DEFAULT_ACCENT_FACTOR
         self.flash_enabled = False
+        self.master_volume = 1.0  # Master volume control (0.0 to 2.0)
         
         # Multiple layers per ear (like desktop)
         self.left = []  # List of layer dictionaries
@@ -694,6 +738,7 @@ class RhythmState:
                 "beats_per_measure": self.beats_per_measure,
                 "accent_factor": self.accent_factor,
                 "flash_enabled": self.flash_enabled,
+                "master_volume": self.master_volume,
                 "left": self.left,
                 "right": self.right
             }
@@ -705,6 +750,7 @@ class RhythmState:
             self.beats_per_measure = int(data.get("beats_per_measure", 4))
             self.accent_factor = float(data.get("accent_factor", DEFAULT_ACCENT_FACTOR))
             self.flash_enabled = bool(data.get("flash_enabled", False))
+            self.master_volume = float(data.get("master_volume", 1.0))
             
             def normalize(x):
                 x = dict(x)
@@ -968,10 +1014,11 @@ class SimpleMetronomeEngine:
                     # Get audio data
                     audio_data = self._get_audio_data(layer, is_accent=is_accent)
                     
-                    # Apply volume with accent if it's first beat
+                    # Apply volume with accent if it's first beat and master volume
                     base_volume = float(layer.get("vol", 1.0))
                     accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                    volume = base_volume * accent_multiplier
+                    master_volume = float(self.state.master_volume)
+                    volume = base_volume * accent_multiplier * master_volume
                     
                     self._play_sound(audio_data, volume, 'left')
                     
@@ -993,10 +1040,11 @@ class SimpleMetronomeEngine:
                     # Get audio data
                     audio_data = self._get_audio_data(layer, is_accent=is_accent)
                     
-                    # Apply volume with accent if it's first beat
+                    # Apply volume with accent if it's first beat and master volume
                     base_volume = float(layer.get("vol", 1.0))
                     accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                    volume = base_volume * accent_multiplier
+                    master_volume = float(self.state.master_volume)
+                    volume = base_volume * accent_multiplier * master_volume
                     
                     self._play_sound(audio_data, volume, 'right')
                     
@@ -1397,14 +1445,26 @@ class LayerListWidget(BoxLayout):
         
         self.add_widget(title_box)
         
-        # Scroll view for layers
+        # Scroll view for layers with darker background
         self.scroll = ScrollView(size_hint=(1, 1))
+        
+        # Add darker background to scroll area
+        with self.scroll.canvas.before:
+            Color(0.15, 0.15, 0.15, 1)  # Darker than main panel
+            self.scroll_bg = Rectangle(size=self.scroll.size, pos=self.scroll.pos)
+        self.scroll.bind(size=self._update_scroll_bg, pos=self._update_scroll_bg)
+        
         self.layers_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing='5dp')
         self.layers_container.bind(minimum_height=self.layers_container.setter('height'))
         self.scroll.add_widget(self.layers_container)
         self.add_widget(self.scroll)
         
         self.refresh()
+    
+    def _update_scroll_bg(self, *args):
+        """Update scroll background rectangle size and position"""
+        self.scroll_bg.size = self.scroll.size
+        self.scroll_bg.pos = self.scroll.pos
     
     def refresh(self):
         self.layers_container.clear_widgets()
@@ -1428,8 +1488,9 @@ class LayerListWidget(BoxLayout):
     
     def _on_add_layer(self, button):
         layers = self.state.left if self.side == "left" else self.state.right
-        # Use random dark color for new layers
-        color = random_dark_color()
+        # Use random dark color for new layers, avoiding the last layer's color
+        previous_color = layers[-1].get("color") if layers else None
+        color = random_dark_color(previous_color=previous_color)
         new_layer = make_layer(subdiv=4, freq=880.0 if self.side == "left" else 440.0, vol=1.0, color=color)
         layers.append(new_layer)
         self.refresh()
@@ -1462,6 +1523,12 @@ class MetronomeWidget(BoxLayout):
         self.padding = '10dp'
         self.spacing = '10dp'
         
+        # Set a slightly lighter background for the main panel
+        with self.canvas.before:
+            Color(0.22, 0.22, 0.22, 1)  # Slightly lighter than default dark
+            self.bg_rect = Rectangle(size=self.size, pos=self.pos)
+        self.bind(size=self._update_bg_rect, pos=self._update_bg_rect)
+        
         # Initialize state and engine
         self.state = RhythmState()
         self.engine = SimpleMetronomeEngine(self.state, on_beat_callback=self.on_beat)
@@ -1474,6 +1541,11 @@ class MetronomeWidget(BoxLayout):
         
         # Bind to window size changes for orientation support
         Window.bind(on_resize=self.on_window_resize)
+    
+    def _update_bg_rect(self, *args):
+        """Update background rectangle size and position"""
+        self.bg_rect.size = self.size
+        self.bg_rect.pos = self.pos
     
     def on_window_resize(self, window, width, height):
         """Handle orientation changes"""
@@ -1509,7 +1581,7 @@ class MetronomeWidget(BoxLayout):
 
     def _build_header(self):
         """Build title and BPM controls"""
-        header = BoxLayout(orientation='vertical', size_hint_y=None, height='140dp', spacing='2dp')
+        header = BoxLayout(orientation='vertical', size_hint_y=None, height='180dp', spacing='2dp')
         
         # Title
         title = Label(text="PolyRhythm Metronome", font_size='24sp', bold=True, size_hint_y=0.25)
@@ -1538,6 +1610,30 @@ class MetronomeWidget(BoxLayout):
         bpm_row.add_widget(self.bpm_slider)
         
         header.add_widget(bpm_row)
+        
+        # Master Volume row
+        volume_row = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        volume_row.add_widget(Label(text="Master:", font_size='14sp', size_hint_x=0.2))
+        
+        self.volume_value_label = Label(
+            text=f"{self.state.master_volume:.1f}x",
+            font_size='18sp',
+            bold=True,
+            size_hint_x=0.3
+        )
+        volume_row.add_widget(self.volume_value_label)
+        
+        self.volume_slider = Slider(
+            min=0.0,
+            max=2.0,
+            value=self.state.master_volume,
+            step=0.1,
+            size_hint_x=0.5
+        )
+        self.volume_slider.bind(value=self.on_master_volume_change)
+        volume_row.add_widget(self.volume_slider)
+        
+        header.add_widget(volume_row)
         
         # BPM presets - all 8 buttons in one row, taller but thinner
         preset_grid = GridLayout(cols=8, size_hint_y=0.45, spacing='2dp', height='50dp')
@@ -1605,6 +1701,12 @@ class MetronomeWidget(BoxLayout):
     def set_bpm(self, bpm):
         """Set BPM to a specific value"""
         self.bpm_slider.value = bpm
+    
+    def on_master_volume_change(self, instance, value):
+        """Handle master volume slider change"""
+        self.state.master_volume = value
+        self.volume_value_label.text = f"{value:.1f}x"
+        self._autosave()
     
     def on_play_stop(self, instance):
         """Handle play/stop button press"""
@@ -1829,6 +1931,7 @@ class MetronomeWidget(BoxLayout):
             
             # Update UI
             self.bpm_slider.value = self.state.bpm
+            self.volume_slider.value = self.state.master_volume
             self.left_list.refresh()
             self.right_list.refresh()
             
