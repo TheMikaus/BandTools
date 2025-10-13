@@ -54,10 +54,27 @@ def start(self):
         # ... start audio stream ...
 ```
 
+#### 3. Modified `update_live_from_state()` Method
+
+Added a call to `_preload_audio_files()` after updating layers during playback to ensure new audio files added during playback are also cached:
+
+```python
+def update_live_from_state(self):
+    # ... existing update code ...
+    self.left_layers,self.L_intervals,self.L_next = recalc(new_left)
+    self.right_layers,self.R_intervals,self.R_next = recalc(new_right)
+    self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
+    # Pre-load any new audio files that were added during playback
+    self._preload_audio_files()
+```
+
+This ensures that when users add new layers with audio files while the metronome is running, those files are pre-loaded immediately, preventing timing issues throughout playback.
+
 ## How It Works
 
 ### Before the Fix
 
+**At Startup:**
 ```
 User clicks Play
   → Audio thread starts
@@ -68,8 +85,19 @@ User clicks Play
   → Timing problems
 ```
 
+**During Playback (adding new layer):**
+```
+User adds layer with WAV file
+  → Layer added to configuration
+  → Audio callback needs new file
+  → Cache miss - loads from disk (SLOW)
+  → Audio plays late
+  → Timing problems continue
+```
+
 ### After the Fix
 
+**At Startup:**
 ```
 User clicks Play
   → Pre-load all audio files
@@ -80,6 +108,18 @@ User clicks Play
   → Cache hit - instant retrieval
   → Audio plays on time
   → Perfect timing
+```
+
+**During Playback (adding new layer):**
+```
+User adds layer with WAV file
+  → Layer added to configuration
+  → Pre-load new audio file immediately
+  → File cached in memory
+  → Audio callback needs new file
+  → Cache hit - instant retrieval
+  → Audio plays on time
+  → Perfect timing continues
 ```
 
 ## Benefits

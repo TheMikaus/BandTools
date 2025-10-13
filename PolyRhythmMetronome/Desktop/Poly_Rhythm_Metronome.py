@@ -378,6 +378,8 @@ class StreamEngine:
             self.left_layers,self.L_intervals,self.L_next = recalc(new_left)
             self.right_layers,self.R_intervals,self.R_next = recalc(new_right)
             self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
+        # Pre-load any new audio files that were added during playback
+        self._preload_audio_files()
     def _preload_audio_files(self):
         """Pre-load all wave/mp3 files into cache before starting playback.
         This prevents disk I/O delays during audio callbacks that cause timing issues."""
