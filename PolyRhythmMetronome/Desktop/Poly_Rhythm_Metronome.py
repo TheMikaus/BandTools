@@ -378,6 +378,23 @@ class StreamEngine:
             self.left_layers,self.L_intervals,self.L_next = recalc(new_left)
             self.right_layers,self.R_intervals,self.R_next = recalc(new_right)
             self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
+    def _preload_audio_files(self):
+        """Pre-load all wave/mp3 files into cache before starting playback.
+        This prevents disk I/O delays during audio callbacks that cause timing issues."""
+        for lay in self.left_layers + self.right_layers:
+            mode = lay.get("mode", "tone")
+            try:
+                if mode == "mp3_tick" and lay.get("mp3_tick"):
+                    # Pre-load both accent and non-accent versions
+                    self.mp3_ticks.get(lay["mp3_tick"], is_accent=True)
+                    self.mp3_ticks.get(lay["mp3_tick"], is_accent=False)
+                elif mode == "file" and lay.get("wav_path"):
+                    # Pre-load wav file
+                    self.waves.get(lay["wav_path"])
+            except Exception as e:
+                # Log but don't fail - the error will be caught during playback
+                print(f"Warning: Failed to preload audio for layer: {e}", file=sys.stderr)
+    
     def start(self):
         if self.running: return
         with self.rhythm._lock:
@@ -390,6 +407,8 @@ class StreamEngine:
         def mk_side(layers): intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]; return intervals,[0.0 for _ in layers]
         self.L_intervals,self.L_next = mk_side(self.left_layers); self.R_intervals,self.R_next = mk_side(self.right_layers)
         self.sample_counter=0; self.active.clear()
+        # Pre-load all audio files to prevent timing issues on first play
+        self._preload_audio_files()
         if sd is not None:
             try:
                 self.stream=sd.OutputStream(samplerate=SAMPLE_RATE, channels=2, dtype='float32', callback=self._callback, blocksize=0)

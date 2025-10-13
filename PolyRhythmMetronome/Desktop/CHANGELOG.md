@@ -18,6 +18,11 @@ This file tracks changes made to the PolyRhythmMetronome application.
 - **Audio File Support**: Extended WaveCache to support both WAV and MP3 files using pydub
 
 ### Fixed
+- **Wave/MP3 Timing Issues**: Fixed issue where wave and MP3 files would not play on time when starting from a freshly opened app
+  - Added pre-loading of all audio files into cache before playback begins
+  - Audio files are now cached in memory before the audio thread starts
+  - Eliminates disk I/O delays during audio callbacks that caused timing problems
+  - Ensures consistent, on-time playback from the first note
 - **Improved Exception Logging**: Enhanced error logging in metronome_log.txt for better debugging
   - Added timestamps to all log entries (format: YYYY-MM-DD HH:MM:SS.mmm)
   - Added context information including mute states for left and right layers
