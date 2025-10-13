@@ -14,12 +14,29 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
   - Files are decoded once at startup and cached in memory for instant playback
 - **Random Dark Colors**: New layers now automatically get assigned random dark colors for better visual distinction
 - **Auto Flash Colors**: Flash colors are automatically generated as brighter versions of layer inactive colors
+- **Master Volume Control**: Added global master volume slider (0.0x to 2.0x) in header section
+  - Applies to all layers uniformly
+  - Multiplies with individual layer volume and accent volume
+  - Persisted in save/load operations
+- **Color Distance Check**: Random colors now ensure minimum 80-unit Euclidean distance from previous color
+  - Prevents consecutive layers from having similar colors
+  - Improves visual distinction between layers
+
+### Changed
+- **UI Background Colors**: Improved visual hierarchy with distinct background shades
+  - Main panel background: lighter gray (RGB 0.22, 0.22, 0.22)
+  - Layer list background: darker gray (RGB 0.15, 0.15, 0.15)
+  - Individual layers: retain their custom color at 0.3 alpha
+- **Header Height**: Increased from 140dp to 180dp to accommodate master volume control
 
 ### Fixed
 - **AudioTrack Initialization**: Fixed "play called on uninitialized AudioTrack" error by:
   - Switching from MODE_STATIC to MODE_STREAM for better compatibility
   - Adding initialization state check before playback
   - Scheduling proper cleanup after playback completes
+- **RuntimeWarning Overflow**: Fixed overflow warning in tom drum synthesis (line 289)
+  - Added clipping to safe range (-88 to 88) before np.expm1() for float32 safety
+  - Prevents potential overflow warnings during audio generation
 
 ## [1.5.0] - Audio Playback Bug Fix and Major Enhancements
 

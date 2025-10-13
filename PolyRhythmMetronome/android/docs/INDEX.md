@@ -22,8 +22,9 @@ Developer-focused documentation for understanding and modifying the code.
 
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
 - [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - Audio playback system details (v1.1)
-- [MP3 MediaCodec Implementation](technical/MP3_MEDIACODEC_IMPLEMENTATION.md) - NEW: Native Android MP3 decoding technical details
+- [MP3 MediaCodec Implementation](technical/MP3_MEDIACODEC_IMPLEMENTATION.md) - Native Android MP3 decoding technical details
 - [V1.2 Changes](technical/V1.2_CHANGES.md) - Technical details of v1.2 improvements and bug fixes
+- [UI Improvements v1.6](technical/UI_IMPROVEMENTS_V1.6.md) - NEW: Background colors, color distance, master volume, and overflow fix
 - [Porting Analysis](technical/PORTING_ANALYSIS.md) - Desktop to Android porting decisions
 - [Build Guide](technical/BUILD_GUIDE.md) - Building and deploying
 - [Setup Script](technical/SETUP_SCRIPT.md) - Automated dependency setup technical details
