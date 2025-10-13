@@ -10,15 +10,19 @@ This is a full-featured version of PolyRhythmMetronome, optimized for mobile use
 - **Multiple Layers Per Ear**: Full support for unlimited layers like the desktop version
 - **Large Touch Targets**: All buttons and controls are sized for easy touch interaction
 - **BPM Presets**: Quick-access buttons for common tempos (60, 80, 100, 120, 140, 160, 180, 200 BPM)
-- **Sound Generation**: Tone and Drum synthesis modes (kick, snare, hihat, crash, tom, ride)
+- **Sound Generation**: Tone, Drum synthesis, and MP3 tick sounds
+- **Native MP3 Support**: Load custom tick sounds without ffmpeg (uses Android MediaCodec)
 - **Orientation Support**: Works in both portrait and landscape orientations
 
 ### Core Features
 - **Multiple Stereo Layers**: Multiple independent rhythm layers for left and right ears (like desktop)
 - **BPM Control**: Adjustable from 40 to 240 BPM via slider or preset buttons
 - **Subdivision Settings**: Choose from 1, 2, 4, 8, or 16 notes per beat per layer
-- **Sound Modes**: Tone (adjustable frequency in Hz) or Drum synthesis
+- **Sound Modes**: Tone (adjustable frequency in Hz), Drum synthesis, or MP3 tick files
 - **Drum Sounds**: Six drum types (kick, snare, hihat, crash, tom, ride)
+- **MP3 Tick Sounds**: Load custom metronome tick sounds from the `ticks/` folder
+  - Supports single files or paired files for accent vs regular beats
+  - Uses native Android MediaCodec - no ffmpeg required
 - **Volume Control**: Independent volume per layer
 - **Mute Controls**: Toggle any layer on/off
 - **Layer Management**: Add/remove layers dynamically with + and X buttons
