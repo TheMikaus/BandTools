@@ -990,7 +990,11 @@ class SimpleMetronomeEngine:
                 print(f"Kivy audio playback error: {e}")
     
     def _run(self):
-        """Main metronome loop with multiple layers and accent support"""
+        """Main metronome loop with multiple layers and accent support
+        
+        Uses high-precision timing to ensure accurate beat placement regardless
+        of the number of layers. Inspired by Desktop version's _sa_loop approach.
+        """
         with self.state._lock:
             bpm = self.state.bpm
             beats_per_measure = self.state.beats_per_measure
@@ -1007,10 +1011,8 @@ class SimpleMetronomeEngine:
             left_intervals = [calc_interval(layer["subdiv"]) for layer in left_layers]
             right_intervals = [calc_interval(layer["subdiv"]) for layer in right_layers]
         
-        # Calculate measure duration for accent detection
-        measure_duration = (60.0 / bpm) * beats_per_measure
-        
-        start_time = time.time()
+        # Use high-precision timer for better accuracy
+        start_time = time.perf_counter()
         left_next_times = [0.0] * len(left_layers)
         right_next_times = [0.0] * len(right_layers)
         
@@ -1018,63 +1020,98 @@ class SimpleMetronomeEngine:
         left_beat_counts = [0] * len(left_layers)
         right_beat_counts = [0] * len(right_layers)
         
+        # Timing tolerance (events within this window are considered simultaneous)
+        TIME_TOLERANCE = 1e-4  # 0.1ms
+        
         while self.running:
-            current_time = time.time() - start_time
+            # Find the next event time across ALL layers (including muted ones for timing consistency)
+            candidates = []
+            
+            for i in range(len(left_layers)):
+                candidates.append(left_next_times[i])
+            
+            for i in range(len(right_layers)):
+                candidates.append(right_next_times[i])
+            
+            if not candidates:
+                time.sleep(0.001)
+                continue
+            
+            # Get the earliest event time
+            next_event_time = min(candidates)
+            current_time = time.perf_counter() - start_time
+            
+            # Wait until the next event with smart sleeping
+            wait_time = next_event_time - current_time
+            if wait_time > 0:
+                # For longer waits, use a longer sleep to reduce CPU usage
+                if wait_time > 0.005:  # More than 5ms away
+                    time.sleep(wait_time - 0.003)  # Sleep most of the time, leave 3ms for precision
+                else:
+                    # For short waits, use minimal sleep for better precision
+                    time.sleep(0.0001)  # 0.1ms
+                continue
+            
+            # Process all events that should fire now (within tolerance)
+            # This ensures simultaneous events are truly simultaneous
             
             # Check left layers
             for i, layer in enumerate(left_layers):
-                if not layer.get("mute", False) and current_time >= left_next_times[i]:
-                    # Determine if this is an accent beat (first beat of measure)
-                    is_accent = (left_beat_counts[i] % beats_per_measure) == 0
+                if abs(left_next_times[i] - next_event_time) < TIME_TOLERANCE:
+                    # Time to fire this layer
+                    if not layer.get("mute", False):
+                        # Determine if this is an accent beat (first beat of measure)
+                        is_accent = (left_beat_counts[i] % beats_per_measure) == 0
+                        
+                        # Get audio data
+                        audio_data = self._get_audio_data(layer, is_accent=is_accent)
+                        
+                        # Apply volume with accent if it's first beat and master volume
+                        base_volume = float(layer.get("vol", 1.0))
+                        accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
+                        master_volume = float(self.state.master_volume)
+                        volume = base_volume * accent_multiplier * master_volume
+                        
+                        self._play_sound(audio_data, volume, 'left')
+                        
+                        # Trigger visual callback
+                        if self.on_beat_callback:
+                            uid = layer.get("uid")
+                            flash_color = layer.get("flash_color", layer.get("color", "#3B82F6"))
+                            Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('left', u, c), 0)
                     
-                    # Get audio data
-                    audio_data = self._get_audio_data(layer, is_accent=is_accent)
-                    
-                    # Apply volume with accent if it's first beat and master volume
-                    base_volume = float(layer.get("vol", 1.0))
-                    accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                    master_volume = float(self.state.master_volume)
-                    volume = base_volume * accent_multiplier * master_volume
-                    
-                    self._play_sound(audio_data, volume, 'left')
-                    
-                    # Trigger visual callback
-                    if self.on_beat_callback:
-                        uid = layer.get("uid")
-                        flash_color = layer.get("flash_color", layer.get("color", "#3B82F6"))
-                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('left', u, c), 0)
-                    
+                    # Update next time for this layer (even if muted, to keep timing consistent)
                     left_next_times[i] += left_intervals[i]
                     left_beat_counts[i] += 1
             
             # Check right layers
             for i, layer in enumerate(right_layers):
-                if not layer.get("mute", False) and current_time >= right_next_times[i]:
-                    # Determine if this is an accent beat (first beat of measure)
-                    is_accent = (right_beat_counts[i] % beats_per_measure) == 0
+                if abs(right_next_times[i] - next_event_time) < TIME_TOLERANCE:
+                    # Time to fire this layer
+                    if not layer.get("mute", False):
+                        # Determine if this is an accent beat (first beat of measure)
+                        is_accent = (right_beat_counts[i] % beats_per_measure) == 0
+                        
+                        # Get audio data
+                        audio_data = self._get_audio_data(layer, is_accent=is_accent)
+                        
+                        # Apply volume with accent if it's first beat and master volume
+                        base_volume = float(layer.get("vol", 1.0))
+                        accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
+                        master_volume = float(self.state.master_volume)
+                        volume = base_volume * accent_multiplier * master_volume
+                        
+                        self._play_sound(audio_data, volume, 'right')
+                        
+                        # Trigger visual callback
+                        if self.on_beat_callback:
+                            uid = layer.get("uid")
+                            flash_color = layer.get("flash_color", layer.get("color", "#EF4444"))
+                            Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('right', u, c), 0)
                     
-                    # Get audio data
-                    audio_data = self._get_audio_data(layer, is_accent=is_accent)
-                    
-                    # Apply volume with accent if it's first beat and master volume
-                    base_volume = float(layer.get("vol", 1.0))
-                    accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
-                    master_volume = float(self.state.master_volume)
-                    volume = base_volume * accent_multiplier * master_volume
-                    
-                    self._play_sound(audio_data, volume, 'right')
-                    
-                    # Trigger visual callback
-                    if self.on_beat_callback:
-                        uid = layer.get("uid")
-                        flash_color = layer.get("flash_color", layer.get("color", "#EF4444"))
-                        Clock.schedule_once(lambda dt, u=uid, c=flash_color: self.on_beat_callback('right', u, c), 0)
-                    
+                    # Update next time for this layer (even if muted, to keep timing consistent)
                     right_next_times[i] += right_intervals[i]
                     right_beat_counts[i] += 1
-            
-            # Small sleep to avoid busy waiting
-            time.sleep(0.001)
 
 # ---------------- UI Components ---------------- #
 
