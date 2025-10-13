@@ -904,13 +904,14 @@ class SimpleMetronomeEngine:
         if mode == "drum":
             drum_name = layer.get("drum", "snare")
             return self.drum_synth.get(drum_name)
-        else:  # tone mode (fallback)
-            # Use accent_freq for accent beats if available, otherwise use regular freq
-            if is_accent and "accent_freq" in layer:
-                freq = float(layer.get("accent_freq", 880.0))
-            else:
-                freq = float(layer.get("freq", 880.0))
-            return self.tone_gen.generate_beep(freq, duration_ms=50)
+        
+        # tone mode (fallback for failed mp3_tick or explicit tone mode)
+        # Use accent_freq for accent beats if available, otherwise use regular freq
+        if is_accent and "accent_freq" in layer:
+            freq = float(layer.get("accent_freq", 880.0))
+        else:
+            freq = float(layer.get("freq", 880.0))
+        return self.tone_gen.generate_beep(freq, duration_ms=50)
     
     def _play_sound(self, audio_data, volume=1.0, channel='center'):
         """Play audio data using available library"""
