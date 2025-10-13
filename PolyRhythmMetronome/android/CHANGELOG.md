@@ -5,6 +5,13 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 ## [Unreleased]
 
 ### Added
+- **Native MP3 Tick Support**: Implemented MP3 metronome tick sounds using Android's native MediaCodec API
+  - No ffmpeg or external codec libraries required
+  - Uses Android MediaExtractor and MediaCodec for hardware-accelerated MP3 decoding
+  - Supports single MP3 files or paired files (_1 for accent, _2 for regular beats)
+  - MP3 files placed in `ticks/` folder are automatically scanned and made available
+  - Added `mp3_tick` mode to layer sound mode spinner
+  - Files are decoded once at startup and cached in memory for instant playback
 - **Random Dark Colors**: New layers now automatically get assigned random dark colors for better visual distinction
 - **Auto Flash Colors**: Flash colors are automatically generated as brighter versions of layer inactive colors
 
