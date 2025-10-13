@@ -16,14 +16,14 @@ Documentation for end users, including how-to guides, feature explanations, and 
 Developer and technical documentation, including implementation details, architecture decisions, and build instructions.
 
 **Key Documents:**
-- Currently being developed - check back soon!
+- [Audio Pre-loading Fix](technical/audio_preloading_fix.md) - Technical details on wave/MP3 timing issue resolution
 
 ### 🧪 Test Plans (`test_plans/`)
 
 Quality assurance and testing documentation, including test cases, validation procedures, and bug reports.
 
 **Key Documents:**
-- Currently being developed - check back soon!
+- [Audio Timing Fix Test Plan](test_plans/audio_timing_fix_test_plan.md) - Validation tests for wave/MP3 pre-loading fix
 
 ## Quick Links
 
