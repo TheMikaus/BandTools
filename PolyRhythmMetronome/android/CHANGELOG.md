@@ -4,6 +4,33 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 
 ## [Unreleased]
 
+## [1.7.0] - Timing Diagnostics and Debugging
+
+### Added
+- **Timing Diagnostics System**: Comprehensive logging to diagnose timing issues
+  - New "TIMING DEBUG" toggle button in UI (next to VIEW LOGS)
+  - Logs engine configuration on start (BPM, audio backend, platform info)
+  - Logs per-layer timing for first 10 beats (timing errors, sleep accuracy, audio processing times)
+  - Periodic statistics every 50 beats (average, min, max timing errors and drift)
+  - Final statistics when metronome stops
+  - Timing diagnostics setting persists in save/load
+  - Automatically restarts metronome when toggled during playback
+- **Enhanced Engine Logging**: Detailed start/stop messages showing configuration
+  - Lists all layers with subdivision, mode, and mute status
+  - Reports audio library in use (AudioTrack, simpleaudio, or Kivy)
+  - Shows platform and Python version
+  - Thread cleanup status on stop
+- **Documentation**: 
+  - Added [Timing Diagnostics User Guide](docs/user_guides/TIMING_DIAGNOSTICS_GUIDE.md)
+  - Added [Timing Debug Implementation](docs/technical/TIMING_DEBUG_IMPLEMENTATION.md)
+
+### Changed
+- **Controls Section Height**: Increased from 140dp to 180dp to accommodate new diagnostics button
+- **Control Button Layout**: Changed to 3-row layout:
+  - Row 1: Play/Stop button (40% height)
+  - Row 2: File operations - NEW, LOAD, SAVE (30% height)
+  - Row 3: Diagnostics - TIMING DEBUG, VIEW LOGS (30% height)
+
 ### Fixed
 - **Audio Timing and Buffer Issues**: Fixed simpleaudio fallback mode buffer management
   - Simpleaudio playback handles are now tracked and properly stopped on play/stop
