@@ -798,6 +798,7 @@ class SimpleMetronomeEngine:
         self.running = False
         self.threads = []  # List of layer threads
         self._lock = threading.RLock()
+        self._sa_handles = []  # Track simpleaudio playback handles
         
         # Try to import audio playback library
         self.audio_lib = None
@@ -845,6 +846,16 @@ class SimpleMetronomeEngine:
         if self.running:
             return
         
+        # Clear any leftover simpleaudio playback handles
+        with self._lock:
+            for h in self._sa_handles:
+                try:
+                    if h and hasattr(h, 'stop'):
+                        h.stop()
+                except Exception:
+                    pass
+            self._sa_handles.clear()
+        
         # Allow starting even with no layers - just won't play any sounds
         # This lets users add layers while running
         
@@ -888,6 +899,16 @@ class SimpleMetronomeEngine:
                 thread.join(timeout=1.0)
         
         self.threads = []
+        
+        # Stop all simpleaudio playback handles
+        with self._lock:
+            for h in self._sa_handles:
+                try:
+                    if h and hasattr(h, 'stop'):
+                        h.stop()
+                except Exception:
+                    pass
+            self._sa_handles.clear()
     
     def _get_audio_data(self, layer, is_accent=False):
         """Get audio data for a layer based on its mode"""
@@ -1007,6 +1028,8 @@ class SimpleMetronomeEngine:
             try:
                 audio_int16 = (stereo * 32767.0).astype(np.int16)
                 play_obj = self.sa.play_buffer(audio_int16, 2, 2, SAMPLE_RATE)
+                with self._lock:
+                    self._sa_handles.append(play_obj)
             except Exception as e:
                 print(f"simpleaudio playback error: {e}")
                 

@@ -5,6 +5,10 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 ## [Unreleased]
 
 ### Fixed
+- **Audio Timing and Buffer Issues**: Fixed simpleaudio fallback mode buffer management
+  - Simpleaudio playback handles are now tracked and properly stopped on play/stop
+  - Leftover audio from previous sessions no longer interferes with new playback
+  - Consistent timing behavior across Desktop and Android versions
 - **Drum and MP3 Playback**: Fixed critical bug in `_get_audio_data` method where drum and mp3_tick modes would incorrectly fall through to tone mode
   - Removed incorrect `else` clause that was preventing drum sounds from playing
   - Drum mode now correctly returns synthesized drum sounds
