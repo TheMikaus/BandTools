@@ -286,8 +286,8 @@ class DrumSynth:
         # Frequency sweep for realistic tom pitch bend
         f0, f1 = 200.0, 160.0
         k = np.log(f1 / f0) / (dur * 0.2)
-        # Clip k*t to avoid overflow in expm1 (values > 700 cause overflow)
-        kt_clipped = np.clip(k * t, -700, 700)
+        # Clip k*t to avoid overflow in expm1 (values > 88 cause overflow for float32)
+        kt_clipped = np.clip(k * t, -88, 88)
         phase = 2 * np.pi * (f0 * (np.expm1(kt_clipped) / k))
         fundamental = np.sin(phase)
         
