@@ -72,14 +72,11 @@ This document summarizes the enhancements made to the Android PolyRhythmMetronom
 
 ---
 
-### 4. Triplets Support ✅
+### 4. Subdivision Options ✅
 
-**Status**: Already supported! Subdivision "3" was already in SUBDIV_OPTIONS.
+**Status**: Already supported! Various subdivisions including "3" were already in SUBDIV_OPTIONS.
 
-**Documentation**: Added comment clarifying that "3" represents triplets (3 notes per beat)
-
-**Files Modified**:
-- `main.py` line ~126-128: Added clarifying comment
+**Note**: Subdivision "3" provides 3 equal notes per beat, not musical triplets (which would be 3 notes in the time of 2).
 
 ---
 
@@ -95,7 +92,7 @@ This document summarizes the enhancements made to the Android PolyRhythmMetronom
 
 ### New Test Plans
 2. **Feature Enhancements Test Plan** (`docs/test_plans/feature_enhancements_test_plan.md`)
-   - 21 detailed test cases
+   - 19 detailed test cases
    - Covers all new features
    - Integration and regression testing
    - Manual testing checklist
@@ -185,7 +182,7 @@ All changes are **fully backwards compatible**:
 
 ### Regression Tests
 7. **RT-1**: Verify no existing features broke
-8. **TC-6.1**: Load old saved patterns (backwards compatibility)
+8. **TC-5.1**: Load old saved patterns (backwards compatibility)
 
 See [Feature Enhancements Test Plan](docs/test_plans/feature_enhancements_test_plan.md) for complete test cases.
 

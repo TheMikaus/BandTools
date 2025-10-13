@@ -62,7 +62,7 @@ If you only want volume accent (not pitch):
 Left Channel:
 - Regular: 440 Hz (A4)
 - Accent: 880 Hz (A5)
-- Subdivision: 3 (triplets)
+- Subdivision: 3 (three notes per beat)
 
 Right Channel:
 - Regular: 330 Hz (E4)
@@ -138,7 +138,7 @@ When you add, delete, or mute a layer while the metronome is playing, it will au
 ## Related Features
 
 - **Accent Volume Slider**: Controls how much louder accent beats are (applies to all modes)
-- **Subdivision**: Determines how many notes per beat (including triplets with "3")
+- **Subdivision**: Determines how many notes per beat (e.g., "3" = three equal notes per beat)
 - **Beats Per Measure**: Determines how often the accent occurs (set in global settings)
 
 ## Frequency Reference

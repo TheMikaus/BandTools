@@ -124,7 +124,6 @@ AUTOSAVE_FILE = "metronome_autosave.json"
 BPM_PRESETS = [60, 80, 100, 120, 140, 160, 180, 200]
 
 # Subdivision options (notes per beat)
-# Note: "3" represents triplets (3 notes per beat)
 SUBDIV_OPTIONS = ["2", "3", "4", "5", "6", "7", "8", "16", "32", "64"]
 
 # Drum sound options

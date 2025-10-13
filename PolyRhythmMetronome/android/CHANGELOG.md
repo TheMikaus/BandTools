@@ -62,7 +62,7 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 
 ### Documentation
 - Added [Accent Frequency Guide](docs/user_guides/accent_frequency_guide.md) with musical examples
-- Added [Feature Enhancements Test Plan](docs/test_plans/feature_enhancements_test_plan.md) with 21 test cases
+- Added [Feature Enhancements Test Plan](docs/test_plans/feature_enhancements_test_plan.md) with 19 test cases
 - Updated [Documentation Index](docs/INDEX.md) with new guides
 
 ## [1.5.0] - Audio Playback Bug Fix and Major Enhancements

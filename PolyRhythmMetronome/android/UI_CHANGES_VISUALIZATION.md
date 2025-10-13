@@ -313,8 +313,7 @@ Beat 4:           440 Hz, 1.0x volume, normal flash
 ✅ "Flash colors look great automatically!"  
 ✅ "I can finally hear the downbeat clearly!"  
 ✅ "Adding layers while playing is so much better!"  
-✅ "One color picker is way less confusing!"  
-✅ "Triplets were already there, nice!"
+✅ "One color picker is way less confusing!"
 
 ### Questions
 ❓ "What's the 'Acc Hz' field?" → See [Accent Frequency Guide](docs/user_guides/accent_frequency_guide.md)  

@@ -19,7 +19,7 @@ The original request included 5 items:
 | 2 | Tone playback issues | ✅ Already Fixed | v1.5 fixed buffer size issue, verified in code |
 | 3 | Accent tone control | ✅ Complete | Added accent_freq field with dual UI inputs |
 | 4 | Auto-restart on changes | ✅ Complete | Engine restarts on add/delete/mute operations |
-| 5 | Triplets support | ✅ Already Present | Subdivision "3" was in SUBDIV_OPTIONS |
+| 5 | Add triplets to dropdown | ✅ Already Present | Subdivision "3" provides 3 notes per beat (not musical triplets) |
 
 ## Files Modified
 
@@ -224,10 +224,11 @@ def normalize(x):
 - **Use Case**: "I want to add a layer without stopping"
 - **Example**: Click + while playing → Layer immediately active
 
-### 4. Triplets
+### 4. Subdivision Options
 - **What**: Already supported via subdivision "3"
 - **Use Case**: "I need 3 notes per beat"
 - **Example**: Set subdiv to 3 at 60 BPM = 3 notes per second
+- **Note**: This provides 3 equal notes per beat, not musical triplets (which would be 3 notes in the time of 2)
 
 ---
 
@@ -237,7 +238,7 @@ def normalize(x):
 ✅ Simpler UI (one fewer button per layer)  
 ✅ More musical expression (accent frequencies)  
 ✅ Better workflow (auto-restart)  
-✅ No learning curve (triplets already there)  
+✅ Flexible subdivisions (including 3 notes per beat)  
 ✅ Professional documentation
 
 ### No Negative Impact
@@ -263,7 +264,7 @@ def normalize(x):
 
 **High Priority Tests**:
 7. Accent frequency at various intervals (octave, fifth, fourth)
-8. Triplets playback (subdivision 3)
+8. Subdivision 3 playback (3 notes per beat)
 9. Multiple layers with different accent frequencies
 10. Save/load with new accent_freq field
 

@@ -11,7 +11,6 @@
 1. **Removed flash color picker** - Flash color is now automatically generated from base color
 2. **Added accent frequency control** - Tone mode can now have different frequencies for accent beats
 3. **Auto-restart on layer changes** - Metronome now restarts automatically when layers are added, deleted, or muted
-4. **Triplets already supported** - Subdivision "3" is already available (3 notes per beat)
 
 ## Test Cases
 
@@ -246,48 +245,9 @@
 
 ---
 
-### 4. Triplets Support
+### 4. Data Persistence
 
-#### TC-4.1: Triplets Available
-**Priority**: HIGH  
-**Description**: Verify "3" is available in subdivision dropdown
-
-**Steps**:
-1. Click subdivision dropdown on any layer
-2. Look for "3" option
-
-**Expected Result**:
-- "3" is listed in subdivision options
-- Appears between "2" and "4"
-- Can be selected
-
-**Status**: [ ] Pass [ ] Fail
-
----
-
-#### TC-4.2: Triplets Playback
-**Priority**: HIGH  
-**Description**: Verify triplets play correctly
-
-**Steps**:
-1. Set BPM to 60 (one beat per second)
-2. Set layer subdivision to 3
-3. Press PLAY
-4. Count beats over 4 seconds
-
-**Expected Result**:
-- Three notes play per beat (per second at 60 BPM)
-- Total of 12 notes in 4 seconds
-- Evenly spaced (approximately 333ms apart)
-- Timing is accurate and consistent
-
-**Status**: [ ] Pass [ ] Fail
-
----
-
-### 5. Data Persistence
-
-#### TC-5.1: Accent Frequency Saved
+#### TC-4.1: Accent Frequency Saved
 **Priority**: HIGH  
 **Description**: Verify accent_freq is saved with layers
 
@@ -308,7 +268,7 @@
 
 ---
 
-#### TC-5.2: Autosave Works
+#### TC-4.2: Autosave Works
 **Priority**: HIGH  
 **Description**: Verify autosave includes new features
 
@@ -327,9 +287,9 @@
 
 ---
 
-### 6. Backwards Compatibility
+### 5. Backwards Compatibility
 
-#### TC-6.1: Load Old Patterns
+#### TC-5.1: Load Old Patterns
 **Priority**: CRITICAL  
 **Description**: Verify old saved patterns still load
 
@@ -359,7 +319,7 @@
 2. Set different accent frequencies on tone layers
 3. Add and remove layers while playing
 4. Change colors and observe auto-generated flash colors
-5. Test with triplets (subdivision 3)
+5. Test with various subdivisions (including 3)
 6. Save and reload
 
 **Expected Result**:
@@ -400,9 +360,9 @@
 **Tester**: ________________  
 **Device**: ________________  
 **Android Version**: ________________  
-**Total Tests**: 21 test cases  
-**Passed**: ___ / 21  
-**Failed**: ___ / 21  
+**Total Tests**: 19 test cases  
+**Passed**: ___ / 19  
+**Failed**: ___ / 19  
 **Critical Issues**: ___  
 **Approved**: YES / NO
 
