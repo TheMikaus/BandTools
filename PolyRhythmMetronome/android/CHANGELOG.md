@@ -4,6 +4,14 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 
 ## [Unreleased]
 
+### Fixed
+- **Drum and MP3 Playback**: Fixed critical bug in `_get_audio_data` method where drum and mp3_tick modes would incorrectly fall through to tone mode
+  - Removed incorrect `else` clause that was preventing drum sounds from playing
+  - Drum mode now correctly returns synthesized drum sounds
+  - MP3 tick mode now correctly plays MP3/WAV files from the ticks folder
+  - Tone mode is now only used as an explicit mode or as a fallback for failed mp3_tick loading
+  - All three sound modes (tone, drum, mp3_tick) now work as intended
+
 ## [1.6.0] - Per-Layer Threading and AudioTrack Reliability
 
 ### Added

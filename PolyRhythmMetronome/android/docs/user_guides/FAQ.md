@@ -125,7 +125,12 @@ Check these things:
 
 ### Can I use different sounds?
 
-Currently, the Android version only supports tone generation (pure sine waves). The desktop version has drum sounds and WAV file support.
+Yes! The Android version supports three sound modes:
+- **Tone**: Pure sine wave tones (adjustable frequency)
+- **Drum**: Synthesized drum sounds (kick, snare, hihat, crash, tom, ride)
+- **MP3 Tick**: Custom MP3 or WAV files from the `ticks/` folder
+
+To use MP3 ticks, place your audio files in the app's `ticks/` directory and select "mp3_tick" mode when adding a layer.
 
 ### Why does it sound different from the desktop version?
 
