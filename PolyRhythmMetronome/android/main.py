@@ -730,6 +730,7 @@ class RhythmState:
         self.accent_factor = DEFAULT_ACCENT_FACTOR
         self.flash_enabled = False
         self.master_volume = 1.0  # Master volume control (0.0 to 2.0)
+        self.timing_diagnostics = False  # Enable verbose timing logging
         
         # Multiple layers per ear (like desktop)
         self.left = []  # List of layer dictionaries
@@ -750,6 +751,7 @@ class RhythmState:
                 "accent_factor": self.accent_factor,
                 "flash_enabled": self.flash_enabled,
                 "master_volume": self.master_volume,
+                "timing_diagnostics": self.timing_diagnostics,
                 "left": self.left,
                 "right": self.right
             }
@@ -762,6 +764,7 @@ class RhythmState:
             self.accent_factor = float(data.get("accent_factor", DEFAULT_ACCENT_FACTOR))
             self.flash_enabled = bool(data.get("flash_enabled", False))
             self.master_volume = float(data.get("master_volume", 1.0))
+            self.timing_diagnostics = bool(data.get("timing_diagnostics", False))
             
             def normalize(x):
                 x = dict(x)
@@ -862,15 +865,30 @@ class SimpleMetronomeEngine:
         self.running = True
         self.threads = []
         
-        # Get current layers
+        # Get current layers and diagnostics flag
         with self.state._lock:
             left_layers = [dict(layer) for layer in self.state.left]
             right_layers = [dict(layer) for layer in self.state.right]
             bpm = self.state.bpm
             beats_per_measure = self.state.beats_per_measure
+            diagnostics_enabled = bool(self.state.timing_diagnostics)
+        
+        # Log engine configuration
+        print(f"[engine] Starting metronome engine")
+        print(f"[engine]   BPM: {bpm}, Beats per measure: {beats_per_measure}")
+        print(f"[engine]   Audio library: {self.audio_lib}")
+        print(f"[engine]   Left layers: {len(left_layers)}, Right layers: {len(right_layers)}")
+        print(f"[engine]   Timing diagnostics: {'ENABLED' if diagnostics_enabled else 'DISABLED'}")
+        print(f"[engine]   Platform: {platform}")
+        print(f"[engine]   Python version: {sys.version.split()[0]}")
+        print(f"[engine]   High-precision timer available: {hasattr(time, 'perf_counter')}")
         
         # Start a thread for each left layer
         for i, layer in enumerate(left_layers):
+            subdiv = layer.get("subdiv", 4)
+            mode = layer.get("mode", "tone")
+            muted = layer.get("mute", False)
+            print(f"[engine]   Starting left layer {i+1}: subdiv={subdiv}, mode={mode}, muted={muted}")
             thread = threading.Thread(
                 target=self._run_layer,
                 args=(layer, 'left', bpm, beats_per_measure),
@@ -881,6 +899,10 @@ class SimpleMetronomeEngine:
         
         # Start a thread for each right layer
         for i, layer in enumerate(right_layers):
+            subdiv = layer.get("subdiv", 4)
+            mode = layer.get("mode", "tone")
+            muted = layer.get("mute", False)
+            print(f"[engine]   Starting right layer {i+1}: subdiv={subdiv}, mode={mode}, muted={muted}")
             thread = threading.Thread(
                 target=self._run_layer,
                 args=(layer, 'right', bpm, beats_per_measure),
@@ -888,16 +910,27 @@ class SimpleMetronomeEngine:
             )
             thread.start()
             self.threads.append(thread)
+        
+        print(f"[engine] Metronome started with {len(self.threads)} layer threads")
     
     def stop(self):
         """Stop the metronome and all layer threads"""
+        print(f"[engine] Stopping metronome with {len(self.threads)} threads...")
         self.running = False
         
         # Wait for all threads to complete
-        for thread in self.threads:
+        stopped_count = 0
+        timeout_count = 0
+        for i, thread in enumerate(self.threads):
             if thread and thread.is_alive():
                 thread.join(timeout=1.0)
+                if thread.is_alive():
+                    print(f"[engine]   WARNING: Thread {i+1} did not stop within timeout")
+                    timeout_count += 1
+                else:
+                    stopped_count += 1
         
+        print(f"[engine] Stopped {stopped_count} threads, {timeout_count} timed out")
         self.threads = []
         
         # Stop all simpleaudio playback handles
@@ -909,6 +942,8 @@ class SimpleMetronomeEngine:
                 except Exception:
                     pass
             self._sa_handles.clear()
+        
+        print(f"[engine] Metronome stopped")
     
     def _get_audio_data(self, layer, is_accent=False):
         """Get audio data for a layer based on its mode"""
@@ -1093,22 +1128,55 @@ class SimpleMetronomeEngine:
         beat_count = 0
         next_beat_time = 0.0
         
-        # Get master volume once at start
+        # Get master volume and diagnostic flag once at start
         with self.state._lock:
             master_volume = float(self.state.master_volume)
+            diagnostics_enabled = bool(self.state.timing_diagnostics)
+        
+        # Timing statistics for diagnostics
+        timing_errors = []
+        max_drift = 0.0
+        layer_id = layer.get("uid", "unknown")
+        
+        # Log layer start
+        if diagnostics_enabled:
+            print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}")
         
         while self.running:
             current_time = time.perf_counter() - start_time
             
+            # Calculate timing error before sleep
+            timing_error = current_time - next_beat_time
+            if diagnostics_enabled and beat_count > 0:
+                timing_errors.append(timing_error)
+                if abs(timing_error) > abs(max_drift):
+                    max_drift = timing_error
+            
             # Wait until next beat time
             wait_time = next_beat_time - current_time
             if wait_time > 0:
+                # Log sleep before sleeping (for debugging)
+                if diagnostics_enabled and beat_count < 10:  # Only log first 10 beats to avoid spam
+                    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} sleeping for {wait_time*1000:.2f}ms (error: {timing_error*1000:+.2f}ms)")
+                
                 # Sleep for the subdivision interval
+                sleep_start = time.perf_counter()
                 time.sleep(wait_time)
+                sleep_actual = time.perf_counter() - sleep_start
+                
+                # Log sleep accuracy
+                if diagnostics_enabled and beat_count < 10:
+                    sleep_error = (sleep_actual - wait_time) * 1000
+                    print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
+            elif diagnostics_enabled and beat_count < 10:
+                print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} LATE by {-wait_time*1000:.2f}ms! Skipping sleep.")
             
             # Check if we should still be running
             if not self.running:
                 break
+            
+            # Record actual play time
+            play_time = time.perf_counter() - start_time
             
             # Play sound if not muted
             if not layer.get("mute", False):
@@ -1117,14 +1185,22 @@ class SimpleMetronomeEngine:
                 
                 # Get audio data
                 try:
+                    audio_start = time.perf_counter()
                     audio_data = self._get_audio_data(layer, is_accent=is_accent)
+                    audio_get_time = (time.perf_counter() - audio_start) * 1000
                     
                     # Apply volume with accent if it's first beat and master volume
                     base_volume = float(layer.get("vol", 1.0))
                     accent_multiplier = float(layer.get("accent_vol", 1.6)) if is_accent else 1.0
                     volume = base_volume * accent_multiplier * master_volume
                     
+                    play_start = time.perf_counter()
                     self._play_sound(audio_data, volume, channel)
+                    play_duration = (time.perf_counter() - play_start) * 1000
+                    
+                    # Log audio processing time
+                    if diagnostics_enabled and beat_count < 10:
+                        print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
                     
                     # Trigger visual callback
                     if self.on_beat_callback:
@@ -1140,6 +1216,24 @@ class SimpleMetronomeEngine:
             # Update for next beat
             beat_count += 1
             next_beat_time += interval
+            
+            # Log periodic timing statistics
+            if diagnostics_enabled and beat_count > 0 and beat_count % 50 == 0:
+                if timing_errors:
+                    avg_error = sum(timing_errors) / len(timing_errors) * 1000
+                    min_error = min(timing_errors) * 1000
+                    max_error = max(timing_errors) * 1000
+                    print(f"[timing] Layer {channel}/{layer_id}: Stats after {beat_count} beats - avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+        
+        # Log layer stop with final statistics
+        if diagnostics_enabled:
+            if timing_errors:
+                avg_error = sum(timing_errors) / len(timing_errors) * 1000
+                min_error = min(timing_errors) * 1000
+                max_error = max(timing_errors) * 1000
+                print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats - Final stats: avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+            else:
+                print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats")
 
 # ---------------- UI Components ---------------- #
 
@@ -1747,20 +1841,20 @@ class MetronomeWidget(BoxLayout):
     
     def _build_controls(self):
         """Build play/stop and file operation controls"""
-        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='140dp', spacing='5dp')
+        controls = BoxLayout(orientation='vertical', size_hint_y=None, height='180dp', spacing='5dp')
         
         # Play/Stop button - taller
         self.play_button = Button(
             text="PLAY",
             font_size='24sp',
-            size_hint_y=0.5,
+            size_hint_y=0.4,
             background_color=(0.2, 0.8, 0.2, 1)
         )
         self.play_button.bind(on_press=self.on_play_stop)
         controls.add_widget(self.play_button)
         
-        # File operations and logs: [NEW][LOAD][SAVE] space [LOGS]
-        file_box = BoxLayout(size_hint_y=0.5, spacing='5dp')
+        # File operations: [NEW][LOAD][SAVE]
+        file_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
         
         new_btn = Button(text="NEW", font_size='14sp')
         new_btn.bind(on_press=self.on_new)
@@ -1774,18 +1868,30 @@ class MetronomeWidget(BoxLayout):
         save_btn.bind(on_press=self.on_save)
         file_box.add_widget(save_btn)
         
-        # Spacer
-        file_box.add_widget(Label(text='', size_hint_x=0.3))
+        controls.add_widget(file_box)
+        
+        # Diagnostics and logs: [TIMING DEBUG] [LOGS]
+        diag_box = BoxLayout(size_hint_y=0.3, spacing='5dp')
+        
+        # Timing diagnostics toggle button
+        self.timing_diag_btn = ToggleButton(
+            text="TIMING DEBUG: OFF",
+            font_size='12sp',
+            background_color=(0.5, 0.5, 0.5, 1),
+            state='down' if self.state.timing_diagnostics else 'normal'
+        )
+        self.timing_diag_btn.bind(on_press=self.on_toggle_timing_diagnostics)
+        diag_box.add_widget(self.timing_diag_btn)
         
         logs_btn = Button(
-            text="LOGS",
-            font_size='14sp',
+            text="VIEW LOGS",
+            font_size='12sp',
             background_color=(0.3, 0.3, 0.8, 1)
         )
         logs_btn.bind(on_press=self.on_view_logs)
-        file_box.add_widget(logs_btn)
+        diag_box.add_widget(logs_btn)
         
-        controls.add_widget(file_box)
+        controls.add_widget(diag_box)
         
         return controls
     
@@ -1806,6 +1912,33 @@ class MetronomeWidget(BoxLayout):
         self.state.master_volume = value
         self.volume_value_label.text = f"{value:.1f}x"
         self._autosave()
+    
+    def on_toggle_timing_diagnostics(self, instance):
+        """Handle timing diagnostics toggle button press"""
+        self.state.timing_diagnostics = instance.state == 'down'
+        
+        if self.state.timing_diagnostics:
+            instance.text = "TIMING DEBUG: ON"
+            instance.background_color = (0.8, 0.5, 0.2, 1)  # Orange when enabled
+            print("[timing] Timing diagnostics ENABLED - verbose logging active")
+            print("[timing] Diagnostics will show:")
+            print("[timing]   - Beat timing errors (expected vs actual)")
+            print("[timing]   - Sleep accuracy (requested vs actual sleep time)")
+            print("[timing]   - Audio processing times (get_audio_data and play_sound)")
+            print("[timing]   - Periodic statistics every 50 beats")
+            print("[timing]   - Final statistics when metronome stops")
+        else:
+            instance.text = "TIMING DEBUG: OFF"
+            instance.background_color = (0.5, 0.5, 0.5, 1)  # Gray when disabled
+            print("[timing] Timing diagnostics DISABLED")
+        
+        self._autosave()
+        
+        # If metronome is running, restart to apply diagnostics setting
+        if self.engine.running:
+            print("[timing] Restarting metronome to apply timing diagnostics setting...")
+            self.engine.stop()
+            self.engine.start()
     
     def on_play_stop(self, instance):
         """Handle play/stop button press"""
