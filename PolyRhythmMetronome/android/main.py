@@ -1183,7 +1183,11 @@ class SimpleMetronomeEngine:
                 # Log sleep accuracy
                 if diagnostics_enabled and beat_count < 10:
                     sleep_error = (sleep_actual - wait_time) * 1000
-                    print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
+                    # Warn if sleep error is abnormally large (>50ms suggests system issues)
+                    if sleep_error > 50:
+                        print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms ⚠️ HIGH")
+                    else:
+                        print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
             elif diagnostics_enabled and beat_count < 10:
                 print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} LATE by {-wait_time*1000:.2f}ms! Skipping sleep.")
             

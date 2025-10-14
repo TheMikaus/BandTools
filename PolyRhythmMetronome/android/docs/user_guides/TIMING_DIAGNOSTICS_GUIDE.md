@@ -71,11 +71,18 @@ The system measures how early or late each beat arrives at its scheduled time:
 
 **Note**: Arriving consistently early is actually good - it means the system has time to sleep and wake up precisely at the target time. Arriving late means the system is falling behind schedule.
 
+**Expected behavior**: The "arrived early/late" time will typically be similar in magnitude to the "sleeping for" time (but opposite in meaning). For example, if you "arrived 5ms early", the system will "sleep for 5ms" to hit the exact target time. This is normal and expected.
+
 ### Sleep Accuracy
 - Shows how accurately the system can sleep for requested duration
 - Android systems typically have ~1-5ms sleep resolution
 - Positive error means sleep took longer than requested
 - Consistent positive errors can accumulate over time
+- **⚠️ HIGH warning**: Appears when sleep error exceeds 50ms, indicating:
+  - System overload or background process interference
+  - Power management throttling the CPU
+  - Thread scheduling issues
+  - May result in audible timing problems
 
 ### Audio Processing Time
 - **audio_get**: Time to retrieve audio data (should be <5ms)
