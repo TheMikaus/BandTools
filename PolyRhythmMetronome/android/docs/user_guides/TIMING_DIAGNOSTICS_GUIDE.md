@@ -37,12 +37,13 @@ For each layer, the app logs:
 - **Timing errors**: How early or late the beat is compared to expected time
 - **Sleep accuracy**: Requested sleep time vs actual sleep duration
 - **Audio processing time**: Time to retrieve and play audio data
+- **Sound played**: Name/details of the sound that was played
 
 Example log output:
 ```
 [timing] Layer left/abc123: Beat 5 sleeping for 500.00ms (error: +0.15ms)
 [timing] Layer left/abc123: Sleep accuracy: requested=500.00ms, actual=500.23ms, error=+0.23ms
-[timing] Layer left/abc123: Beat 5 audio_get=2.34ms, play_sound=5.67ms
+[timing] Layer left/abc123: Beat 5 played tone 880Hz, audio_get=2.34ms, play_sound=5.67ms
 ```
 
 ### Periodic Statistics (every 50 beats)

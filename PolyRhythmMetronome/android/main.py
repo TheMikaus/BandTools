@@ -1138,9 +1138,24 @@ class SimpleMetronomeEngine:
         max_drift = 0.0
         layer_id = layer.get("uid", "unknown")
         
-        # Log layer start
+        # Log layer start with sound configuration
         if diagnostics_enabled:
-            print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}")
+            mode = layer.get("mode", "tone")
+            sound_desc = ""
+            if mode == "tone":
+                freq = layer.get("freq", 880.0)
+                accent_freq = layer.get("accent_freq", freq)
+                if accent_freq != freq:
+                    sound_desc = f"tone {freq}Hz (accent: {accent_freq}Hz)"
+                else:
+                    sound_desc = f"tone {freq}Hz"
+            elif mode == "drum":
+                drum_name = layer.get("drum", "snare")
+                sound_desc = f"drum '{drum_name}'"
+            elif mode == "mp3_tick":
+                mp3_name = layer.get("mp3_tick", "none")
+                sound_desc = f"mp3_tick '{mp3_name}'"
+            print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}, sound={sound_desc}")
         
         while self.running:
             current_time = time.perf_counter() - start_time
@@ -1198,9 +1213,29 @@ class SimpleMetronomeEngine:
                     self._play_sound(audio_data, volume, channel)
                     play_duration = (time.perf_counter() - play_start) * 1000
                     
-                    # Log audio processing time
+                    # Log audio processing time with sound name
                     if diagnostics_enabled and beat_count < 10:
-                        print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
+                        # Determine what sound was played
+                        mode = layer.get("mode", "tone")
+                        sound_played = ""
+                        if mode == "tone":
+                            if is_accent and "accent_freq" in layer:
+                                freq = layer.get("accent_freq", 880.0)
+                                sound_played = f"tone {freq}Hz (accent)"
+                            else:
+                                freq = layer.get("freq", 880.0)
+                                sound_played = f"tone {freq}Hz"
+                        elif mode == "drum":
+                            drum_name = layer.get("drum", "snare")
+                            sound_played = f"drum '{drum_name}'"
+                        elif mode == "mp3_tick":
+                            mp3_name = layer.get("mp3_tick", "none")
+                            if is_accent:
+                                sound_played = f"mp3_tick '{mp3_name}' (accent)"
+                            else:
+                                sound_played = f"mp3_tick '{mp3_name}'"
+                        
+                        print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} played {sound_played}, audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
                     
                     # Trigger visual callback
                     if self.on_beat_callback:

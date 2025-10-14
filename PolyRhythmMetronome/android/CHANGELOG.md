@@ -9,8 +9,10 @@ This file tracks changes made to the Android version of PolyRhythmMetronome.
 ### Added
 - **Timing Diagnostics System**: Comprehensive logging to diagnose timing issues
   - New "TIMING DEBUG" toggle button in UI (next to VIEW LOGS)
-  - Logs engine configuration on start (BPM, audio backend, platform info)
+  - Logs engine configuration on start (BPM, audio backend, platform info, sound configuration)
   - Logs per-layer timing for first 10 beats (timing errors, sleep accuracy, audio processing times)
+  - Logs sound name/details for each beat played (tone frequency, drum name, or MP3 tick file)
+  - Shows accent indicators for accent beats (different frequency or MP3 variant)
   - Periodic statistics every 50 beats (average, min, max timing errors and drift)
   - Final statistics when metronome stops
   - Timing diagnostics setting persists in save/load

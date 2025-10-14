@@ -59,7 +59,15 @@ Modified `SimpleMetronomeEngine._run_layer()` to add comprehensive logging:
 
 ```python
 if diagnostics_enabled:
-    print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}")
+    mode = layer.get("mode", "tone")
+    # Build sound description
+    if mode == "tone":
+        sound_desc = f"tone {freq}Hz (accent: {accent_freq}Hz)" if accent else f"tone {freq}Hz"
+    elif mode == "drum":
+        sound_desc = f"drum '{drum_name}'"
+    elif mode == "mp3_tick":
+        sound_desc = f"mp3_tick '{mp3_name}'"
+    print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}, sound={sound_desc}")
 ```
 
 #### 2. Per-Beat Timing (First 10 Beats)
@@ -74,8 +82,15 @@ if diagnostics_enabled and beat_count < 10:
     sleep_error = (sleep_actual - wait_time) * 1000
     print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
     
-    # Audio processing times
-    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
+    # Audio processing times with sound name
+    mode = layer.get("mode", "tone")
+    if mode == "tone":
+        sound_played = f"tone {freq}Hz (accent)" if is_accent else f"tone {freq}Hz"
+    elif mode == "drum":
+        sound_played = f"drum '{drum_name}'"
+    elif mode == "mp3_tick":
+        sound_played = f"mp3_tick '{mp3_name}' (accent)" if is_accent else f"mp3_tick '{mp3_name}'"
+    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} played {sound_played}, audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
 ```
 
 **Why first 10 beats only?**

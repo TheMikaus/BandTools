@@ -332,15 +332,15 @@ Example: 120 BPM, subdiv 4, 2 layers, 60 seconds:
 [engine]   Timing diagnostics: ENABLED
 [engine]   Platform: android
 
-[timing] Layer left/abc123: Started with subdiv=4, interval=500.00ms, BPM=120
+[timing] Layer left/abc123: Started with subdiv=4, interval=500.00ms, BPM=120, sound=tone 880Hz
 
 [timing] Layer left/abc123: Beat 0 sleeping for 0.00ms (error: +0.00ms)
 [timing] Layer left/abc123: Sleep accuracy: requested=0.00ms, actual=0.05ms, error=+0.05ms
-[timing] Layer left/abc123: Beat 0 audio_get=2.34ms, play_sound=5.67ms
+[timing] Layer left/abc123: Beat 0 played tone 880Hz, audio_get=2.34ms, play_sound=5.67ms
 
 [timing] Layer left/abc123: Beat 1 sleeping for 500.00ms (error: +0.15ms)
 [timing] Layer left/abc123: Sleep accuracy: requested=500.00ms, actual=500.23ms, error=+0.23ms
-[timing] Layer left/abc123: Beat 1 audio_get=0.12ms, play_sound=3.45ms
+[timing] Layer left/abc123: Beat 1 played tone 880Hz, audio_get=0.12ms, play_sound=3.45ms
 
 ... (beats 2-9) ...
 
