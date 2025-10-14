@@ -41,19 +41,19 @@ For each layer, the app logs:
 
 Example log output:
 ```
-[timing] Layer left/abc123: Beat 5 sleeping for 500.00ms (error: +0.15ms)
-[timing] Layer left/abc123: Sleep accuracy: requested=500.00ms, actual=500.23ms, error=+0.23ms
+[timing] Layer left/abc123: Beat 5 arrived 0.15ms early, sleeping for 500.15ms
+[timing] Layer left/abc123: Sleep accuracy: requested=500.15ms, actual=500.38ms, error=+0.23ms
 [timing] Layer left/abc123: Beat 5 played tone 880Hz, audio_get=2.34ms, play_sound=5.67ms
 ```
 
 ### Periodic Statistics (every 50 beats)
-- Average timing error
+- Average timing drift (shown as "early" or "late")
 - Minimum and maximum timing errors
 - Maximum drift from expected timing
 
 Example:
 ```
-[timing] Layer left/abc123: Stats after 50 beats - avg_error=+0.45ms, min=-0.12ms, max=+1.23ms, max_drift=+1.23ms
+[timing] Layer left/abc123: Stats after 50 beats - avg_drift=0.45ms early, min=-0.12ms, max=+1.23ms, max_drift=+1.23ms
 ```
 
 ### Final Statistics (when stopped)
@@ -61,12 +61,15 @@ Complete timing summary for the entire session.
 
 ## Interpreting the Logs
 
-### Timing Error
-- **Positive values** (+0.5ms): Beat was played slightly late
-- **Negative values** (-0.5ms): Beat was played slightly early
-- **Acceptable range**: ±5ms is generally imperceptible
-- **Warning range**: ±10ms may be noticeable
-- **Problem range**: >±20ms indicates timing issues
+### Timing Drift
+The system measures how early or late each beat arrives at its scheduled time:
+- **"early"**: The beat processing started before the target time (gives time to sleep before playing)
+- **"late"**: The beat processing started after the target time (playing will be delayed)
+- **Acceptable range**: Within 5ms early/late is generally imperceptible
+- **Warning range**: 10ms early/late may be noticeable
+- **Problem range**: >20ms early/late indicates timing issues
+
+**Note**: Arriving consistently early is actually good - it means the system has time to sleep and wake up precisely at the target time. Arriving late means the system is falling behind schedule.
 
 ### Sleep Accuracy
 - Shows how accurately the system can sleep for requested duration

@@ -66,6 +66,7 @@ if diagnostics_enabled:
     elif mode == "drum":
         sound_desc = f"drum '{drum_name}'"
     elif mode == "mp3_tick":
+        mp3_name = layer.get("mp3_tick", "") or "none"  # Handle empty strings
         sound_desc = f"mp3_tick '{mp3_name}'"
     print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}, sound={sound_desc}")
 ```
@@ -74,8 +75,9 @@ if diagnostics_enabled:
 
 ```python
 if diagnostics_enabled and beat_count < 10:
-    # Before sleep
-    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} sleeping for {wait_time*1000:.2f}ms (error: {timing_error*1000:+.2f}ms)")
+    # Before sleep - show if arrived early or late
+    drift_desc = "late" if timing_error > 0 else "early"
+    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} arrived {abs(timing_error*1000):.2f}ms {drift_desc}, sleeping for {wait_time*1000:.2f}ms")
     
     # Sleep accuracy
     sleep_actual = time.perf_counter() - sleep_start
@@ -89,6 +91,7 @@ if diagnostics_enabled and beat_count < 10:
     elif mode == "drum":
         sound_played = f"drum '{drum_name}'"
     elif mode == "mp3_tick":
+        mp3_name = layer.get("mp3_tick", "") or "none"  # Handle empty strings
         sound_played = f"mp3_tick '{mp3_name}' (accent)" if is_accent else f"mp3_tick '{mp3_name}'"
     print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} played {sound_played}, audio_get={audio_get_time:.2f}ms, play_sound={play_duration:.2f}ms")
 ```
@@ -106,19 +109,22 @@ if diagnostics_enabled and beat_count > 0 and beat_count % 50 == 0:
         avg_error = sum(timing_errors) / len(timing_errors) * 1000
         min_error = min(timing_errors) * 1000
         max_error = max(timing_errors) * 1000
-        print(f"[timing] Layer {channel}/{layer_id}: Stats after {beat_count} beats - avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+        timing_desc = "late" if avg_error > 0 else "early"
+        print(f"[timing] Layer {channel}/{layer_id}: Stats after {beat_count} beats - avg_drift={abs(avg_error):.2f}ms {timing_desc}, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
 ```
 
 **Tracks**:
 - `timing_errors`: List of timing errors (actual - expected time)
 - `max_drift`: Largest absolute timing error observed
 - Statistics: average, min, max errors
+- **Note**: Negative average (early arrival) is displayed as "early", positive as "late"
 
 #### 4. Layer Stop Logging
 
 ```python
 if diagnostics_enabled:
-    print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats - Final stats: avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+    timing_desc = "late" if avg_error > 0 else "early"
+    print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats - Final stats: avg_drift={abs(avg_error):.2f}ms {timing_desc}, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
 ```
 
 ### Engine Start/Stop Logging
@@ -162,9 +168,11 @@ timing_error = current_time - next_beat_time
 ```
 
 **Interpretation**:
-- `timing_error > 0`: Beat is late (current time past expected time)
-- `timing_error < 0`: Beat is early (current time before expected time)
+- `timing_error > 0`: Beat is late (current time past expected time) - displayed as "late"
+- `timing_error < 0`: Beat is early (current time before expected time) - displayed as "early"
 - `timing_error == 0`: Perfect timing (practically impossible)
+
+**Note**: Being early is actually desirable - it means the thread has time to sleep and wake up at the precise target time. Being late means the thread is falling behind schedule.
 
 ### Sleep Accuracy Measurement
 
