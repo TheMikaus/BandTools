@@ -1499,6 +1499,9 @@ class LayerWidget(BoxLayout):
             elif current_mp3 not in mp3_choices and mp3_choices:
                 current_mp3 = mp3_choices[0]
             
+            # Update layer to match spinner initial value
+            self.layer["mp3_tick"] = current_mp3
+            
             self.mp3_spinner = Spinner(
                 text=current_mp3,
                 values=mp3_choices,
