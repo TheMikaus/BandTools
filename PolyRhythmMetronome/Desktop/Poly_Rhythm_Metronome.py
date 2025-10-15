@@ -54,6 +54,10 @@ TOL = 1e-4
 TOL_SAMPLES = 2
 TOL_SAVE = 1e-6
 FLASH_MS = 120
+LOG_FILE = "metronome_log.txt"
+
+# Build timestamp - updated at compilation time
+BUILD_TIMESTAMP = datetime.now().strftime("%Y/%m/%d %H:%M")
 
 # ---------------- Helpers: timing ---------------- #
 
@@ -409,7 +413,7 @@ class StreamEngine:
     def _log_exception(self, context_msg: str):
         """Log exception with timestamp and context information."""
         try:
-            with open("metronome_log.txt", "a", encoding="utf-8") as f:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write("\n" + "="*70 + "\n")
                 f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}\n")
                 f.write(f"Context: {context_msg}\n")
@@ -915,13 +919,16 @@ class ScrollList(ttk.Frame):
 class App(ttk.Frame):
     def __init__(self, master):
         super().__init__(master, padding=10)
-        master.title("Stereo Subdivision Metronome — Compact")
+        master.title(f"Stereo Subdivision Metronome — Compact — Build: {BUILD_TIMESTAMP}")
         master.protocol("WM_DELETE_WINDOW", self.on_close)
         try:
             master.minsize(720, 560)
             master.geometry("820x640")
         except Exception:
             pass
+
+        # Clear log file on startup
+        self._clear_log_file()
 
         self.state=RhythmState(); self.flash_queue=deque()
         self.engine=StreamEngine(self.state, ui_after_callable=lambda cb:self.after(0,cb),
@@ -1047,6 +1054,9 @@ class App(ttk.Frame):
         
         # Connect log callback to engine
         self.engine.log_callback = self._append_log
+        
+        # Ensure engine verbose_logging state matches UI
+        self.engine.verbose_logging = self.var_verbose_log.get()
 
     # --- Flash queue ---
     def _enqueue_flash(self, side, uid, flash_color): self.flash_queue.append((side,uid,flash_color))
@@ -1062,9 +1072,10 @@ class App(ttk.Frame):
         enabled = self.var_verbose_log.get()
         self.engine.verbose_logging = enabled
         if enabled:
-            # Show log window
+            # Show log window and load existing log file
             self.log_frame.grid(row=4,column=0,sticky="nsew",pady=(8,0))
             self.rowconfigure(4,weight=0)
+            self._load_log_from_file()  # Load existing log file content
             self._append_log("=== Verbose logging enabled ===")
         else:
             # Hide log window
@@ -1083,6 +1094,29 @@ class App(ttk.Frame):
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
+    
+    def _clear_log_file(self):
+        """Clear/erase the log file on startup."""
+        try:
+            if os.path.exists(LOG_FILE):
+                os.remove(LOG_FILE)
+        except Exception as e:
+            print(f"Failed to clear log file: {e}", file=sys.stderr)
+    
+    def _load_log_from_file(self):
+        """Load the entire log file contents into the log viewer."""
+        try:
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    if content:
+                        self.log_text.configure(state="normal")
+                        self.log_text.delete("1.0", "end")
+                        self.log_text.insert("1.0", content)
+                        self.log_text.see("end")
+                        self.log_text.configure(state="disabled")
+        except Exception as e:
+            print(f"Failed to load log file: {e}", file=sys.stderr)
 
     # --- Autosave ---
     def _autosave(self):
