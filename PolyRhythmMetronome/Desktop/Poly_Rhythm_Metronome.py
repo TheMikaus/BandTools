@@ -57,14 +57,22 @@ FLASH_MS = 120
 
 # ---------------- Helpers: timing ---------------- #
 
-def notes_per_beat_from_input(n: int) -> float:
-    if n in (1, 2, 4, 8, 16, 32, 64): return n/4.0
-    if n > 0: return float(n)
-    raise ValueError("Subdivision must be a positive integer.")
-
 def interval_seconds(bpm: float, subdiv: int) -> float:
+    """Calculate the time interval between clicks for a given BPM and subdivision.
+    
+    Args:
+        bpm: Beats per minute (quarter note = 1 beat)
+        subdiv: Number of clicks per beat (e.g., 4 = 4 clicks per beat)
+    
+    Returns:
+        Time interval in seconds between clicks
+    """
     if bpm <= 0: raise ValueError("BPM must be > 0.")
-    return (60.0/bpm) / notes_per_beat_from_input(subdiv)
+    if subdiv <= 0: raise ValueError("Subdivision must be > 0.")
+    # One beat duration in seconds
+    beat_duration = 60.0 / bpm
+    # Interval between clicks = beat duration / number of clicks per beat
+    return beat_duration / float(subdiv)
 
 def measure_seconds(bpm: float, beats_per_measure: int) -> float:
     if beats_per_measure <= 0: raise ValueError("Beats per measure must be > 0.")
@@ -391,6 +399,8 @@ class StreamEngine:
         self.tones=ToneCache(); self.waves=WaveCache(); self.drums=DrumSynth(); self.mp3_ticks=Mp3TickCache()
         self._lock=threading.RLock()
         self.left_layers=[]; self.right_layers=[]; self.L_intervals=[]; self.R_intervals=[]; self.L_next=[]; self.R_next=[]
+        self.L_note_counters=[]; self.R_note_counters=[]  # Track note count for each layer (for accent logic)
+        self.beats_per_measure=4  # Track beats per measure for accent calculation
         self.measure_samples=0; self.sample_counter=0; self.accent_factor=DEFAULT_ACCENT_FACTOR; self.flash_enabled=False
         self.active=[]; self._sa_start_time=None
     def _log_exception(self, context_msg: str):
@@ -428,16 +438,23 @@ class StreamEngine:
         t_cur = self.sample_counter/float(SAMPLE_RATE) if self.stream is not None else (0.0 if self._sa_start_time is None else time.perf_counter()-self._sa_start_time)
         meas_len=measure_seconds(bpm, beats)
         with self._lock:
-            def recalc(layers):
+            def recalc(layers, old_counters):
                 intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]
                 next_times=[]
-                for iv in intervals:
+                note_counters=[]
+                for idx, iv in enumerate(intervals):
                     if iv<=0: iv=1e9
                     k=math.ceil((t_cur-1e-9)/iv); k=0 if k<0 else k
                     next_times.append(k*iv)
-                return layers, intervals, next_times
-            self.left_layers,self.L_intervals,self.L_next = recalc(new_left)
-            self.right_layers,self.R_intervals,self.R_next = recalc(new_right)
+                    # Preserve existing note counter if layer still exists, otherwise start at 0
+                    if idx < len(old_counters):
+                        note_counters.append(old_counters[idx])
+                    else:
+                        note_counters.append(0)
+                return layers, intervals, next_times, note_counters
+            self.left_layers,self.L_intervals,self.L_next,self.L_note_counters = recalc(new_left, self.L_note_counters)
+            self.right_layers,self.R_intervals,self.R_next,self.R_note_counters = recalc(new_right, self.R_note_counters)
+            self.beats_per_measure = beats
             self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
         # Pre-load any new audio files that were added during playback
         self._preload_audio_files()
@@ -466,9 +483,15 @@ class StreamEngine:
             self.left_layers=[dict(x) for x in self.rhythm.left]; self.right_layers=[dict(x) for x in self.rhythm.right]
         if not self.left_layers and not self.right_layers:
             self._notify_error("No layers added. Add layers to Left or Right and try Play."); return
+        self.beats_per_measure=beats
         self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE))
-        def mk_side(layers): intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]; return intervals,[0.0 for _ in layers]
-        self.L_intervals,self.L_next = mk_side(self.left_layers); self.R_intervals,self.R_next = mk_side(self.right_layers)
+        def mk_side(layers): 
+            intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]
+            next_times=[0.0 for _ in layers]
+            note_counters=[0 for _ in layers]  # Start all layers at note 0
+            return intervals, next_times, note_counters
+        self.L_intervals,self.L_next,self.L_note_counters = mk_side(self.left_layers)
+        self.R_intervals,self.R_next,self.R_note_counters = mk_side(self.right_layers)
         self.sample_counter=0; self.active.clear()
         # Pre-load all audio files to prevent timing issues on first play
         self._preload_audio_files()
@@ -491,23 +514,39 @@ class StreamEngine:
             self.stream=None
         with self._lock: self.active.clear()
     def _amp_and_source(self, lay, accent: bool):
-        amp = BASE_AMP * float(lay["vol"]) * (self.accent_factor if accent else 1.0)
         mode = lay.get("mode","tone")
+        
+        # For mp3_tick mode, accent is volume only (not different sound)
         if mode=="mp3_tick" and lay.get("mp3_tick"):
+            amp = BASE_AMP * float(lay["vol"]) * (self.accent_factor if accent else 1.0)
             try: 
-                data = self.mp3_ticks.get(lay["mp3_tick"], is_accent=accent)
+                # Always get the non-accent version (same sound for both)
+                data = self.mp3_ticks.get(lay["mp3_tick"], is_accent=False)
                 if data is not None:
                     return amp, data
             except Exception: pass
+        
+        # For tone mode, accent uses different frequency (800Hz accent, 400Hz normal)
+        if mode=="tone":
+            amp = BASE_AMP * float(lay["vol"])
+            # Use fixed frequencies: 800Hz for accent, 400Hz for normal
+            freq = 800.0 if accent else 400.0
+            return amp, self.tones.get(freq)
+        
+        # For other modes, use volume for accent
+        amp = BASE_AMP * float(lay["vol"]) * (self.accent_factor if accent else 1.0)
         if mode=="file" and lay.get("wav_path"):
             try: return amp, self.waves.get(lay["wav_path"])
             except Exception: pass
         if mode=="drum": return amp, self.drums.get(lay.get("drum","snare"))
-        return amp, self.tones.get(float(lay.get("freq",880.0)))
+        
+        # Fallback to tone with fixed frequencies
+        freq = 800.0 if accent else 400.0
+        return amp, self.tones.get(freq)
     def _callback(self, outdata, frames, time_info, status):
         try:
             block = np.zeros((frames,2), dtype=np.float32); sr=SAMPLE_RATE; t0=self.sample_counter; t1=t0+frames
-            def schedule_side(layers, intervals, next_times, channel):
+            def schedule_side(layers, intervals, next_times, note_counters, channel):
                 for i, lay in enumerate(layers):
                     if lay.get("mute",False): continue
                     iv=intervals[i]
@@ -515,20 +554,26 @@ class StreamEngine:
                         t_sec=next_times[i]; ev_sample=int(round(t_sec*sr))
                         if ev_sample>=t1: break
                         if ev_sample>=t0:
-                            accent=False
-                            if self.measure_samples>0:
-                                r=ev_sample%self.measure_samples; accent = (r<=TOL_SAMPLES or (self.measure_samples-r)<=TOL_SAMPLES)
+                            # Calculate accent based on layer's note count
+                            # Each layer has a measure cycle of (subdiv * beats_per_measure) notes
+                            subdiv = lay.get("subdiv", 4)
+                            notes_per_measure = subdiv * self.beats_per_measure
+                            # Accent on note 0 (first note of each measure cycle)
+                            accent = (note_counters[i] % notes_per_measure) == 0
                             amp,data=self._amp_and_source(lay, accent)
                             self.active.append({"data":data,"idx":0,"amp":amp,"channel":channel})
                             if self.flash_enabled and self.event_notify is not None:
                                 self.event_notify("L" if channel==0 else "R", lay.get("uid"), lay.get("flash_color", lay.get("color","#9CA3AF")))
+                            # Increment note counter for this layer
+                            note_counters[i] = (note_counters[i] + 1) % notes_per_measure
                         next_times[i]=t_sec+iv
             with self._lock:
                 L_layers,R_layers = self.left_layers, self.right_layers
                 L_intv,R_intv     = self.L_intervals, self.R_intervals
                 L_next,R_next     = self.L_next, self.R_next
-            schedule_side(L_layers, L_intv, L_next, 0)
-            schedule_side(R_layers, R_intv, R_next, 1)
+                L_counters,R_counters = self.L_note_counters, self.R_note_counters
+            schedule_side(L_layers, L_intv, L_next, L_counters, 0)
+            schedule_side(R_layers, R_intv, R_next, R_counters, 1)
             new_active=[]
             for blip in self.active:
                 data, ch, amp, idx = blip["data"], blip["channel"], blip["amp"], blip["idx"]
@@ -558,22 +603,28 @@ class StreamEngine:
                             if i<len(self.left_layers):
                                 lay=self.left_layers[i]
                                 if not lay.get("mute",False):
-                                    ev_sample=int(round(t_ev*sr)); accent=False
-                                    if self.measure_samples>0:
-                                        r=ev_sample%self.measure_samples; accent=(r<=TOL_SAMPLES or (self.measure_samples-r)<=TOL_SAMPLES)
+                                    # Calculate accent based on layer's note count
+                                    subdiv = lay.get("subdiv", 4)
+                                    notes_per_measure = subdiv * self.beats_per_measure
+                                    accent = (self.L_note_counters[i] % notes_per_measure) == 0
                                     amp,data=self._amp_and_source(lay, accent)
                                     left_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
+                                    # Increment note counter
+                                    self.L_note_counters[i] = (self.L_note_counters[i] + 1) % notes_per_measure
                             self.L_next[i]=t_ev+self.L_intervals[i]
                     for i,t_ev in enumerate(self.R_next):
                         if abs(t_ev-next_t)<TOL:
                             if i<len(self.right_layers):
                                 lay=self.right_layers[i]
                                 if not lay.get("mute",False):
-                                    ev_sample=int(round(t_ev*sr)); accent=False
-                                    if self.measure_samples>0:
-                                        r=ev_sample%self.measure_samples; accent=(r<=TOL_SAMPLES or (self.measure_samples-r)<=TOL_SAMPLES)
+                                    # Calculate accent based on layer's note count
+                                    subdiv = lay.get("subdiv", 4)
+                                    notes_per_measure = subdiv * self.beats_per_measure
+                                    accent = (self.R_note_counters[i] % notes_per_measure) == 0
                                     amp,data=self._amp_and_source(lay, accent)
                                     right_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
+                                    # Increment note counter
+                                    self.R_note_counters[i] = (self.R_note_counters[i] + 1) % notes_per_measure
                             self.R_next[i]=t_ev+self.R_intervals[i]
                 target=start+next_t
                 while True:
@@ -610,9 +661,13 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
     with state._lock:
         bpm=float(state.bpm); beats=int(state.beats_per_measure); accent=float(state.accent_factor)
         left_layers=[dict(x) for x in state.left]; right_layers=[dict(x) for x in state.right]
-    meas_len=measure_seconds(bpm, beats); meas_samples=int(round(meas_len*SAMPLE_RATE)) if meas_len>0 else 0
-    def make_side(layers): intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]; return intervals,[0.0 for _ in layers]
-    L_intv,L_next = make_side(left_layers); R_intv,R_next = make_side(right_layers)
+    def make_side(layers): 
+        intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]
+        next_times=[0.0 for _ in layers]
+        note_counters=[0 for _ in layers]
+        return intervals, next_times, note_counters
+    L_intv,L_next,L_counters = make_side(left_layers)
+    R_intv,R_next,R_counters = make_side(right_layers)
     total=int(SAMPLE_RATE*duration_sec); stereo=np.zeros((total,2),dtype=np.float32)
     tone_cache=ToneCache(); wave_cache=WaveCache(); drum=DrumSynth(); mp3_ticks=Mp3TickCache()
     def add_data(start_idx,data,amp,ch):
@@ -620,23 +675,31 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
         end_idx=min(total,start_idx+data.shape[0]); L=end_idx-start_idx
         if L<=0: return
         stereo[start_idx:end_idx, ch]+=amp*data[:L]
-    def amp_src(lay, ev_sample):
-        accent_now=False
-        if meas_samples>0:
-            r=ev_sample%meas_samples; accent_now=(r<=TOL_SAMPLES or (meas_samples-r)<=TOL_SAMPLES)
-        amp=BASE_AMP*float(lay["vol"])*(accent if accent_now else 1.0)
+    def amp_src(lay, accent_now):
         mode=lay.get("mode","tone")
+        # For mp3_tick mode, accent is volume only (not different sound)
         if mode=="mp3_tick" and lay.get("mp3_tick"):
+            amp = BASE_AMP * float(lay["vol"]) * (accent if accent_now else 1.0)
             try: 
-                data = mp3_ticks.get(lay["mp3_tick"], is_accent=accent_now)
+                # Always get the non-accent version (same sound for both)
+                data = mp3_ticks.get(lay["mp3_tick"], is_accent=False)
                 if data is not None:
                     return amp, data
             except Exception: pass
+        # For tone mode, accent uses different frequency (800Hz accent, 400Hz normal)
+        if mode=="tone":
+            amp = BASE_AMP * float(lay["vol"])
+            freq = 800.0 if accent_now else 400.0
+            return amp, tone_cache.get(freq)
+        # For other modes, use volume for accent
+        amp = BASE_AMP * float(lay["vol"]) * (accent if accent_now else 1.0)
         if mode=="file" and lay.get("wav_path"):
             try: return amp, wave_cache.get(lay["wav_path"])
             except Exception: pass
         if mode=="drum": return amp, drum.get(lay.get("drum","snare"))
-        return amp, tone_cache.get(float(lay.get("freq",880.0)))
+        # Fallback to tone with fixed frequencies
+        freq = 800.0 if accent_now else 400.0
+        return amp, tone_cache.get(freq)
     t=0.0
     while True:
         candidates=[]; 
@@ -650,13 +713,25 @@ def render_to_wav(path: str, state: RhythmState, duration_sec: float):
             if abs(tn-t)<TOL_SAVE:
                 lay=left_layers[i]
                 if not lay.get("mute",False):
-                    amp,data=amp_src(lay, ev_sample); add_data(ev_sample,data,amp,0)
+                    # Calculate accent based on layer's note count
+                    subdiv = lay.get("subdiv", 4)
+                    notes_per_measure = subdiv * beats
+                    accent_now = (L_counters[i] % notes_per_measure) == 0
+                    amp,data=amp_src(lay, accent_now)
+                    add_data(ev_sample,data,amp,0)
+                    L_counters[i] = (L_counters[i] + 1) % notes_per_measure
                 L_next[i]+=L_intv[i]
         for i,tn in enumerate(R_next):
             if abs(tn-t)<TOL_SAVE:
                 lay=right_layers[i]
                 if not lay.get("mute",False):
-                    amp,data=amp_src(lay, ev_sample); add_data(ev_sample,data,amp,1)
+                    # Calculate accent based on layer's note count
+                    subdiv = lay.get("subdiv", 4)
+                    notes_per_measure = subdiv * beats
+                    accent_now = (R_counters[i] % notes_per_measure) == 0
+                    amp,data=amp_src(lay, accent_now)
+                    add_data(ev_sample,data,amp,1)
+                    R_counters[i] = (R_counters[i] + 1) % notes_per_measure
                 R_next[i]+=R_intv[i]
     int16=(np.clip(stereo,-1.0,1.0)*32767.0).astype(np.int16)
     with wave.open(path,"wb") as wf:

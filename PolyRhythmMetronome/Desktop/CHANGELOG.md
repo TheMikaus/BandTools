@@ -16,8 +16,28 @@ This file tracks changes made to the PolyRhythmMetronome application.
 ### Changed
 - **Color System**: Layers now use separate colors for inactive and flash (active) states
 - **Audio File Support**: Extended WaveCache to support both WAV and MP3 files using pydub
+- **Tone Frequencies**: Changed tone mode to use fixed frequencies for clarity:
+  - Accent notes now use 800Hz
+  - Normal notes now use 400Hz
+  - This replaces the user-configurable frequency setting for more consistent metronome behavior
+- **MP3 Tick Accent Behavior**: MP3 tick accents now use volume changes instead of different sounds
+  - Always uses the non-accent file version
+  - Accent is indicated by volume increase (controlled by accent factor)
 
 ### Fixed
+- **Subdivision Timing**: Fixed critical issue where subdivisions 4 and 8 did not click on time
+  - Removed incorrect `notes_per_beat_from_input()` function that was dividing by 4
+  - `interval_seconds()` now correctly interprets subdivision as "notes per beat"
+  - Subdivision 4 now produces 4 notes per beat (not 1)
+  - Subdivision 8 now produces 8 notes per beat (not 2)
+  - All subdivision values now match the "notes per beat" behavior documented in README
+- **Accent Note Timing**: Fixed issue where accent always played on the fourth note instead of beat 1
+  - Changed from global measure-based accent to per-layer note counting
+  - Each layer now tracks its own note count independently
+  - Accent now always plays on the first note of each layer's measure cycle
+  - Formula: accent occurs every (subdivision × beats_per_measure) notes
+  - Example: subdivision 4 with 4 beats per measure = accent every 16 notes (notes 0, 16, 32, etc.)
+  - This ensures the accent always lands on the "1" count of each layer, regardless of other layers
 - **Wave/MP3 Timing Issues**: Fixed issue where wave and MP3 files would not play on time throughout playback
   - Added pre-loading of all audio files into cache before playback begins
   - Audio files are now pre-loaded when layers are added/modified during playback
