@@ -1153,14 +1153,14 @@ class SimpleMetronomeEngine:
                 drum_name = layer.get("drum", "snare")
                 sound_desc = f"drum '{drum_name}'"
             elif mode == "mp3_tick":
-                mp3_name = layer.get("mp3_tick", "none")
+                mp3_name = layer.get("mp3_tick", "") or "none"
                 sound_desc = f"mp3_tick '{mp3_name}'"
             print(f"[timing] Layer {channel}/{layer_id}: Started with subdiv={subdiv}, interval={interval*1000:.2f}ms, BPM={bpm}, sound={sound_desc}")
         
         while self.running:
             current_time = time.perf_counter() - start_time
             
-            # Calculate timing error before sleep
+            # Calculate timing drift (how early/late we arrived at this beat)
             timing_error = current_time - next_beat_time
             if diagnostics_enabled and beat_count > 0:
                 timing_errors.append(timing_error)
@@ -1172,7 +1172,8 @@ class SimpleMetronomeEngine:
             if wait_time > 0:
                 # Log sleep before sleeping (for debugging)
                 if diagnostics_enabled and beat_count < 10:  # Only log first 10 beats to avoid spam
-                    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} sleeping for {wait_time*1000:.2f}ms (error: {timing_error*1000:+.2f}ms)")
+                    drift_desc = "late" if timing_error > 0 else "early"
+                    print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} arrived {abs(timing_error*1000):.2f}ms {drift_desc}, sleeping for {wait_time*1000:.2f}ms")
                 
                 # Sleep for the subdivision interval
                 sleep_start = time.perf_counter()
@@ -1182,7 +1183,11 @@ class SimpleMetronomeEngine:
                 # Log sleep accuracy
                 if diagnostics_enabled and beat_count < 10:
                     sleep_error = (sleep_actual - wait_time) * 1000
-                    print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
+                    # Warn if sleep error is abnormally large (>50ms suggests system issues)
+                    if sleep_error > 50:
+                        print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms ⚠️ HIGH")
+                    else:
+                        print(f"[timing] Layer {channel}/{layer_id}: Sleep accuracy: requested={wait_time*1000:.2f}ms, actual={sleep_actual*1000:.2f}ms, error={sleep_error:+.2f}ms")
             elif diagnostics_enabled and beat_count < 10:
                 print(f"[timing] Layer {channel}/{layer_id}: Beat {beat_count} LATE by {-wait_time*1000:.2f}ms! Skipping sleep.")
             
@@ -1229,7 +1234,7 @@ class SimpleMetronomeEngine:
                             drum_name = layer.get("drum", "snare")
                             sound_played = f"drum '{drum_name}'"
                         elif mode == "mp3_tick":
-                            mp3_name = layer.get("mp3_tick", "none")
+                            mp3_name = layer.get("mp3_tick", "") or "none"
                             if is_accent:
                                 sound_played = f"mp3_tick '{mp3_name}' (accent)"
                             else:
@@ -1258,7 +1263,9 @@ class SimpleMetronomeEngine:
                     avg_error = sum(timing_errors) / len(timing_errors) * 1000
                     min_error = min(timing_errors) * 1000
                     max_error = max(timing_errors) * 1000
-                    print(f"[timing] Layer {channel}/{layer_id}: Stats after {beat_count} beats - avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+                    # Clarify the meaning: negative avg_error means we're consistently arriving early (good)
+                    timing_desc = "late" if avg_error > 0 else "early"
+                    print(f"[timing] Layer {channel}/{layer_id}: Stats after {beat_count} beats - avg_drift={abs(avg_error):.2f}ms {timing_desc}, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
         
         # Log layer stop with final statistics
         if diagnostics_enabled:
@@ -1266,7 +1273,9 @@ class SimpleMetronomeEngine:
                 avg_error = sum(timing_errors) / len(timing_errors) * 1000
                 min_error = min(timing_errors) * 1000
                 max_error = max(timing_errors) * 1000
-                print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats - Final stats: avg_error={avg_error:+.2f}ms, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
+                # Clarify the meaning: negative avg_error means we're consistently arriving early (good)
+                timing_desc = "late" if avg_error > 0 else "early"
+                print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats - Final stats: avg_drift={abs(avg_error):.2f}ms {timing_desc}, min={min_error:+.2f}ms, max={max_error:+.2f}ms, max_drift={max_drift*1000:+.2f}ms")
             else:
                 print(f"[timing] Layer {channel}/{layer_id}: STOPPED after {beat_count} beats")
 
@@ -1489,6 +1498,9 @@ class LayerWidget(BoxLayout):
                 current_mp3 = mp3_choices[0]
             elif current_mp3 not in mp3_choices and mp3_choices:
                 current_mp3 = mp3_choices[0]
+            
+            # Update layer to match spinner initial value
+            self.layer["mp3_tick"] = current_mp3
             
             self.mp3_spinner = Spinner(
                 text=current_mp3,
