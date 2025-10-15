@@ -261,6 +261,15 @@ ApplicationWindow {
             MenuSeparator {}
             
             MenuItem {
+                text: "View Logs..."
+                onTriggered: {
+                    logViewer.openLogInSystemViewer()
+                }
+            }
+            
+            MenuSeparator {}
+            
+            MenuItem {
                 text: "About"
                 onTriggered: {
                     aboutDialog.open()
@@ -301,7 +310,8 @@ ApplicationWindow {
                 
                 // Playback controls
                 PlaybackControls {
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: 600
+                    Layout.maximumWidth: 700
                     Layout.preferredHeight: Theme.toolbarHeight
                 }
                 

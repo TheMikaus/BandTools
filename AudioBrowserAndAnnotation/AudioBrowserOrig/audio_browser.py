@@ -7362,6 +7362,12 @@ class AudioBrowser(QMainWindow):
         
         help_menu.addSeparator()
         
+        help_logs_action = QAction("View &Logs", self)
+        help_logs_action.triggered.connect(self._view_logs)
+        help_menu.addAction(help_logs_action)
+        
+        help_menu.addSeparator()
+        
         help_about_action = QAction("&About", self)
         help_about_action.triggered.connect(self._show_about_dialog)
         help_menu.addAction(help_about_action)
@@ -13900,6 +13906,40 @@ class AudioBrowser(QMainWindow):
         layout.addLayout(button_layout)
         
         dialog.exec()
+
+    def _view_logs(self):
+        """Open the log file in the system's default text viewer."""
+        try:
+            import subprocess
+            import sys
+            import os
+            
+            # Get the log file path
+            log_file = Path(__file__).parent / "audiobrowser.log"
+            
+            if not log_file.exists():
+                QMessageBox.information(
+                    self,
+                    "No Log File",
+                    "No log file found. The log file will be created when the application runs."
+                )
+                return
+            
+            # Open the log file in the system's default text viewer
+            log_path = str(log_file.absolute())
+            
+            if sys.platform == "win32":
+                os.startfile(log_path)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", log_path])
+            else:
+                subprocess.run(["xdg-open", log_path])
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error Opening Log",
+                f"Error opening log file: {e}"
+            )
 
     def _show_keyboard_shortcuts_dialog(self):
         """Show keyboard shortcuts dialog with all available shortcuts."""

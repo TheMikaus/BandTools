@@ -103,6 +103,9 @@ class FileManager(QObject):
                 self.errorOccurred.emit(f"Invalid directory: {scan_path}")
                 return
             
+            # Load metadata for this directory (best/partial takes)
+            self._load_takes_for_directory(scan_path)
+            
             # Discover audio files (non-recursive - only immediate directory)
             files = []
             for ext in self._audio_extensions:
@@ -413,15 +416,16 @@ class FileManager(QObject):
                 try:
                     audio_count = count_audio_files(dir_path)
                     
-                    # Add this directory if it has audio files
-                    if audio_count > 0 or dir_path == root_path:  # Always include root
+                    # Add this directory if it has audio files, but SKIP the root folder
+                    # Only subdirectories should be selectable
+                    if audio_count > 0 and dir_path != root_path:
                         directories_info.append({
                             'path': str(dir_path),
-                            'name': dir_path.name if dir_path != root_path else root_path.name,
-                            'parent': str(dir_path.parent) if dir_path != root_path else "",
+                            'name': dir_path.name,
+                            'parent': str(dir_path.parent),
                             'hasAudio': audio_count > 0,
                             'audioCount': audio_count,
-                            'isRoot': dir_path == root_path
+                            'isRoot': False
                         })
                     
                     # Scan subdirectories (skip hidden ones and docs folders)
