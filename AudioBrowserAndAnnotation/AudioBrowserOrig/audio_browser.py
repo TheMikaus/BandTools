@@ -7362,6 +7362,12 @@ class AudioBrowser(QMainWindow):
         
         help_menu.addSeparator()
         
+        help_logs_action = QAction("View &Logs", self)
+        help_logs_action.triggered.connect(self._view_logs)
+        help_menu.addAction(help_logs_action)
+        
+        help_menu.addSeparator()
+        
         help_about_action = QAction("&About", self)
         help_about_action.triggered.connect(self._show_about_dialog)
         help_menu.addAction(help_about_action)
@@ -10104,9 +10110,21 @@ class AudioBrowser(QMainWindow):
 
     # ----- Annotation table config (dynamic) -----
     def _on_library_cell_clicked(self, row: int, column: int):
-        # Play the clicked filename from the Library tab without switching tabs.
+        # Handle clicks on different columns:
+        # - File column (0): Play the file
+        # - Best Take column (2): Toggle best take status
+        # - Partial Take column (3): Toggle partial take status
         try:
-            # Only the File column (0)
+            # Handle Best Take and Partial Take column clicks
+            # Columns: 0=File, 1=Reviewed, 2=Best Take, 3=Partial Take, 4=BPM, 5=Provided Name
+            if column == 2:  # Best Take column
+                self._on_best_take_widget_clicked(row)
+                return
+            elif column == 3:  # Partial Take column
+                self._on_partial_take_widget_clicked(row)
+                return
+            
+            # Only the File column (0) - play the file
             if column != 0:
                 return
             item = self.table.item(row, 0)
@@ -10133,14 +10151,15 @@ class AudioBrowser(QMainWindow):
 
     def _on_library_cell_double_clicked(self, row: int, column: int):
         """Handle double-clicks on the library table cells."""
-        # Handle double-clicks on the Best Take column (column 1) or Partial Take column (column 2)
-        if column not in [1, 2]:
+        # Handle double-clicks on the Best Take column (column 2) or Partial Take column (column 3)
+        # Columns: 0=File, 1=Reviewed, 2=Best Take, 3=Partial Take, 4=BPM, 5=Provided Name
+        if column not in [2, 3]:
             return
         
         # Delegate to the appropriate widget clicked handler
-        if column == 1:  # Best Take column
+        if column == 2:  # Best Take column
             self._on_best_take_widget_clicked(row)
-        elif column == 2:  # Partial Take column
+        elif column == 3:  # Partial Take column
             self._on_partial_take_widget_clicked(row)
 
     def _configure_annotation_table(self):
@@ -11138,45 +11157,11 @@ class AudioBrowser(QMainWindow):
         fname = old_path.name
         is_checked = state == Qt.CheckState.Checked.value
         
-        # Update the metadata
+        # Update the metadata (DO NOT rename the file - just update display)
         self.file_best_takes[fname] = is_checked
         
-        # Calculate new filename with/without "_best_take" suffix
-        stem = old_path.stem
-        suffix = old_path.suffix
-        
-        # Remove existing "_best_take" suffix if present
-        if stem.endswith("_best_take"):
-            stem = stem[:-len("_best_take")]
-        
-        # Add "_best_take" suffix if checked
-        if is_checked:
-            stem = f"{stem}_best_take"
-        
-        new_path = old_path.with_name(f"{stem}{suffix}")
-        
-        # Perform the rename if the name changed
-        if old_path != new_path:
-            success = self._rename_single_file(old_path, new_path)
-            if not success:
-                # Revert the checkbox state if rename failed
-                self.best_take_cb.blockSignals(True)
-                self.best_take_cb.setChecked(not is_checked)
-                self.best_take_cb.blockSignals(False)
-                self.file_best_takes[fname] = not is_checked
-                QMessageBox.warning(self, "Rename Failed", 
-                                  f"Could not rename file to add/remove '_best_take' suffix.\n"
-                                  f"The file may be in use or the target name already exists.")
-                return
-            
-            # Refresh the file system model
-            self.fs_model.setRootPath("")
-            self.fs_model.setRootPath(str(self.root_path))
-            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
-            QTimer.singleShot(100, self._restore_folder_selection)
-        else:
-            # Even if no rename, save the metadata
-            self._save_notes()
+        # Save the metadata
+        self._save_notes()
         
         self._refresh_right_table()  # Update the library table to show the green highlighting
         
@@ -11195,45 +11180,11 @@ class AudioBrowser(QMainWindow):
         fname = old_path.name
         is_checked = state == Qt.CheckState.Checked.value
         
-        # Update the metadata
+        # Update the metadata (DO NOT rename the file - just update display)
         self.file_partial_takes[fname] = is_checked
         
-        # Calculate new filename with/without "_partial_take" suffix
-        stem = old_path.stem
-        suffix = old_path.suffix
-        
-        # Remove existing "_partial_take" suffix if present
-        if stem.endswith("_partial_take"):
-            stem = stem[:-len("_partial_take")]
-        
-        # Add "_partial_take" suffix if checked
-        if is_checked:
-            stem = f"{stem}_partial_take"
-        
-        new_path = old_path.with_name(f"{stem}{suffix}")
-        
-        # Perform the rename if the name changed
-        if old_path != new_path:
-            success = self._rename_single_file(old_path, new_path)
-            if not success:
-                # Revert the checkbox state if rename failed
-                self.partial_take_cb.blockSignals(True)
-                self.partial_take_cb.setChecked(not is_checked)
-                self.partial_take_cb.blockSignals(False)
-                self.file_partial_takes[fname] = not is_checked
-                QMessageBox.warning(self, "Rename Failed", 
-                                  f"Could not rename file to add/remove '_partial_take' suffix.\n"
-                                  f"The file may be in use or the target name already exists.")
-                return
-            
-            # Refresh the file system model
-            self.fs_model.setRootPath("")
-            self.fs_model.setRootPath(str(self.root_path))
-            self.tree.setRootIndex(self.file_proxy.mapFromSource(self.fs_model.index(str(self.root_path))))
-            QTimer.singleShot(100, self._restore_folder_selection)
-        else:
-            # Even if no rename, save the metadata
-            self._save_notes()
+        # Save the metadata
+        self._save_notes()
         
         self._refresh_right_table()  # Update the library table to show the highlighting
         
@@ -13900,6 +13851,40 @@ class AudioBrowser(QMainWindow):
         layout.addLayout(button_layout)
         
         dialog.exec()
+
+    def _view_logs(self):
+        """Open the log file in the system's default text viewer."""
+        try:
+            import subprocess
+            import sys
+            import os
+            
+            # Get the log file path
+            log_file = Path(__file__).parent / "audiobrowser.log"
+            
+            if not log_file.exists():
+                QMessageBox.information(
+                    self,
+                    "No Log File",
+                    "No log file found. The log file will be created when the application runs."
+                )
+                return
+            
+            # Open the log file in the system's default text viewer
+            log_path = str(log_file.absolute())
+            
+            if sys.platform == "win32":
+                os.startfile(log_path)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", log_path])
+            else:
+                subprocess.run(["xdg-open", log_path])
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error Opening Log",
+                f"Error opening log file: {e}"
+            )
 
     def _show_keyboard_shortcuts_dialog(self):
         """Show keyboard shortcuts dialog with all available shortcuts."""

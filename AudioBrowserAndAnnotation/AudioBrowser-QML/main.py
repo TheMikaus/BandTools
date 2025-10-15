@@ -95,6 +95,7 @@ from backend.export_manager import ExportManager
 from backend.documentation_manager import DocumentationManager
 from backend.undo_manager import UndoManager
 from backend.sync_manager import SyncManager
+from backend.log_viewer import LogViewer
 
 
 class ApplicationViewModel(QObject):
@@ -228,6 +229,7 @@ def main():
         sys.exit(2)
     config_dir = Path.home() / ".audiobrowser"
     sync_manager = safe_create("SyncManager", lambda: SyncManager(config_dir))
+    log_viewer = safe_create("LogViewer", LogViewer)
     file_list_model = safe_create("FileListModel", lambda: FileListModel(file_manager=file_manager, tempo_manager=tempo_manager))
     annotations_model = safe_create("AnnotationsModel", AnnotationsModel)
     view_model = safe_create("ApplicationViewModel", ApplicationViewModel)
@@ -324,6 +326,7 @@ def main():
     ctx.setContextProperty("documentationManager", documentation_manager)
     ctx.setContextProperty("undoManager", undo_manager)
     ctx.setContextProperty("syncManager", sync_manager)
+    ctx.setContextProperty("logViewer", log_viewer)
 
     # Load saved root directory on startup
     saved_root = settings_manager.getRootDir()
