@@ -259,6 +259,67 @@ class DrumSynth:
 def float_to_int16(stereo: np.ndarray) -> np.ndarray:
     stereo = np.clip(stereo, -1.0, 1.0); return (stereo * 32767.0).astype(np.int16)
 
+def tanh_soft_clip(x: np.ndarray) -> np.ndarray:
+    """Soft clip audio using tanh to prevent harsh digital clipping"""
+    a = 2.0
+    return np.tanh(a * x) / np.tanh(a)
+
+# ---------------- Lock-free Ring Buffer ---------------- #
+
+class FloatRingBuffer:
+    """Lock-free-ish single-producer single-consumer ring buffer for float mono frames"""
+    def __init__(self, capacity_frames: int):
+        self.buf = np.zeros(capacity_frames, dtype=np.float32)
+        self.capacity = capacity_frames
+        # Use separate read/write indices (volatile in nature due to GIL)
+        self._read_idx = 0
+        self._write_idx = 0
+    
+    def push(self, src: np.ndarray) -> int:
+        """Push frames into buffer, returns number of frames actually written"""
+        frames = len(src)
+        space = self.free_space()
+        n = min(frames, space)
+        if n <= 0:
+            return 0
+        
+        w = self._write_idx
+        # Handle wrap-around
+        first_chunk = min(n, self.capacity - w)
+        self.buf[w:w + first_chunk] = src[:first_chunk]
+        if n > first_chunk:
+            self.buf[0:n - first_chunk] = src[first_chunk:n]
+        
+        self._write_idx = (w + n) % self.capacity
+        return n
+    
+    def pop(self, dst: np.ndarray, frames: int) -> int:
+        """Pop frames from buffer into dst, returns number of frames actually read"""
+        avail = self.available()
+        n = min(frames, avail)
+        
+        r = self._read_idx
+        # Handle wrap-around
+        first_chunk = min(n, self.capacity - r)
+        dst[:first_chunk] = self.buf[r:r + first_chunk]
+        if n > first_chunk:
+            dst[first_chunk:n] = self.buf[0:n - first_chunk]
+        
+        # Pad with zeros if we don't have enough data
+        if n < frames:
+            dst[n:frames] = 0.0
+        
+        self._read_idx = (r + n) % self.capacity
+        return n
+    
+    def available(self) -> int:
+        """Number of frames available to read"""
+        return (self._write_idx - self._read_idx + self.capacity) % self.capacity
+    
+    def free_space(self) -> int:
+        """Number of frames available to write"""
+        return self.capacity - 1 - self.available()
+
 # ---------------- Data model ---------------- #
 
 def new_uid(): return uuid.uuid4().hex
@@ -475,6 +536,9 @@ class StreamEngine:
                 if remain<=0: continue
                 n=min(remain, frames); block[:n, ch]+=amp*data[idx:idx+n]; blip["idx"]+=n
                 if blip["idx"]<data.shape[0]: new_active.append(blip)
+            # Apply soft clipping to prevent harsh digital clipping from mixing
+            block[:, 0] = tanh_soft_clip(block[:, 0])
+            block[:, 1] = tanh_soft_clip(block[:, 1])
             self.active=new_active; outdata[:]=block; self.sample_counter+=frames
         except Exception:
             self._log_exception("Exception in sounddevice callback")
@@ -526,7 +590,10 @@ class StreamEngine:
                 for amp,data,uid,flash_color in right_events:
                     L=min(max_len, data.shape[0]); frame[:L,1]+=amp*data[:L]
                     if self.flash_enabled and self.event_notify is not None: self.event_notify("R", uid, flash_color)
-                int16=(np.clip(frame,-1.0,1.0)*32767.0).astype(np.int16)
+                # Apply soft clipping to prevent harsh digital clipping from mixing
+                frame[:, 0] = tanh_soft_clip(frame[:, 0])
+                frame[:, 1] = tanh_soft_clip(frame[:, 1])
+                int16=(frame*32767.0).astype(np.int16)
                 try: h=sa.play_buffer(int16,2,2,sr)
                 except TypeError: h=sa.play_buffer(int16.tobytes(),2,2,sr)
                 handles.append(h); time.sleep(0.0005)

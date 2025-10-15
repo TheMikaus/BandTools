@@ -15,6 +15,46 @@ The following requirements were implemented:
 7. ✅ MP3 ticks can specify two sounds (for accent vs regular beats)
 8. ✅ Tick and flash operations are on separate threads for timing accuracy
 
+## Safe Audio Threading Pattern (NEW)
+
+**Problem**: Original implementation had multiple threads calling audio write APIs concurrently, causing clicks, pops, and underruns.
+
+**Solution**: Producer-consumer pattern with lock-free ring buffers.
+
+### Key Components
+
+1. **FloatRingBuffer**: Lock-free circular buffer for audio samples
+   - One ring buffer per audio layer/source
+   - Producer threads push, render thread pulls
+   - Handles wrap-around and zero-padding
+
+2. **Producer Threads**: One thread per layer
+   - Generate audio blocks (tone/drum/mp3)
+   - Apply volume, accent, master volume
+   - Push to layer's ring buffer
+   - No audio device access
+
+3. **Single Render Thread**: Owns the audio device
+   - Pulls from all ring buffers
+   - Mixes to left/right channels
+   - Applies soft-clipping (tanh) to prevent harsh clipping
+   - Writes to audio device (only thread that does this)
+
+4. **Soft-Clipping**: Prevents digital clipping when mixing
+   - Uses tanh function for gentle limiting
+   - More musical than hard clipping
+   - Allows multiple layers to sum without distortion
+
+### Benefits
+
+- ✅ No concurrent writes to audio device
+- ✅ No locks in audio path
+- ✅ Stable, glitch-free playback
+- ✅ Proper mixing with soft-clipping
+- ✅ Works across all platforms (Desktop/Android)
+
+See `SAFE_THREADING_PATTERN.md` for detailed documentation.
+
 ## Implementation Details
 
 ### 1. Color Randomization (Desktop & Android)
@@ -129,7 +169,7 @@ pyinstaller Poly_Rhythm_Metronome.spec
 
 ## Technical Architecture
 
-### Threading Model
+### Threading Model (Updated - Safe Pattern)
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -141,13 +181,27 @@ pyinstaller Poly_Rhythm_Metronome.spec
                 │
                 ▼
 ┌─────────────────────────────────────────────────────┐
-│              Audio Thread (separate)                  │
-│  - sounddevice callback OR simpleaudio loop         │
-│  - Sample generation and mixing                     │
-│  - Beat scheduling                                  │
-│  - Flash event queueing                             │
+│           Producer Threads (one per layer)            │
+│  - Calculate next beat time                          │
+│  - Generate audio (tone/drum/mp3)                   │
+│  - Apply volume/accent                               │
+│  - Push to per-source ring buffer                   │
+│  - Trigger flash events                              │
+└───────────────┬─────────────────────────────────────┘
+                │ Lock-free Ring Buffers (one per layer)
+                ▼
+┌─────────────────────────────────────────────────────┐
+│         Single Render Thread (owns audio device)      │
+│  - Pull from all ring buffers                        │
+│  - Mix left/right channels                           │
+│  - Apply soft-clipping (prevent harsh clipping)      │
+│  - Write to audio device (single-threaded)           │
+│  - sounddevice callback OR simpleaudio loop          │
+│    OR Android AudioTrack (MODE_STREAM)               │
 └─────────────────────────────────────────────────────┘
 ```
+
+**Key Improvement**: Only one thread writes to audio device, preventing concurrent write issues, clicks, and underruns.
 
 ### Audio Flow with MP3 Ticks
 

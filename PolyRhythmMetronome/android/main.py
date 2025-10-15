@@ -120,6 +120,10 @@ DEFAULT_ACCENT_FACTOR = 1.6
 FLASH_DURATION = 0.12  # seconds
 AUTOSAVE_FILE = "metronome_autosave.json"
 
+# Audio buffer configuration
+AUDIO_BLOCK_SIZE = 1024  # frames per block for ring buffer
+RING_BUFFER_BLOCKS = 8  # how many blocks to buffer
+
 # BPM presets for quick access
 BPM_PRESETS = [60, 80, 100, 120, 140, 160, 180, 200]
 
@@ -131,6 +135,69 @@ DRUM_CHOICES = ["kick", "snare", "hihat", "crash", "tom", "ride"]
 
 # Sound mode options
 SOUND_MODES = ["tone", "drum", "mp3_tick"]
+
+# ---------------- Audio Utilities ---------------- #
+
+def tanh_soft_clip(x):
+    """Soft clip audio using tanh to prevent harsh digital clipping"""
+    a = 2.0
+    return np.tanh(a * x) / np.tanh(a)
+
+
+class FloatRingBuffer:
+    """Lock-free-ish single-producer single-consumer ring buffer for float mono frames"""
+    def __init__(self, capacity_frames):
+        self.buf = np.zeros(capacity_frames, dtype=np.float32)
+        self.capacity = capacity_frames
+        # Use separate read/write indices (volatile in nature due to GIL)
+        self._read_idx = 0
+        self._write_idx = 0
+    
+    def push(self, src):
+        """Push frames into buffer, returns number of frames actually written"""
+        frames = len(src)
+        space = self.free_space()
+        n = min(frames, space)
+        if n <= 0:
+            return 0
+        
+        w = self._write_idx
+        # Handle wrap-around
+        first_chunk = min(n, self.capacity - w)
+        self.buf[w:w + first_chunk] = src[:first_chunk]
+        if n > first_chunk:
+            self.buf[0:n - first_chunk] = src[first_chunk:n]
+        
+        self._write_idx = (w + n) % self.capacity
+        return n
+    
+    def pop(self, dst, frames):
+        """Pop frames from buffer into dst, returns number of frames actually read"""
+        avail = self.available()
+        n = min(frames, avail)
+        
+        r = self._read_idx
+        # Handle wrap-around
+        first_chunk = min(n, self.capacity - r)
+        dst[:first_chunk] = self.buf[r:r + first_chunk]
+        if n > first_chunk:
+            dst[first_chunk:n] = self.buf[0:n - first_chunk]
+        
+        # Pad with zeros if we don't have enough data
+        if n < frames:
+            dst[n:frames] = 0.0
+        
+        self._read_idx = (r + n) % self.capacity
+        return n
+    
+    def available(self):
+        """Number of frames available to read"""
+        return (self._write_idx - self._read_idx + self.capacity) % self.capacity
+    
+    def free_space(self):
+        """Number of frames available to write"""
+        return self.capacity - 1 - self.available()
+
 
 # ---------------- Audio Generation ---------------- #
 
@@ -783,12 +850,39 @@ class RhythmState:
 
 # ---------------- Metronome Engine ---------------- #
 
+class Source:
+    """One source/layer feeding the mixer with its own ring buffer"""
+    def __init__(self, layer, channel, bpm, beats_per_measure, audio_getter):
+        self.layer = layer
+        self.channel = channel  # 'left' or 'right'
+        self.bpm = bpm
+        self.beats_per_measure = beats_per_measure
+        self.audio_getter = audio_getter  # function to get audio data
+        
+        # Ring buffer for this source (8 blocks of headroom)
+        self.ring = FloatRingBuffer(AUDIO_BLOCK_SIZE * RING_BUFFER_BLOCKS)
+        
+        # Control flags (atomic-ish due to GIL)
+        self.muted = bool(layer.get("mute", False))
+        self.gain = float(layer.get("vol", 1.0))
+        self.uid = layer.get("uid")
+        self.flash_color = layer.get("flash_color", layer.get("color", "#9CA3AF"))
+        
+        # Timing state
+        self.subdiv = layer.get("subdiv", 4)
+        self.notes_per_beat = self.subdiv / 4.0
+        self.interval = 60.0 / (self.bpm * self.notes_per_beat)
+        self.next_beat_time = 0.0
+        self.beat_count = 0
+
+
 class SimpleMetronomeEngine:
-    """Audio engine for Android with multiple layers and drum support
+    """Audio engine for Android with safe single-thread audio playback
     
-    Uses per-layer threading where each layer runs on its own thread and sleeps
-    for its subdivision interval. This ensures accurate timing for each layer
-    independently of other layers.
+    Uses producer-consumer pattern:
+    - Producer threads generate audio blocks and push into per-source ring buffers
+    - Single render thread pulls from all ring buffers, mixes, and writes to AudioTrack
+    This ensures no concurrent writes to AudioTrack, preventing clicks and underruns.
     """
     
     def __init__(self, rhythm_state, on_beat_callback=None):
@@ -799,9 +893,11 @@ class SimpleMetronomeEngine:
         self.mp3_ticks = Mp3TickCache()
         
         self.running = False
-        self.threads = []  # List of layer threads
+        self.sources = []  # List of Source objects
+        self.render_thread = None  # Single render thread
+        self.producer_threads = []  # Producer threads
         self._lock = threading.RLock()
-        self._sa_handles = []  # Track simpleaudio playback handles
+        self._sa_handles = []  # Track simpleaudio playback handles (for non-Android)
         
         # Try to import audio playback library
         self.audio_lib = None
@@ -845,7 +941,7 @@ class SimpleMetronomeEngine:
                 self.audio_lib = None
         
     def start(self):
-        """Start the metronome with per-layer threading"""
+        """Start the metronome with producer-consumer threading pattern"""
         if self.running:
             return
         
@@ -859,81 +955,89 @@ class SimpleMetronomeEngine:
                     pass
             self._sa_handles.clear()
         
-        # Allow starting even with no layers - just won't play any sounds
-        # This lets users add layers while running
-        
-        self.running = True
-        self.threads = []
-        
-        # Get current layers and diagnostics flag
+        # Get current layers
         with self.state._lock:
             left_layers = [dict(layer) for layer in self.state.left]
             right_layers = [dict(layer) for layer in self.state.right]
             bpm = self.state.bpm
             beats_per_measure = self.state.beats_per_measure
+            master_volume = float(self.state.master_volume)
             diagnostics_enabled = bool(self.state.timing_diagnostics)
         
         # Log engine configuration
-        print(f"[engine] Starting metronome engine")
+        print(f"[engine] Starting metronome engine (safe threading pattern)")
         print(f"[engine]   BPM: {bpm}, Beats per measure: {beats_per_measure}")
         print(f"[engine]   Audio library: {self.audio_lib}")
         print(f"[engine]   Left layers: {len(left_layers)}, Right layers: {len(right_layers)}")
+        print(f"[engine]   Master volume: {master_volume}")
         print(f"[engine]   Timing diagnostics: {'ENABLED' if diagnostics_enabled else 'DISABLED'}")
         print(f"[engine]   Platform: {platform}")
-        print(f"[engine]   Python version: {sys.version.split()[0]}")
-        print(f"[engine]   High-precision timer available: {hasattr(time, 'perf_counter')}")
         
-        # Start a thread for each left layer
+        # Create sources for each layer
+        self.sources = []
+        self.producer_threads = []
+        
         for i, layer in enumerate(left_layers):
-            subdiv = layer.get("subdiv", 4)
-            mode = layer.get("mode", "tone")
-            muted = layer.get("mute", False)
-            print(f"[engine]   Starting left layer {i+1}: subdiv={subdiv}, mode={mode}, muted={muted}")
-            thread = threading.Thread(
-                target=self._run_layer,
-                args=(layer, 'left', bpm, beats_per_measure),
-                daemon=True
-            )
-            thread.start()
-            self.threads.append(thread)
+            source = Source(layer, 'left', bpm, beats_per_measure, self._get_audio_data)
+            self.sources.append(source)
+            print(f"[engine]   Created left source {i+1}: subdiv={source.subdiv}, muted={source.muted}")
         
-        # Start a thread for each right layer
         for i, layer in enumerate(right_layers):
-            subdiv = layer.get("subdiv", 4)
-            mode = layer.get("mode", "tone")
-            muted = layer.get("mute", False)
-            print(f"[engine]   Starting right layer {i+1}: subdiv={subdiv}, mode={mode}, muted={muted}")
+            source = Source(layer, 'right', bpm, beats_per_measure, self._get_audio_data)
+            self.sources.append(source)
+            print(f"[engine]   Created right source {i+1}: subdiv={source.subdiv}, muted={source.muted}")
+        
+        self.running = True
+        
+        # Start producer threads (one per source)
+        for i, source in enumerate(self.sources):
             thread = threading.Thread(
-                target=self._run_layer,
-                args=(layer, 'right', bpm, beats_per_measure),
-                daemon=True
+                target=self._run_producer,
+                args=(source,),
+                daemon=True,
+                name=f"Producer-{source.channel}-{i}"
             )
             thread.start()
-            self.threads.append(thread)
+            self.producer_threads.append(thread)
         
-        print(f"[engine] Metronome started with {len(self.threads)} layer threads")
+        # Start single render thread
+        self.render_thread = threading.Thread(
+            target=self._run_render_thread,
+            daemon=True,
+            name="AudioRender"
+        )
+        self.render_thread.start()
+        
+        print(f"[engine] Started {len(self.producer_threads)} producer threads + 1 render thread")
     
     def stop(self):
-        """Stop the metronome and all layer threads"""
-        print(f"[engine] Stopping metronome with {len(self.threads)} threads...")
+        """Stop the metronome and all threads"""
+        print(f"[engine] Stopping metronome...")
         self.running = False
         
-        # Wait for all threads to complete
+        # Wait for render thread
+        if self.render_thread and self.render_thread.is_alive():
+            self.render_thread.join(timeout=2.0)
+            if self.render_thread.is_alive():
+                print(f"[engine]   WARNING: Render thread did not stop within timeout")
+        
+        # Wait for producer threads
         stopped_count = 0
         timeout_count = 0
-        for i, thread in enumerate(self.threads):
+        for i, thread in enumerate(self.producer_threads):
             if thread and thread.is_alive():
                 thread.join(timeout=1.0)
                 if thread.is_alive():
-                    print(f"[engine]   WARNING: Thread {i+1} did not stop within timeout")
+                    print(f"[engine]   WARNING: Producer thread {i+1} did not stop within timeout")
                     timeout_count += 1
                 else:
                     stopped_count += 1
         
-        print(f"[engine] Stopped {stopped_count} threads, {timeout_count} timed out")
-        self.threads = []
+        print(f"[engine] Stopped {stopped_count} producer threads, {timeout_count} timed out")
+        self.producer_threads = []
+        self.sources = []
         
-        # Stop all simpleaudio playback handles
+        # Stop all simpleaudio playback handles (for non-Android platforms)
         with self._lock:
             for h in self._sa_handles:
                 try:
@@ -1106,7 +1210,190 @@ class SimpleMetronomeEngine:
             except Exception as e:
                 print(f"Kivy audio playback error: {e}")
     
-    def _run_layer(self, layer, channel, bpm, beats_per_measure):
+    def _run_producer(self, source):
+        """Producer thread: generates audio blocks and pushes to source's ring buffer"""
+        start_time = time.perf_counter()
+        
+        # Get master volume once at start
+        with self.state._lock:
+            master_volume = float(self.state.master_volume)
+            accent_factor = float(self.state.accent_factor)
+        
+        while self.running:
+            current_time = time.perf_counter() - start_time
+            
+            # Wait until next beat time
+            wait_time = source.next_beat_time - current_time
+            if wait_time > 0:
+                time.sleep(wait_time)
+            
+            if not self.running:
+                break
+            
+            # Check if source is muted (atomic read)
+            if source.muted:
+                # Still update timing even if muted
+                source.beat_count += 1
+                source.next_beat_time += source.interval
+                continue
+            
+            # Determine if this is an accent beat
+            is_accent = (source.beat_count % source.beats_per_measure) == 0
+            
+            # Get audio data
+            try:
+                audio_data = source.audio_getter(source.layer, is_accent=is_accent)
+                
+                # Apply volume with accent and master volume
+                base_volume = source.gain
+                accent_multiplier = accent_factor if is_accent else 1.0
+                volume = base_volume * accent_multiplier * master_volume
+                
+                # Scale audio data
+                scaled_audio = audio_data * volume
+                
+                # Try to push to ring buffer
+                pushed = source.ring.push(scaled_audio)
+                
+                if pushed < len(scaled_audio):
+                    print(f"[producer] Warning: Ring buffer full for {source.channel} source, dropped {len(scaled_audio) - pushed} frames")
+                
+                # Trigger visual callback
+                if self.on_beat_callback:
+                    Clock.schedule_once(
+                        lambda dt, u=source.uid, c=source.flash_color, ch=source.channel: 
+                            self.on_beat_callback(ch, u, c), 0
+                    )
+            except Exception as e:
+                print(f"[producer] Error generating audio: {e}")
+            
+            # Update for next beat
+            source.beat_count += 1
+            source.next_beat_time += source.interval
+    
+    def _run_render_thread(self):
+        """Render thread: pulls from all ring buffers, mixes, and writes to audio device"""
+        print(f"[render] Render thread started")
+        
+        # Determine block size for rendering
+        frames_per_block = AUDIO_BLOCK_SIZE
+        
+        # Pre-allocate buffers
+        mix_left = np.zeros(frames_per_block, dtype=np.float32)
+        mix_right = np.zeros(frames_per_block, dtype=np.float32)
+        tmp = np.zeros(frames_per_block, dtype=np.float32)
+        
+        # Track for Android AudioTrack
+        audio_track = None
+        
+        # Initialize AudioTrack if on Android
+        if self.audio_lib == 'android':
+            try:
+                min_buffer_size = self.AudioTrack.getMinBufferSize(
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT
+                )
+                
+                # Use larger buffer for safety
+                buffer_size = max(min_buffer_size * 2, frames_per_block * 4 * 2)
+                
+                audio_track = self.AudioTrack(
+                    self.AudioManager.STREAM_MUSIC,
+                    SAMPLE_RATE,
+                    self.AudioFormat.CHANNEL_OUT_STEREO,
+                    self.AudioFormat.ENCODING_PCM_16BIT,
+                    buffer_size,
+                    self.AudioTrack.MODE_STREAM
+                )
+                
+                # Check initialization
+                if hasattr(audio_track, 'getState'):
+                    state = audio_track.getState()
+                    if state != self.AudioTrack.STATE_INITIALIZED:
+                        print(f"[render] ERROR: AudioTrack not initialized (state: {state})")
+                        return
+                
+                # Start playback (MODE_STREAM requires play() before write())
+                audio_track.play()
+                print(f"[render] AudioTrack initialized and playing")
+            except Exception as e:
+                print(f"[render] Failed to initialize AudioTrack: {e}")
+                return
+        
+        try:
+            while self.running:
+                # Clear mix buffers
+                mix_left.fill(0.0)
+                mix_right.fill(0.0)
+                
+                # Pull from all sources and mix
+                sources_snapshot = list(self.sources)  # Snapshot to avoid lock
+                for source in sources_snapshot:
+                    if source.muted:
+                        continue
+                    
+                    # Pop audio from source's ring buffer
+                    n = source.ring.pop(tmp, frames_per_block)
+                    
+                    # Mix to appropriate channel
+                    if source.channel == 'left':
+                        mix_left += tmp
+                    else:  # right
+                        mix_right += tmp
+                
+                # Apply soft clipping to prevent harsh digital clipping
+                mix_left = tanh_soft_clip(mix_left)
+                mix_right = tanh_soft_clip(mix_right)
+                
+                # Interleave stereo
+                stereo = np.empty(frames_per_block * 2, dtype=np.float32)
+                stereo[0::2] = mix_left
+                stereo[1::2] = mix_right
+                
+                # Write to audio device
+                if self.audio_lib == 'android' and audio_track is not None:
+                    # Convert to int16 and write
+                    audio_int16 = (stereo * 32767.0).astype(np.int16)
+                    audio_bytes = audio_int16.tobytes()
+                    
+                    bytes_written = audio_track.write(audio_bytes, 0, len(audio_bytes))
+                    
+                    if bytes_written < 0:
+                        print(f"[render] AudioTrack write error: {bytes_written}")
+                        break
+                
+                elif self.audio_lib == 'simpleaudio':
+                    # Use simpleaudio
+                    audio_int16 = (stereo * 32767.0).astype(np.int16).reshape(-1, 2)
+                    try:
+                        play_obj = self.sa.play_buffer(audio_int16, 2, 2, SAMPLE_RATE)
+                        with self._lock:
+                            self._sa_handles.append(play_obj)
+                    except Exception as e:
+                        print(f"[render] simpleaudio error: {e}")
+                
+                # Small sleep to prevent tight loop (if no audio lib available)
+                if self.audio_lib is None:
+                    time.sleep(frames_per_block / SAMPLE_RATE)
+        
+        except Exception as e:
+            print(f"[render] Exception in render thread: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Cleanup AudioTrack
+            if audio_track is not None:
+                try:
+                    audio_track.stop()
+                    audio_track.release()
+                    print(f"[render] AudioTrack cleaned up")
+                except Exception as e:
+                    print(f"[render] Error cleaning up AudioTrack: {e}")
+        
+        print(f"[render] Render thread stopped")
+    
+    def _OLD_run_layer(self, layer, channel, bpm, beats_per_measure):
         """Run a single layer on its own thread
         
         Each layer thread independently:
