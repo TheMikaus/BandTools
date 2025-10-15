@@ -5,6 +5,7 @@ This file tracks changes made to the PolyRhythmMetronome application.
 ## [Unreleased]
 
 ### Added
+- **Build Timestamp**: Application now displays the build/compilation date and time in the title bar (format: YYYY/MM/DD HH:MM)
 - **Verbose Logging Mode**: New debugging and analysis feature
   - "Verbose Log" checkbox to enable/disable real-time timing information
   - Scrollable log window displaying per-layer timing details
@@ -22,6 +23,8 @@ This file tracks changes made to the PolyRhythmMetronome application.
 - **Build Scripts**: Added PyInstaller spec file and build scripts (build.sh, build.bat) for easy executable creation
 
 ### Changed
+- **Log File Behavior**: Log file (metronome_log.txt) is now cleared on each application startup for cleaner debugging
+- **Log Viewer Display**: The verbose log viewer now loads and displays the entire log file contents when opened, not just new messages
 - **Color System**: Layers now use separate colors for inactive and flash (active) states
 - **Audio File Support**: Extended WaveCache to support both WAV and MP3 files using pydub
 - **Tone Frequencies**: Changed tone mode to use fixed frequencies for clarity:
@@ -33,6 +36,7 @@ This file tracks changes made to the PolyRhythmMetronome application.
   - Accent is indicated by volume increase (controlled by accent factor)
 
 ### Fixed
+- **Verbose Log Checkbox Initialization**: Ensured the "Verbose Log" checkbox (timing debug button) initializes properly on startup with correct off state
 - **Subdivision Timing**: Fixed critical issue where subdivisions 4 and 8 did not click on time
   - Removed incorrect `notes_per_beat_from_input()` function that was dividing by 4
   - `interval_seconds()` now correctly interprets subdivision as "notes per beat"
