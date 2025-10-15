@@ -5,6 +5,14 @@ This file tracks changes made to the PolyRhythmMetronome application.
 ## [Unreleased]
 
 ### Added
+- **Verbose Logging Mode**: New debugging and analysis feature
+  - "Verbose Log" checkbox to enable/disable real-time timing information
+  - Scrollable log window displaying per-layer timing details
+  - Shows delta between actual play times and expected intervals
+  - Includes timestamp with millisecond precision
+  - "Clear Log" button to reset accumulated entries
+  - Useful for debugging timing issues and verifying tempo accuracy
+  - See [docs/user_guides/verbose_logging.md](docs/user_guides/verbose_logging.md) for details
 - **Random Dark Colors**: New layers now automatically get assigned random dark colors for better visual distinction
 - **Auto Flash Colors**: Flash colors are automatically generated as brighter versions of layer inactive colors
 - **MP3 Tick Support**: Added support for MP3 tick sounds from a `ticks` folder

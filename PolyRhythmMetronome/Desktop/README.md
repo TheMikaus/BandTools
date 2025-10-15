@@ -21,6 +21,10 @@ A stereo subdivision metronome with multi-layer support, visual flashing, and ad
   - Time signature (beats per measure)
   - Accent factor for beat 1
   - Visual flash notifications
+- **Verbose Logging**: Real-time timing information for debugging and analysis
+  - Shows delta between actual and expected intervals
+  - Scrollable log window with clear function
+  - Per-layer timing details
 - **Save/Load**: Save and load rhythm patterns as JSON files
 - **WAV Export**: Export your rhythm patterns to stereo WAV files
 - **Auto-save**: Automatically saves your current rhythm on changes
@@ -33,6 +37,22 @@ python3 Poly_Rhythm_Metronome.py
 ```
 
 The application will auto-install required dependencies (numpy, sounddevice/simpleaudio).
+
+### Verbose Logging
+
+Enable verbose logging by checking the "Verbose Log" checkbox in the application. This will display a scrollable log window showing real-time timing information for each sound:
+
+```
+[12:34:56.789] Left Layer 1 (subdiv=4): played | Delta: 250.00ms | Expected: 250.00ms
+[12:34:57.039] Right Layer 1 (subdiv=3): played | Delta: 333.33ms | Expected: 333.33ms
+```
+
+This is useful for:
+- Debugging timing issues
+- Verifying tempo accuracy
+- Understanding how different subdivisions interact
+
+See [docs/user_guides/verbose_logging.md](docs/user_guides/verbose_logging.md) for detailed usage instructions.
 
 ## Error Logging
 

@@ -403,6 +403,9 @@ class StreamEngine:
         self.beats_per_measure=4  # Track beats per measure for accent calculation
         self.measure_samples=0; self.sample_counter=0; self.accent_factor=DEFAULT_ACCENT_FACTOR; self.flash_enabled=False
         self.active=[]; self._sa_start_time=None
+        # Verbose logging support
+        self.verbose_logging=False; self.log_callback=None
+        self.L_last_play_time=[]; self.R_last_play_time=[]  # Track last play time for each layer
     def _log_exception(self, context_msg: str):
         """Log exception with timestamp and context information."""
         try:
@@ -422,6 +425,15 @@ class StreamEngine:
             print(f"Failed to write to log: {context_msg}", file=sys.stderr)
             traceback.print_exc()
     
+    def _log_verbose(self, msg: str):
+        """Log verbose message to UI callback if enabled."""
+        if self.verbose_logging and self.log_callback is not None:
+            try:
+                timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                self.ui_after(lambda: self.log_callback(f"[{timestamp}] {msg}"))
+            except Exception:
+                pass  # Silently fail if logging fails
+    
     def _notify_error(self, msg:str):
         def cb():
             try: messagebox.showerror("Audio Error", msg)
@@ -438,10 +450,11 @@ class StreamEngine:
         t_cur = self.sample_counter/float(SAMPLE_RATE) if self.stream is not None else (0.0 if self._sa_start_time is None else time.perf_counter()-self._sa_start_time)
         meas_len=measure_seconds(bpm, beats)
         with self._lock:
-            def recalc(layers, old_counters):
+            def recalc(layers, old_counters, old_last_play):
                 intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]
                 next_times=[]
                 note_counters=[]
+                last_play=[]
                 for idx, iv in enumerate(intervals):
                     if iv<=0: iv=1e9
                     k=math.ceil((t_cur-1e-9)/iv); k=0 if k<0 else k
@@ -451,9 +464,14 @@ class StreamEngine:
                         note_counters.append(old_counters[idx])
                     else:
                         note_counters.append(0)
-                return layers, intervals, next_times, note_counters
-            self.left_layers,self.L_intervals,self.L_next,self.L_note_counters = recalc(new_left, self.L_note_counters)
-            self.right_layers,self.R_intervals,self.R_next,self.R_note_counters = recalc(new_right, self.R_note_counters)
+                    # Preserve last play time
+                    if idx < len(old_last_play):
+                        last_play.append(old_last_play[idx])
+                    else:
+                        last_play.append(None)
+                return layers, intervals, next_times, note_counters, last_play
+            self.left_layers,self.L_intervals,self.L_next,self.L_note_counters,self.L_last_play_time = recalc(new_left, self.L_note_counters, self.L_last_play_time)
+            self.right_layers,self.R_intervals,self.R_next,self.R_note_counters,self.R_last_play_time = recalc(new_right, self.R_note_counters, self.R_last_play_time)
             self.beats_per_measure = beats
             self.measure_samples=int(round(measure_seconds(bpm, beats)*SAMPLE_RATE)) if meas_len>0 else 0
         # Pre-load any new audio files that were added during playback
@@ -489,22 +507,25 @@ class StreamEngine:
             intervals=[interval_seconds(bpm, lay["subdiv"]) for lay in layers]
             next_times=[0.0 for _ in layers]
             note_counters=[0 for _ in layers]  # Start all layers at note 0
-            return intervals, next_times, note_counters
-        self.L_intervals,self.L_next,self.L_note_counters = mk_side(self.left_layers)
-        self.R_intervals,self.R_next,self.R_note_counters = mk_side(self.right_layers)
+            last_play=[None for _ in layers]  # Initialize last play time tracking
+            return intervals, next_times, note_counters, last_play
+        self.L_intervals,self.L_next,self.L_note_counters,self.L_last_play_time = mk_side(self.left_layers)
+        self.R_intervals,self.R_next,self.R_note_counters,self.R_last_play_time = mk_side(self.right_layers)
         self.sample_counter=0; self.active.clear()
         # Pre-load all audio files to prevent timing issues on first play
         self._preload_audio_files()
         if sd is not None:
             try:
                 self.stream=sd.OutputStream(samplerate=SAMPLE_RATE, channels=2, dtype='float32', callback=self._callback, blocksize=0)
-                self.stream.start(); self.running=True; return
+                self.stream.start(); self.running=True
+                self._log_verbose("Started playback with sounddevice"); return
             except Exception as e:
                 self._notify_error(f"sounddevice stream failed ({e}). Falling back to simpleaudio."); self.stream=None
         if sa is None:
             try: globals()['sa']=ensure_pkg("simpleaudio")
             except ImportError: self._notify_error("Neither 'sounddevice' nor 'simpleaudio' are available."); return
         self.running=True; self._sa_start_time=time.perf_counter()
+        self._log_verbose("Started playback with simpleaudio")
         threading.Thread(target=self._sa_loop, name="SA-Loop", daemon=True).start()
     def stop(self):
         self.running=False
@@ -546,7 +567,7 @@ class StreamEngine:
     def _callback(self, outdata, frames, time_info, status):
         try:
             block = np.zeros((frames,2), dtype=np.float32); sr=SAMPLE_RATE; t0=self.sample_counter; t1=t0+frames
-            def schedule_side(layers, intervals, next_times, note_counters, channel):
+            def schedule_side(layers, intervals, next_times, note_counters, last_play_times, channel):
                 for i, lay in enumerate(layers):
                     if lay.get("mute",False): continue
                     iv=intervals[i]
@@ -564,6 +585,16 @@ class StreamEngine:
                             self.active.append({"data":data,"idx":0,"amp":amp,"channel":channel})
                             if self.flash_enabled and self.event_notify is not None:
                                 self.event_notify("L" if channel==0 else "R", lay.get("uid"), lay.get("flash_color", lay.get("color","#9CA3AF")))
+                            # Verbose logging
+                            if self.verbose_logging:
+                                side_name = "Left" if channel==0 else "Right"
+                                delta_str = "N/A (first)"
+                                if last_play_times[i] is not None:
+                                    delta = t_sec - last_play_times[i]
+                                    delta_str = f"{delta*1000:.2f}ms"
+                                expected_interval = iv * 1000  # Convert to ms
+                                self._log_verbose(f"{side_name} Layer {i+1} (subdiv={subdiv}): played | Delta: {delta_str} | Expected: {expected_interval:.2f}ms")
+                                last_play_times[i] = t_sec
                             # Increment note counter for this layer
                             note_counters[i] = (note_counters[i] + 1) % notes_per_measure
                         next_times[i]=t_sec+iv
@@ -572,8 +603,9 @@ class StreamEngine:
                 L_intv,R_intv     = self.L_intervals, self.R_intervals
                 L_next,R_next     = self.L_next, self.R_next
                 L_counters,R_counters = self.L_note_counters, self.R_note_counters
-            schedule_side(L_layers, L_intv, L_next, L_counters, 0)
-            schedule_side(R_layers, R_intv, R_next, R_counters, 1)
+                L_last_play,R_last_play = self.L_last_play_time, self.R_last_play_time
+            schedule_side(L_layers, L_intv, L_next, L_counters, L_last_play, 0)
+            schedule_side(R_layers, R_intv, R_next, R_counters, R_last_play, 1)
             new_active=[]
             for blip in self.active:
                 data, ch, amp, idx = blip["data"], blip["channel"], blip["amp"], blip["idx"]
@@ -609,6 +641,15 @@ class StreamEngine:
                                     accent = (self.L_note_counters[i] % notes_per_measure) == 0
                                     amp,data=self._amp_and_source(lay, accent)
                                     left_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
+                                    # Verbose logging
+                                    if self.verbose_logging:
+                                        delta_str = "N/A (first)"
+                                        if self.L_last_play_time[i] is not None:
+                                            delta = t_ev - self.L_last_play_time[i]
+                                            delta_str = f"{delta*1000:.2f}ms"
+                                        expected_interval = self.L_intervals[i] * 1000  # Convert to ms
+                                        self._log_verbose(f"Left Layer {i+1} (subdiv={subdiv}): played | Delta: {delta_str} | Expected: {expected_interval:.2f}ms")
+                                        self.L_last_play_time[i] = t_ev
                                     # Increment note counter
                                     self.L_note_counters[i] = (self.L_note_counters[i] + 1) % notes_per_measure
                             self.L_next[i]=t_ev+self.L_intervals[i]
@@ -623,6 +664,15 @@ class StreamEngine:
                                     accent = (self.R_note_counters[i] % notes_per_measure) == 0
                                     amp,data=self._amp_and_source(lay, accent)
                                     right_events.append((amp,data,lay.get("uid"),lay.get("flash_color", lay.get("color","#9CA3AF"))))
+                                    # Verbose logging
+                                    if self.verbose_logging:
+                                        delta_str = "N/A (first)"
+                                        if self.R_last_play_time[i] is not None:
+                                            delta = t_ev - self.R_last_play_time[i]
+                                            delta_str = f"{delta*1000:.2f}ms"
+                                        expected_interval = self.R_intervals[i] * 1000  # Convert to ms
+                                        self._log_verbose(f"Right Layer {i+1} (subdiv={subdiv}): played | Delta: {delta_str} | Expected: {expected_interval:.2f}ms")
+                                        self.R_last_play_time[i] = t_ev
                                     # Increment note counter
                                     self.R_note_counters[i] = (self.R_note_counters[i] + 1) % notes_per_measure
                             self.R_next[i]=t_ev+self.R_intervals[i]
@@ -897,6 +947,10 @@ class App(ttk.Frame):
         self.var_flash_enabled=tk.BooleanVar(value=self.state.flash_enabled)
         ttk.Checkbutton(top,text="Flash",variable=self.var_flash_enabled,
                         command=self._update_global_from_inputs).grid(row=0,column=6,sticky="w",padx=(8,0))
+        
+        self.var_verbose_log=tk.BooleanVar(value=False)
+        ttk.Checkbutton(top,text="Verbose Log",variable=self.var_verbose_log,
+                        command=self._toggle_verbose_log).grid(row=0,column=7,sticky="w",padx=(8,0))
 
         # ---------- New Layer (stacked rows, fewer columns) ----------
         newlay=ttk.LabelFrame(self, text="New Layer")
@@ -970,9 +1024,29 @@ class App(ttk.Frame):
         ttk.Button(bottom,text="Load Rhythm…",command=self.on_load_rhythm).grid(row=0,column=4,sticky="ew",padx=2)
         ttk.Button(bottom,text="New (Clear)",command=self.on_new).grid(row=0,column=5,sticky="ew",padx=2)
 
+        # ---------- Log Window (initially hidden) ----------
+        self.log_frame=ttk.LabelFrame(self, text="Verbose Log")
+        self.log_text=tk.Text(self.log_frame, height=8, width=80, wrap="none", state="disabled",
+                              bg="#f8f9fa", fg="#212529", font=("Courier", 9))
+        log_scroll_y=ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_text.yview)
+        log_scroll_x=ttk.Scrollbar(self.log_frame, orient="horizontal", command=self.log_text.xview)
+        self.log_text.configure(yscrollcommand=log_scroll_y.set, xscrollcommand=log_scroll_x.set)
+        self.log_text.grid(row=0,column=0,sticky="nsew")
+        log_scroll_y.grid(row=0,column=1,sticky="ns")
+        log_scroll_x.grid(row=1,column=0,sticky="ew")
+        self.log_frame.columnconfigure(0,weight=1)
+        self.log_frame.rowconfigure(0,weight=1)
+        
+        # Clear log button
+        clear_log_btn=ttk.Button(self.log_frame, text="Clear Log", command=self._clear_log)
+        clear_log_btn.grid(row=2,column=0,sticky="w",padx=4,pady=4)
+
         self.pack(fill="both",expand=True)
         self.refresh_lists()
         self.after(30,self._drain_flash_queue)
+        
+        # Connect log callback to engine
+        self.engine.log_callback = self._append_log
 
     # --- Flash queue ---
     def _enqueue_flash(self, side, uid, flash_color): self.flash_queue.append((side,uid,flash_color))
@@ -982,6 +1056,33 @@ class App(ttk.Frame):
             if self.state.flash_enabled:
                 (self.left_list.flash_uid if side=="L" else self.right_list.flash_uid)(uid,flash_color,FLASH_MS)
         self.after(30,self._drain_flash_queue)
+    
+    # --- Verbose logging ---
+    def _toggle_verbose_log(self):
+        enabled = self.var_verbose_log.get()
+        self.engine.verbose_logging = enabled
+        if enabled:
+            # Show log window
+            self.log_frame.grid(row=4,column=0,sticky="nsew",pady=(8,0))
+            self.rowconfigure(4,weight=0)
+            self._append_log("=== Verbose logging enabled ===")
+        else:
+            # Hide log window
+            self.log_frame.grid_remove()
+            self._append_log("=== Verbose logging disabled ===")
+    
+    def _append_log(self, message):
+        """Append message to the log window."""
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", message + "\n")
+        self.log_text.see("end")  # Auto-scroll to bottom
+        self.log_text.configure(state="disabled")
+    
+    def _clear_log(self):
+        """Clear the log window."""
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
 
     # --- Autosave ---
     def _autosave(self):

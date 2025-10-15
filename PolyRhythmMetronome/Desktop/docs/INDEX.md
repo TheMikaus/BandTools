@@ -9,7 +9,7 @@ Welcome to the PolyRhythmMetronome documentation! This index helps you navigate 
 Documentation for end users, including how-to guides, feature explanations, and usage instructions.
 
 **Key Documents:**
-- Currently being developed - check back soon!
+- [Verbose Logging Feature](user_guides/verbose_logging.md) - Real-time timing information and debugging guide
 
 ### 🔧 Technical Documentation (`technical/`)
 
@@ -17,6 +17,7 @@ Developer and technical documentation, including implementation details, archite
 
 **Key Documents:**
 - [Audio Pre-loading Fix](technical/audio_preloading_fix.md) - Technical details on wave/MP3 timing issue resolution
+- [Verbose Logging Implementation](technical/verbose_logging_implementation.md) - Technical details on verbose logging feature
 
 ### 🧪 Test Plans (`test_plans/`)
 
