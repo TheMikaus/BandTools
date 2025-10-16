@@ -322,6 +322,117 @@ Item {
                     Item { Layout.fillWidth: true }
                 }
                 
+                // Annotation Set Controls
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingNormal
+                    
+                    Label {
+                        text: "Annotation Set:"
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                    }
+                    
+                    ComboBox {
+                        id: annotationSetCombo
+                        Layout.preferredWidth: 180
+                        
+                        model: {
+                            var sets = annotationManager.getAnnotationSets()
+                            return sets.map(function(set) { return set.name })
+                        }
+                        
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            radius: Theme.radiusSmall
+                        }
+                        
+                        contentItem: Text {
+                            text: annotationSetCombo.displayText
+                            color: Theme.textColor
+                            font.pixelSize: Theme.fontSizeSmall
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8
+                        }
+                        
+                        onCurrentIndexChanged: {
+                            if (currentIndex >= 0) {
+                                var sets = annotationManager.getAnnotationSets()
+                                if (currentIndex < sets.length) {
+                                    annotationManager.setCurrentSetId(sets[currentIndex].id)
+                                }
+                            }
+                        }
+                        
+                        Component.onCompleted: {
+                            updateSetCombo()
+                        }
+                    }
+                    
+                    StyledButton {
+                        text: "Add Set"
+                        Layout.preferredWidth: 80
+                        onClicked: newSetDialog.open()
+                    }
+                    
+                    StyledButton {
+                        text: "Rename"
+                        Layout.preferredWidth: 80
+                        enabled: annotationManager.getAnnotationSets().length > 0
+                        onClicked: renameSetDialog.open()
+                    }
+                    
+                    StyledButton {
+                        text: "Delete"
+                        danger: true
+                        Layout.preferredWidth: 80
+                        enabled: annotationManager.getAnnotationSets().length > 1
+                        onClicked: deleteSetDialog.open()
+                    }
+                    
+                    CheckBox {
+                        id: showAllSetsCheckbox
+                        text: "Show all visible sets in table"
+                        checked: annotationManager.getShowAllSets()
+                        
+                        indicator: Rectangle {
+                            implicitWidth: 16
+                            implicitHeight: 16
+                            x: showAllSetsCheckbox.leftPadding
+                            y: parent.height / 2 - height / 2
+                            radius: 2
+                            border.color: Theme.borderColor
+                            border.width: 1
+                            color: showAllSetsCheckbox.checked ? Theme.accentPrimary : Theme.backgroundColor
+                            
+                            Label {
+                                visible: showAllSetsCheckbox.checked
+                                anchors.centerIn: parent
+                                text: "✓"
+                                color: "white"
+                                font.pixelSize: 12
+                            }
+                        }
+                        
+                        contentItem: Text {
+                            text: showAllSetsCheckbox.text
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textColor
+                            leftPadding: showAllSetsCheckbox.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        
+                        onCheckedChanged: {
+                            annotationManager.setShowAllSets(checked)
+                            refreshAnnotations()
+                        }
+                    }
+                    
+                    Item { Layout.fillWidth: true }
+                }
+                
                 // Annotation table
                 Rectangle {
                     Layout.fillWidth: true
@@ -456,6 +567,25 @@ Item {
         }
     }
     
+    // Update when annotation sets change
+    Connections {
+        target: annotationManager
+        
+        function onAnnotationSetsChanged() {
+            updateSetCombo()
+        }
+        
+        function onCurrentSetChanged(setId) {
+            updateSetCombo()
+            refreshAnnotations()
+        }
+        
+        function onShowAllSetsChanged(showAll) {
+            showAllSetsCheckbox.checked = showAll
+            refreshAnnotations()
+        }
+    }
+    
     // Update when annotations change
     Connections {
         target: annotationManager
@@ -483,7 +613,224 @@ Item {
         }
     }
     
+    // ========== Annotation Set Dialogs ==========
+    
+    // New Set Dialog
+    Dialog {
+        id: newSetDialog
+        title: "Add Annotation Set"
+        modal: true
+        anchors.centerIn: parent
+        width: 400
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusNormal
+        }
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Theme.spacingNormal
+            
+            Label {
+                text: "Set Name:"
+                font.pixelSize: Theme.fontSizeNormal
+                color: Theme.textColor
+            }
+            
+            StyledTextField {
+                id: newSetNameField
+                Layout.fillWidth: true
+                placeholderText: "Enter set name..."
+                text: settingsManager.getCurrentUser()
+            }
+            
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingNormal
+                
+                Item { Layout.fillWidth: true }
+                
+                StyledButton {
+                    text: "Cancel"
+                    Layout.preferredWidth: 100
+                    onClicked: newSetDialog.close()
+                }
+                
+                StyledButton {
+                    text: "Create"
+                    primary: true
+                    Layout.preferredWidth: 100
+                    enabled: newSetNameField.text.trim().length > 0
+                    onClicked: {
+                        var setName = newSetNameField.text.trim()
+                        if (setName.length > 0) {
+                            annotationManager.addAnnotationSet(setName, "")
+                            updateSetCombo()
+                            newSetDialog.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Rename Set Dialog
+    Dialog {
+        id: renameSetDialog
+        title: "Rename Annotation Set"
+        modal: true
+        anchors.centerIn: parent
+        width: 400
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusNormal
+        }
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Theme.spacingNormal
+            
+            Label {
+                text: "New Name:"
+                font.pixelSize: Theme.fontSizeNormal
+                color: Theme.textColor
+            }
+            
+            StyledTextField {
+                id: renameSetNameField
+                Layout.fillWidth: true
+                placeholderText: "Enter new name..."
+                text: {
+                    var currentId = annotationManager.getCurrentSetId()
+                    var sets = annotationManager.getAnnotationSets()
+                    for (var i = 0; i < sets.length; i++) {
+                        if (sets[i].id === currentId) {
+                            return sets[i].name
+                        }
+                    }
+                    return ""
+                }
+            }
+            
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingNormal
+                
+                Item { Layout.fillWidth: true }
+                
+                StyledButton {
+                    text: "Cancel"
+                    Layout.preferredWidth: 100
+                    onClicked: renameSetDialog.close()
+                }
+                
+                StyledButton {
+                    text: "Rename"
+                    primary: true
+                    Layout.preferredWidth: 100
+                    enabled: renameSetNameField.text.trim().length > 0
+                    onClicked: {
+                        var newName = renameSetNameField.text.trim()
+                        if (newName.length > 0) {
+                            var currentId = annotationManager.getCurrentSetId()
+                            annotationManager.renameAnnotationSet(currentId, newName)
+                            updateSetCombo()
+                            renameSetDialog.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Delete Set Dialog
+    Dialog {
+        id: deleteSetDialog
+        title: "Delete Annotation Set"
+        modal: true
+        anchors.centerIn: parent
+        width: 500
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusNormal
+        }
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Theme.spacingNormal
+            
+            Label {
+                text: {
+                    var currentId = annotationManager.getCurrentSetId()
+                    var sets = annotationManager.getAnnotationSets()
+                    for (var i = 0; i < sets.length; i++) {
+                        if (sets[i].id === currentId) {
+                            return "Delete set '" + sets[i].name + "'? This removes its annotations permanently."
+                        }
+                    }
+                    return "Delete this annotation set?"
+                }
+                font.pixelSize: Theme.fontSizeNormal
+                color: Theme.textColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingNormal
+                
+                Item { Layout.fillWidth: true }
+                
+                StyledButton {
+                    text: "Cancel"
+                    Layout.preferredWidth: 100
+                    onClicked: deleteSetDialog.close()
+                }
+                
+                StyledButton {
+                    text: "Delete"
+                    danger: true
+                    Layout.preferredWidth: 100
+                    onClicked: {
+                        var currentId = annotationManager.getCurrentSetId()
+                        if (annotationManager.deleteAnnotationSet(currentId)) {
+                            updateSetCombo()
+                            refreshAnnotations()
+                        }
+                        deleteSetDialog.close()
+                    }
+                }
+            }
+        }
+    }
+    
     // Helper functions
+    function updateSetCombo() {
+        // Update combo box model
+        var sets = annotationManager.getAnnotationSets()
+        var setNames = sets.map(function(set) { return set.name })
+        annotationSetCombo.model = setNames
+        
+        // Set current index to match current set
+        var currentId = annotationManager.getCurrentSetId()
+        for (var i = 0; i < sets.length; i++) {
+            if (sets[i].id === currentId) {
+                annotationSetCombo.currentIndex = i
+                break
+            }
+        }
+    }
+    
     function openAddDialog() {
         annotationDialog.resetDialog()
         annotationDialog.timestampMs = audioEngine.getPosition()
