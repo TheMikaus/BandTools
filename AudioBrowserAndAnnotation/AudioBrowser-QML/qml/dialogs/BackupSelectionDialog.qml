@@ -76,21 +76,21 @@ Dialog {
     function performRestore() {
         if (!selectedBackupPath || !selectedTargetFolder) {
             statusLabel.text = "Please select a backup and target folder"
-            statusLabel.color = colorManager.getColor("error")
+            statusLabel.color = colorManager ? colorManager.getColor("error") : "#ef5350"
             return
         }
         
         var filesRestored = backupManager.restoreBackup(selectedBackupPath, selectedTargetFolder)
         if (filesRestored > 0) {
             statusLabel.text = `Successfully restored ${filesRestored} file(s)`
-            statusLabel.color = colorManager.getColor("success")
+            statusLabel.color = colorManager ? colorManager.getColor("success") : "#66bb6a"
             // Close dialog after successful restore
             Qt.callLater(function() {
                 backupDialog.accept()
             })
         } else {
             statusLabel.text = "No files were restored"
-            statusLabel.color = colorManager.getColor("warning")
+            statusLabel.color = colorManager ? colorManager.getColor("warning") : "#ffa726"
         }
     }
     
@@ -153,7 +153,7 @@ Dialog {
                 Label {
                     text: "No files found in this backup"
                     visible: backupContents.length === 0
-                    color: colorManager.getColor("text_dim")
+                    color: colorManager ? colorManager.getColor("text_dim") : "#808080"
                     font.italic: true
                 }
             }
@@ -213,8 +213,8 @@ Dialog {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: warningLayout.implicitHeight + 20
-            color: colorManager.getColor("warning_bg")
-            border.color: colorManager.getColor("warning")
+            color: colorManager ? colorManager.getColor("warning_bg") : "#4a3a1f"
+            border.color: colorManager ? colorManager.getColor("warning") : "#ffa726"
             border.width: 1
             radius: 4
             
@@ -227,7 +227,7 @@ Dialog {
                 Label {
                     text: "⚠️ Warning"
                     font.bold: true
-                    color: colorManager.getColor("warning")
+                    color: colorManager ? colorManager.getColor("warning") : "#ffa726"
                 }
                 
                 Label {
