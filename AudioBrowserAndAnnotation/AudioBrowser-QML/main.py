@@ -270,6 +270,12 @@ def main():
         annotations_model.setAnnotations(annotations)
     annotation_manager.annotationsChanged.connect(update_annotations_model)
     
+    # Connect annotation manager to file manager for directory changes
+    def update_annotation_manager_directory(directory):
+        if directory:
+            annotation_manager.setCurrentDirectory(Path(directory))
+    file_manager.currentDirectoryChanged.connect(update_annotation_manager_directory)
+    
     # Connect fingerprint engine to file manager
     file_manager.currentDirectoryChanged.connect(fingerprint_engine.setCurrentDirectory)
     

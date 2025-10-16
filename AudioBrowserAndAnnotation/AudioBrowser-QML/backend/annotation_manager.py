@@ -4,13 +4,16 @@ Annotation Manager Module
 
 Manages annotations for audio files with CRUD operations, persistence,
 and multi-user support. Provides QML integration via signals and slots.
+
+Enhanced with multi-annotation sets support for feature parity with original application.
 """
 
 import json
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
 
 
 class AnnotationManager(QObject):
@@ -27,6 +30,7 @@ class AnnotationManager(QObject):
     - Category-based organization
     - Importance flagging
     - Automatic timestamp tracking
+    - Multi-annotation sets with switching and merged view
     - Signal emissions for UI updates
     """
     
@@ -38,15 +42,26 @@ class AnnotationManager(QObject):
     currentFileChanged = pyqtSignal(str)  # Current file path
     errorOccurred = pyqtSignal(str)  # Error message
     
+    # Annotation set signals
+    annotationSetsChanged = pyqtSignal()  # Emitted when annotation sets change
+    currentSetChanged = pyqtSignal(str)  # Emitted when current set changes (set_id)
+    showAllSetsChanged = pyqtSignal(bool)  # Emitted when show all sets toggle changes
+    
     def __init__(self, parent=None):
         """Initialize the annotation manager."""
         super().__init__(parent)
         self._current_file: str = ""
         self._current_user: str = "default_user"
-        self._annotations: Dict[str, List[Dict[str, Any]]] = {}  # filepath -> annotations
+        self._annotations: Dict[str, List[Dict[str, Any]]] = {}  # filepath -> annotations (legacy single set)
         self._categories = ["timing", "energy", "harmony", "dynamics", "notes"]
         self._next_uid = 1  # Counter for generating unique IDs
         self._undo_manager = None  # Will be set by main app
+        self._current_directory: Optional[Path] = None
+        
+        # Multi-annotation sets support
+        self._annotation_sets: List[Dict[str, Any]] = []  # List of annotation sets
+        self._current_set_id: Optional[str] = None  # ID of the currently active set
+        self._show_all_sets: bool = False  # Whether to show annotations from all visible sets
         
     # ========== QML-accessible methods ==========
     
@@ -536,6 +551,211 @@ class AnnotationManager(QObject):
         """
         self._save_annotations(file_path)
     
+    # ========== Annotation Sets Management ==========
+    
+    def setCurrentDirectory(self, directory: Path) -> None:
+        """
+        Set the current directory and load annotation sets.
+        
+        Args:
+            directory: Path to the current directory
+        """
+        self._current_directory = directory
+        self._load_annotation_sets()
+    
+    @pyqtSlot(result=list)
+    def getAnnotationSets(self) -> List[Dict[str, Any]]:
+        """
+        Get the list of all annotation sets.
+        
+        Returns:
+            List of annotation set dictionaries with id, name, color, visible
+        """
+        # Return simplified version for QML
+        return [
+            {
+                "id": aset["id"],
+                "name": aset["name"],
+                "color": aset["color"],
+                "visible": aset.get("visible", True)
+            }
+            for aset in self._annotation_sets
+        ]
+    
+    @pyqtSlot(result=str)
+    def getCurrentSetId(self) -> str:
+        """Get the current annotation set ID."""
+        return self._current_set_id or ""
+    
+    @pyqtSlot(str)
+    def setCurrentSetId(self, set_id: str) -> None:
+        """
+        Set the current annotation set.
+        
+        Args:
+            set_id: ID of the annotation set to make current
+        """
+        if set_id != self._current_set_id:
+            self._current_set_id = set_id
+            self.currentSetChanged.emit(set_id)
+            # Reload annotations for current file with new set context
+            if self._current_file:
+                self._load_annotations(self._current_file)
+                self.annotationsChanged.emit(self._current_file)
+    
+    @pyqtSlot(result=bool)
+    def getShowAllSets(self) -> bool:
+        """Get whether to show annotations from all visible sets."""
+        return self._show_all_sets
+    
+    @pyqtSlot(bool)
+    def setShowAllSets(self, show_all: bool) -> None:
+        """
+        Set whether to show annotations from all visible sets (merged view).
+        
+        Args:
+            show_all: True to show all visible sets, False to show only current set
+        """
+        if show_all != self._show_all_sets:
+            self._show_all_sets = show_all
+            self.showAllSetsChanged.emit(show_all)
+            # Reload annotations to reflect merged view
+            if self._current_file:
+                self._load_annotations(self._current_file)
+                self.annotationsChanged.emit(self._current_file)
+    
+    @pyqtSlot(str, str, result=str)
+    def addAnnotationSet(self, name: str, color: str = "") -> str:
+        """
+        Create a new annotation set.
+        
+        Args:
+            name: Name for the new set
+            color: Color for the set (hex format), or empty to auto-assign
+            
+        Returns:
+            ID of the newly created set
+        """
+        if not name.strip():
+            name = self._get_default_set_name()
+        
+        if not color:
+            color = self._get_color_for_set_name(name)
+        
+        set_id = uuid.uuid4().hex[:8]
+        new_set = {
+            "id": set_id,
+            "name": name.strip(),
+            "color": color,
+            "visible": True,
+            "files": {}  # Per-file annotations and metadata
+        }
+        
+        self._annotation_sets.append(new_set)
+        self._current_set_id = set_id
+        
+        # Save annotation sets
+        self._save_annotation_sets()
+        
+        # Emit signals
+        self.annotationSetsChanged.emit()
+        self.currentSetChanged.emit(set_id)
+        
+        return set_id
+    
+    @pyqtSlot(str, str)
+    def renameAnnotationSet(self, set_id: str, new_name: str) -> None:
+        """
+        Rename an annotation set.
+        
+        Args:
+            set_id: ID of the set to rename
+            new_name: New name for the set
+        """
+        for aset in self._annotation_sets:
+            if aset["id"] == set_id:
+                aset["name"] = new_name.strip()
+                self._save_annotation_sets()
+                self.annotationSetsChanged.emit()
+                return
+    
+    @pyqtSlot(str, result=bool)
+    def deleteAnnotationSet(self, set_id: str) -> bool:
+        """
+        Delete an annotation set.
+        
+        Args:
+            set_id: ID of the set to delete
+            
+        Returns:
+            True if deleted, False if cannot delete (e.g., last set)
+        """
+        if len(self._annotation_sets) <= 1:
+            self.errorOccurred.emit("Cannot delete the last annotation set")
+            return False
+        
+        # Remove the set
+        self._annotation_sets = [s for s in self._annotation_sets if s["id"] != set_id]
+        
+        # If current set was deleted, switch to first set
+        if self._current_set_id == set_id:
+            self._current_set_id = self._annotation_sets[0]["id"]
+            self.currentSetChanged.emit(self._current_set_id)
+        
+        # Save and notify
+        self._save_annotation_sets()
+        self.annotationSetsChanged.emit()
+        
+        return True
+    
+    @pyqtSlot(str, bool)
+    def setAnnotationSetVisibility(self, set_id: str, visible: bool) -> None:
+        """
+        Set the visibility of an annotation set.
+        
+        Args:
+            set_id: ID of the set
+            visible: Whether the set should be visible
+        """
+        for aset in self._annotation_sets:
+            if aset["id"] == set_id:
+                aset["visible"] = visible
+                self._save_annotation_sets()
+                self.annotationSetsChanged.emit()
+                # If in merged view, reload annotations
+                if self._show_all_sets and self._current_file:
+                    self._load_annotations(self._current_file)
+                    self.annotationsChanged.emit(self._current_file)
+                return
+    
+    def _get_default_set_name(self) -> str:
+        """Get the default name for a new annotation set (based on username)."""
+        return self._current_user
+    
+    def _get_color_for_set_name(self, name: str) -> str:
+        """
+        Get a consistent color for a set name.
+        
+        Args:
+            name: Set name
+            
+        Returns:
+            Color in hex format
+        """
+        # Use simple hash-based color assignment for consistency
+        colors = [
+            "#3498db",  # blue
+            "#2ecc71",  # green
+            "#e74c3c",  # red
+            "#f39c12",  # orange
+            "#9b59b6",  # purple
+            "#1abc9c",  # teal
+            "#e67e22",  # dark orange
+        ]
+        # Hash the name to get consistent color
+        hash_val = sum(ord(c) for c in name)
+        return colors[hash_val % len(colors)]
+    
     # ========== Internal methods ==========
     
     def _get_annotation_file_path(self, audio_file_path: str) -> Path:
@@ -736,3 +956,107 @@ class AnnotationManager(QObject):
                 f.write(f"- **User:** {annotation.get('user', 'unknown')}\n")
                 f.write(f"\n{annotation.get('text', '')}\n\n")
                 f.write("---\n\n")
+    
+    # ========== Annotation Sets Persistence ==========
+    
+    def _get_annotation_sets_file_path(self) -> Optional[Path]:
+        """Get the path to the annotation sets file for current directory."""
+        if not self._current_directory:
+            return None
+        # Use username-specific file for multi-user support
+        return self._current_directory / f".{self._current_user}_notes.json"
+    
+    def _load_annotation_sets(self) -> None:
+        """Load annotation sets from disk."""
+        sets_file = self._get_annotation_sets_file_path()
+        if not sets_file or not sets_file.exists():
+            # Create default set if no file exists
+            self._create_default_set()
+            return
+        
+        try:
+            with open(sets_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Check if it's the new multi-set format
+            if isinstance(data, dict) and "annotation_sets" in data:
+                self._annotation_sets = data["annotation_sets"]
+                if not self._annotation_sets:
+                    self._create_default_set()
+                else:
+                    # Set current set to saved one or first available
+                    self._current_set_id = data.get("current_set_id")
+                    if not self._current_set_id or not any(s["id"] == self._current_set_id for s in self._annotation_sets):
+                        self._current_set_id = self._annotation_sets[0]["id"]
+            else:
+                # Legacy single-set format - convert to multi-set
+                self._convert_legacy_to_multi_set(data)
+        
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading annotation sets: {e}")
+            self._create_default_set()
+        
+        self.annotationSetsChanged.emit()
+        if self._current_set_id:
+            self.currentSetChanged.emit(self._current_set_id)
+    
+    def _save_annotation_sets(self) -> None:
+        """Save annotation sets to disk."""
+        sets_file = self._get_annotation_sets_file_path()
+        if not sets_file:
+            return
+        
+        try:
+            data = {
+                "annotation_sets": self._annotation_sets,
+                "current_set_id": self._current_set_id
+            }
+            
+            with open(sets_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        except IOError as e:
+            print(f"Error saving annotation sets: {e}")
+            self.errorOccurred.emit(f"Failed to save annotation sets: {e}")
+    
+    def _create_default_set(self) -> None:
+        """Create a default annotation set."""
+        set_id = uuid.uuid4().hex[:8]
+        set_name = self._get_default_set_name()
+        color = self._get_color_for_set_name(set_name)
+        
+        default_set = {
+            "id": set_id,
+            "name": set_name,
+            "color": color,
+            "visible": True,
+            "files": {}
+        }
+        
+        self._annotation_sets = [default_set]
+        self._current_set_id = set_id
+        self._save_annotation_sets()
+    
+    def _convert_legacy_to_multi_set(self, legacy_data: Dict) -> None:
+        """
+        Convert legacy single-set annotation format to multi-set format.
+        
+        Args:
+            legacy_data: Legacy annotation data
+        """
+        # Create a set from legacy data
+        set_id = uuid.uuid4().hex[:8]
+        set_name = self._get_default_set_name()
+        color = self._get_color_for_set_name(set_name)
+        
+        new_set = {
+            "id": set_id,
+            "name": set_name,
+            "color": color,
+            "visible": True,
+            "files": legacy_data.get("files", {}) if isinstance(legacy_data, dict) else {}
+        }
+        
+        self._annotation_sets = [new_set]
+        self._current_set_id = set_id
+        self._save_annotation_sets()
