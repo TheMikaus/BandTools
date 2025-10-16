@@ -490,6 +490,23 @@ Item {
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
+                        
+                        // Duration column header
+                        Rectangle {
+                            Layout.preferredWidth: 80
+                            height: parent.height
+                            color: "transparent"
+                            
+                            Label {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                text: "Duration"
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.bold: true
+                                color: Theme.textColor
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
                     }
                 }
                 
@@ -593,6 +610,15 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 200
                                 elide: Text.ElideMiddle
+                            }
+                            
+                            // Duration
+                            Label {
+                                text: formatDuration(model.duration || 0)
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                Layout.preferredWidth: 80
+                                horizontalAlignment: Text.AlignRight
                             }
                         }
                         

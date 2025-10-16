@@ -136,12 +136,15 @@ class FileListModel(QAbstractListModel):
                     if duration_ms == 0:
                         duration_ms = self._file_manager.getAudioDuration(file_path)
                 
-                # Get provided name from .provided_names.json if available
+                # Always use actual filename for display
                 display_name = path.name
+                
+                # Get library/song name from provided names (from fingerprinting)
+                library_name = ""
                 if self._file_manager is not None:
                     provided_name = self._file_manager.getProvidedName(file_path)
                     if provided_name:
-                        display_name = provided_name
+                        library_name = provided_name
                 
                 # Get best/partial take status
                 is_best_take = False
@@ -154,9 +157,6 @@ class FileListModel(QAbstractListModel):
                 bpm = 0
                 if self._tempo_manager is not None:
                     bpm = self._tempo_manager.getBPM(path.name)
-                
-                # Get library name (folder name)
-                library_name = path.parent.name if path.parent else ""
                 
                 # Check for important annotations
                 has_important_annotation = False

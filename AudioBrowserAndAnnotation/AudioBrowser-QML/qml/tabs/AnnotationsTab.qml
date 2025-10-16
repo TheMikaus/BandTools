@@ -399,7 +399,8 @@ Item {
         
         function onCurrentFileChanged(path) {
             if (path !== "") {
-                waveformDisplay.setFilePath(path)
+                // TODO: Re-enable when WaveformDisplay is added to this tab
+                // waveformDisplay.setFilePath(path)
                 annotationManager.setCurrentFile(path)
                 updateUserFilter()  // Update user list when file changes
                 refreshAnnotations()
@@ -407,7 +408,8 @@ Item {
                 // Set BPM for tempo markers
                 var fileName = fileManager.getFileName(path)
                 var bpm = tempoManager.getBPM(fileName)
-                waveformDisplay.bpm = bpm
+                // TODO: Re-enable when WaveformDisplay is added to this tab
+                // waveformDisplay.bpm = bpm
             }
         }
     }
@@ -453,7 +455,8 @@ Item {
             if (currentPath !== "") {
                 var fileName = fileManager.getFileName(currentPath)
                 var bpm = tempoManager.getBPM(fileName)
-                waveformDisplay.bpm = bpm
+                // TODO: Re-enable when WaveformDisplay is added to this tab
+                // waveformDisplay.bpm = bpm
             }
         }
     }
