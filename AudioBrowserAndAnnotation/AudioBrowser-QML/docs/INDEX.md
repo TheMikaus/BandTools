@@ -28,6 +28,7 @@ End-user documentation and how-to guides:
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
 - [SPECTROGRAM_USER_GUIDE.md](user_guides/SPECTROGRAM_USER_GUIDE.md) - Spectrogram feature guide (Issue 7)
 - [WAVEFORM_GUIDE.md](user_guides/WAVEFORM_GUIDE.md) - Waveform display features
+- [WAVEFORM_AND_PLAYBACK_GUIDE.md](user_guides/WAVEFORM_AND_PLAYBACK_GUIDE.md) - **NEW**: Waveform display and playback user guide
 - [WEBDAV_SYNC_SETUP.md](user_guides/WEBDAV_SYNC_SETUP.md) - **NEW**: WebDAV/Nextcloud sync setup guide
 
 ### Technical Documentation (`technical/`)
@@ -58,6 +59,7 @@ Developer and technical documentation:
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
 - [WAVEFORM_VIEW_PROPERTY_FIX.md](technical/WAVEFORM_VIEW_PROPERTY_FIX.md) - WaveformView peaks property type fix
+- [WAVEFORM_AND_PLAYBACK_FIXES.md](technical/WAVEFORM_AND_PLAYBACK_FIXES.md) - **NEW**: Waveform display and playback fixes
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
 - [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
