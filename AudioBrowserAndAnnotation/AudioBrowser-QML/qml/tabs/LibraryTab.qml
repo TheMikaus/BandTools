@@ -16,6 +16,10 @@ Item {
     property bool filterBestTakes: false
     property bool filterPartialTakes: false
     
+    // Signals for context menu actions that need to switch tabs
+    signal requestAnnotationTab(string filePath)
+    signal requestClipsTab(string filePath)
+    
     // Functions accessible from outside
     function openFolderDialog() {
         folderDialog.open()
@@ -789,14 +793,25 @@ Item {
         id: contextMenu
         
         onAnnotationRequested: {
-            // Switch to Annotations tab
-            // This will be triggered from the parent (main.qml)
-            console.log("Annotation requested for:", contextMenu.filePath)
+            // Emit signal to request switching to Annotations tab
+            // and load the file if different from current
+            if (contextMenu.filePath && audioEngine) {
+                if (audioEngine.getCurrentFile() !== contextMenu.filePath) {
+                    audioEngine.loadAndPlay(contextMenu.filePath)
+                }
+            }
+            libraryTab.requestAnnotationTab(contextMenu.filePath)
         }
         
         onClipRequested: {
-            // Switch to Clips tab
-            console.log("Clip requested for:", contextMenu.filePath)
+            // Emit signal to request switching to Clips tab
+            // and load the file if different from current
+            if (contextMenu.filePath && audioEngine) {
+                if (audioEngine.getCurrentFile() !== contextMenu.filePath) {
+                    audioEngine.loadAndPlay(contextMenu.filePath)
+                }
+            }
+            libraryTab.requestClipsTab(contextMenu.filePath)
         }
         
         onPropertiesRequested: {
