@@ -899,15 +899,7 @@ class FileManager(QObject):
         except Exception as e:
             print(f"Error caching duration: {e}")
     
-    @pyqtSlot(str, result=int)
-            if stem in duration_cache:
-                return duration_cache[stem]
-                
-        except Exception as e:
-            print(f"Error getting cached duration: {e}")
-        
-        return 0
-    
+    @pyqtSlot(str, result=bool)
     # ========== Best/Partial Take Tracking ==========
     
     def _get_takes_file(self, directory: Path) -> Path:
