@@ -5,6 +5,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **AudioBrowser-QML: ColorManager Null Reference Errors** - Fixed TypeError exceptions in dialog QML files
+  - Added null safety checks to all `colorManager.getColor()` calls in BackupSelectionDialog.qml and AutoGenerationSettingsDialog.qml
+  - Fixed 11 instances where dialogs would crash with "Cannot call method 'getColor' of null" during initialization
+  - Applied defensive pattern: `colorManager ? colorManager.getColor("color_name") : "#fallback_color"`
+  - Ensures dialogs work correctly even during QML parsing phase before context properties are fully initialized
+  - Scanned all 41 QML files to verify no other unsafe calls remain
 - **AudioBrowser-QML: Mutagen Auto-Installation** - Fixed "No module named 'mutagen'" errors for MP3 metadata extraction
   - Added `_ensure_import()` function to backend/file_manager.py following the repository's auto-install pattern
   - Added `HAVE_MUTAGEN` flag at module level that auto-installs mutagen on first import
