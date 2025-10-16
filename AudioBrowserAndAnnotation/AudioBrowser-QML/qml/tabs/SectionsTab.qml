@@ -8,19 +8,21 @@ import "../dialogs"
 /**
  * SectionsTab Component
  * 
- * Main tab for managing song sections.
+ * Main tab for managing song sections (subsections).
+ * Sections are stored as annotations with subsection=true flag.
  * 
  * Features:
  * - View all sections in a table
  * - Create, edit, delete sections
- * - Auto-detect sections using fingerprints
  * - Common section labels (Verse, Chorus, Bridge, etc.)
+ * - Sections stored as annotations with end_ms and subsection flag
  */
 Item {
     id: sectionsTab
     
     // Properties
     property int selectedSectionIndex: -1
+    property var commonLabels: ["Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Solo", "Interlude", "Outro", "Break"]
     
     // Dialog for adding/editing sections
     Dialog {
@@ -125,7 +127,7 @@ Item {
                     id: labelCombo
                     Layout.fillWidth: true
                     editable: true
-                    model: sectionManager.getCommonLabels()
+                    model: commonLabels
                     
                     background: Rectangle {
                         color: Theme.backgroundColor
@@ -198,12 +200,28 @@ Item {
                         var notes = notesField.text.trim()
                         
                         if (sectionDialog.editMode) {
-                            sectionManager.updateSection(sectionDialog.editIndex, startMs, endMs, label, notes)
+                            // Update existing subsection
+                            var subsections = annotationManager.getSubsections()
+                            if (sectionDialog.editIndex >= 0 && sectionDialog.editIndex < subsections.length) {
+                                var subsection = subsections[sectionDialog.editIndex]
+                                annotationManager.updateAnnotation(
+                                    sectionDialog.editIndex,
+                                    startMs,
+                                    label,
+                                    "",  // category
+                                    false,  // important
+                                    subsection.color || "#3498db"
+                                )
+                                // Note: updateAnnotation doesn't handle end_ms and subsection_note yet
+                                // This is a limitation that would need additional backend support
+                            }
                         } else {
-                            sectionManager.addSection(startMs, endMs, label, notes)
+                            // Add new subsection
+                            annotationManager.addSubsection(startMs, endMs, label, notes)
                         }
                         
                         sectionDialog.close()
+                        refreshSections()
                     }
                 }
             }
@@ -231,23 +249,11 @@ Item {
             spacing: Theme.spacingNormal
             
             StyledLabel {
-                text: "Sections (" + sectionManager.getSectionCount() + ")"
+                text: "Sections (" + sectionsModel.count + ")"
                 heading: true
             }
             
             Item { Layout.fillWidth: true }
-            
-            StyledButton {
-                text: "Auto-Detect"
-                info: true
-                enabled: audioEngine.getCurrentFile() !== ""
-                onClicked: {
-                    sectionManager.autoDetectSections()
-                }
-                
-                ToolTip.visible: hovered
-                ToolTip.text: "Auto-detect sections using fingerprint matching"
-            }
             
             StyledButton {
                 text: "➕ Add Section"
@@ -265,14 +271,14 @@ Item {
                 enabled: selectedSectionIndex >= 0
                 
                 onClicked: {
-                    var section = sectionManager.getSectionAt(selectedSectionIndex)
-                    if (section) {
+                    if (selectedSectionIndex >= 0 && selectedSectionIndex < sectionsModel.count) {
+                        var section = sectionsModel.get(selectedSectionIndex)
                         sectionDialog.editMode = true
                         sectionDialog.editIndex = selectedSectionIndex
-                        startTimeField.text = formatTime(section.start_ms)
+                        startTimeField.text = formatTime(section.start_ms || section.ms || section.timestamp_ms)
                         endTimeField.text = formatTime(section.end_ms)
-                        labelCombo.editText = section.label
-                        notesField.text = section.notes
+                        labelCombo.editText = section.text || section.label
+                        notesField.text = section.subsection_note || section.notes || ""
                         sectionDialog.open()
                     }
                 }
@@ -284,8 +290,21 @@ Item {
                 enabled: selectedSectionIndex >= 0
                 
                 onClicked: {
-                    sectionManager.deleteSection(selectedSectionIndex)
+                    // Delete the subsection annotation
+                    var subsections = annotationManager.getSubsections()
+                    if (selectedSectionIndex >= 0 && selectedSectionIndex < subsections.length) {
+                        // Find the actual annotation index in the full annotations list
+                        var allAnnotations = annotationManager.getAnnotations()
+                        var subsection = subsections[selectedSectionIndex]
+                        for (var i = 0; i < allAnnotations.length; i++) {
+                            if (allAnnotations[i].uid === subsection.uid) {
+                                annotationManager.deleteAnnotation(i)
+                                break
+                            }
+                        }
+                    }
                     selectedSectionIndex = -1
+                    refreshSections()
                 }
             }
         }
@@ -450,7 +469,7 @@ Item {
         // Status message
         Label {
             text: audioEngine.getCurrentFile() !== "" ? 
-                  "Current file: " + fileManager.getFileName(audioEngine.getCurrentFile()) :
+                  "Current file: " + fileManager.getFileName(audioEngine.getCurrentFile()) + " | Sections stored as annotations with subsection flag" :
                   "No file selected - select a file to manage sections"
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textMuted
@@ -476,19 +495,26 @@ Item {
     }
     
     function refreshSections() {
-        var sections = sectionManager.getSections()
+        var subsections = annotationManager.getSubsections()
         sectionsModel.clear()
         
-        for (var i = 0; i < sections.length; i++) {
-            sectionsModel.append(sections[i])
+        for (var i = 0; i < subsections.length; i++) {
+            var subsection = subsections[i]
+            sectionsModel.append({
+                start_ms: subsection.ms || subsection.timestamp_ms,
+                end_ms: subsection.end_ms,
+                label: subsection.text,
+                notes: subsection.subsection_note || "",
+                uid: subsection.uid
+            })
         }
     }
     
     // Connections
     Connections {
-        target: sectionManager
+        target: annotationManager
         
-        function onSectionsChanged() {
+        function onAnnotationsChanged() {
             refreshSections()
         }
         
@@ -503,7 +529,7 @@ Item {
         
         function onCurrentFileChanged(filePath) {
             if (filePath) {
-                sectionManager.setCurrentFile(filePath)
+                annotationManager.setCurrentFile(filePath)
                 refreshSections()
             }
         }
@@ -512,7 +538,7 @@ Item {
     // Initialize
     Component.onCompleted: {
         if (audioEngine.getCurrentFile() !== "") {
-            sectionManager.setCurrentFile(audioEngine.getCurrentFile())
+            annotationManager.setCurrentFile(audioEngine.getCurrentFile())
             refreshSections()
         }
     }

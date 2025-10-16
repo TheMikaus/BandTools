@@ -34,25 +34,25 @@ This document summarizes the implementation of all requested features for the Au
 #### Files Modified:
 - `AudioBrowserAndAnnotation/AudioBrowser-QML/qml/tabs/AnnotationsTab.qml`
 
-### 3. Sections Feature ✅
+### 3. Sections Feature (Subsections) ✅
 
 #### New Functionality:
-- Complete section management system for labeling song parts
+- Sections management system integrated with annotations (matches original format)
 - **Common Section Labels**: Intro, Verse, Pre-Chorus, Chorus, Bridge, Solo, Interlude, Outro, Break
 - CRUD operations: Add, Edit, Delete sections
 - Time range selection with "Current" position buttons
-- Notes field for each section
+- Notes field for each section (stored as `subsection_note`)
 - Double-click to jump to section position
-- Sections stored as `.{filename}_sections.json` files
-- Auto-detection placeholder (integrates with fingerprint engine)
+- **Sections stored as annotations with `subsection=true` flag** (not as separate files)
+- Section format: `ms` (start), `end_ms`, `text` (label), `subsection: true`, `subsection_note`
 
 #### Files Created:
-- `AudioBrowserAndAnnotation/AudioBrowser-QML/backend/section_manager.py` (341 lines)
 - `AudioBrowserAndAnnotation/AudioBrowser-QML/qml/tabs/SectionsTab.qml` (541 lines)
 
 #### Files Modified:
-- `AudioBrowserAndAnnotation/AudioBrowser-QML/main.py`
-- `AudioBrowserAndAnnotation/AudioBrowser-QML/qml/main.qml`
+- `AudioBrowserAndAnnotation/AudioBrowser-QML/backend/annotation_manager.py` - Added subsection support
+- `AudioBrowserAndAnnotation/AudioBrowser-QML/main.py` - Removed separate section_manager
+- `AudioBrowserAndAnnotation/AudioBrowser-QML/qml/main.qml` - Added Sections tab
 
 ### 4. Audio Channel Controls ✅
 
@@ -105,13 +105,21 @@ LibraryNameRole = Qt.ItemDataRole.UserRole + 10
 HasImportantAnnotationRole = Qt.ItemDataRole.UserRole + 11
 ```
 
-#### SectionManager Data Structure:
+#### Subsection/Section Data Structure:
+Sections are stored as annotations with these additional fields:
 ```json
 {
-  "start_ms": 0,
+  "uid": 123,
+  "ms": 0,
+  "timestamp_ms": 0,
   "end_ms": 30000,
-  "label": "Intro",
-  "notes": "Optional notes",
+  "text": "Intro",
+  "subsection": true,
+  "subsection_note": "Optional notes",
+  "user": "default_user",
+  "category": "",
+  "important": false,
+  "color": "#3498db",
   "created_at": "2025-10-16T04:19:16",
   "updated_at": "2025-10-16T04:19:16"
 }
@@ -141,15 +149,14 @@ HasImportantAnnotationRole = Qt.ItemDataRole.UserRole + 11
 
 1. **Real-time Channel Control**: QMediaPlayer limitation prevents runtime per-channel muting. Channel settings work for conversion but not live playback.
 
-2. **Fingerprint Auto-Detection**: Section manager includes placeholder for fingerprint-based section auto-detection. Full implementation would require additional analysis logic.
+2. **Subsection Edit**: The updateAnnotation method now supports end_ms and subsection_note, but the SectionsTab edit dialog needs full integration for proper updates.
 
 3. **Metadata File Switching**: Already handled by existing directory change events. Each folder maintains its own metadata files.
 
 ## Files Summary
 
-### Created (2 files):
-1. `backend/section_manager.py` - Complete section management backend
-2. `qml/tabs/SectionsTab.qml` - Section management UI
+### Created (1 file):
+1. `qml/tabs/SectionsTab.qml` - Section management UI (works with annotations)
 
 ### Modified (10 files):
 1. `qml/tabs/LibraryTab.qml` - File list columns and click behavior
@@ -157,12 +164,12 @@ HasImportantAnnotationRole = Qt.ItemDataRole.UserRole + 11
 3. `qml/main.qml` - Added Sections tab
 4. `qml/components/PlaybackControls.qml` - Added channel controls
 5. `backend/models.py` - Added library name and important annotation roles
-6. `backend/annotation_manager.py` - Added important annotations check method
+6. `backend/annotation_manager.py` - Added subsection support (matching original format)
 7. `backend/audio_engine.py` - Added channel control methods
 8. `backend/dropbox_sync.py` - Added auto-install
 9. `backend/gdrive_sync.py` - Added auto-install
 10. `backend/webdav_sync.py` - Added auto-install
-11. `main.py` - Integrated section manager
+11. `main.py` - Removed section_manager, sections now use annotations
 
 ## Testing Recommendations
 

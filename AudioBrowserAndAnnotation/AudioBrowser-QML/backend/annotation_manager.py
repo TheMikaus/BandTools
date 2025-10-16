@@ -107,16 +107,21 @@ class AnnotationManager(QObject):
     
     @pyqtSlot(int, str, str, bool, str)
     def addAnnotation(self, timestamp_ms: int, text: str, category: str = "",
-                     important: bool = False, color: str = "#3498db") -> None:
+                     important: bool = False, color: str = "#3498db", 
+                     end_ms: int = None, subsection: bool = False, 
+                     subsection_note: str = "") -> None:
         """
         Add a new annotation to the current file in the current set.
         
         Args:
-            timestamp_ms: Timestamp in milliseconds
+            timestamp_ms: Timestamp in milliseconds (start time)
             text: Annotation text
             category: Category (e.g., "timing", "energy")
             important: Whether this is an important annotation
             color: Color for the marker (hex format)
+            end_ms: End timestamp for subsections (optional)
+            subsection: Whether this is a subsection/section
+            subsection_note: Optional note for subsection
         """
         if not self._current_file:
             self.errorOccurred.emit("No file selected")
@@ -135,6 +140,7 @@ class AnnotationManager(QObject):
         annotation = {
             "uid": self._next_uid,
             "timestamp_ms": timestamp_ms,
+            "ms": timestamp_ms,  # Also store as 'ms' for compatibility
             "text": text.strip(),
             "category": category,
             "important": important,
@@ -143,6 +149,14 @@ class AnnotationManager(QObject):
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
+        
+        # Add subsection-specific fields if this is a subsection
+        if subsection and end_ms is not None:
+            annotation["end_ms"] = end_ms
+            annotation["subsection"] = True
+            if subsection_note:
+                annotation["subsection_note"] = subsection_note
+        
         self._next_uid += 1
         
         # Get file name from path
@@ -169,20 +183,23 @@ class AnnotationManager(QObject):
         self.annotationAdded.emit(self._current_file, annotation)
         self.annotationsChanged.emit(self._current_file)
     
-    @pyqtSlot(int, int, str, str, bool, str)
+    @pyqtSlot(int, int, str, str, bool, str, int, str)
     def updateAnnotation(self, index: int, timestamp_ms: int, text: str,
                         category: str = "", important: bool = False,
-                        color: str = "#3498db") -> None:
+                        color: str = "#3498db", end_ms: int = None, 
+                        subsection_note: str = "") -> None:
         """
         Update an existing annotation.
         
         Args:
             index: Index of the annotation to update
-            timestamp_ms: New timestamp in milliseconds
+            timestamp_ms: New timestamp in milliseconds (start time)
             text: New annotation text
             category: New category
             important: New importance flag
             color: New color
+            end_ms: End timestamp for subsections (optional)
+            subsection_note: Note for subsection (optional)
         """
         if not self._current_file:
             self.errorOccurred.emit("No file selected")
@@ -235,11 +252,18 @@ class AnnotationManager(QObject):
         
         # Apply updates
         annotation["timestamp_ms"] = timestamp_ms
+        annotation["ms"] = timestamp_ms  # Keep ms field for compatibility
         annotation["text"] = text.strip()
         annotation["category"] = category
         annotation["important"] = important
         annotation["color"] = color
         annotation["updated_at"] = datetime.now().isoformat()
+        
+        # Update subsection fields if provided
+        if end_ms is not None:
+            annotation["end_ms"] = end_ms
+        if subsection_note:
+            annotation["subsection_note"] = subsection_note
         
         # Re-sort by timestamp
         annotations.sort(key=lambda a: a["timestamp_ms"])
@@ -573,6 +597,44 @@ class AnnotationManager(QObject):
         
         annotations = self._annotations.get(file_path, [])
         return [a for a in annotations if a.get("important", False)]
+    
+    @pyqtSlot(result=list)
+    def getSubsections(self) -> List[Dict[str, Any]]:
+        """
+        Get all subsections (sections) for the current file.
+        Subsections are annotations with subsection=True and end_ms set.
+        
+        Returns:
+            List of subsection annotations
+        """
+        if not self._current_file:
+            return []
+        
+        # Get all annotations (respecting current set or merged view)
+        annotations = self.getAnnotations()
+        return [a for a in annotations if a.get("subsection", False) and a.get("end_ms") is not None]
+    
+    @pyqtSlot(int, int, str, str)
+    def addSubsection(self, start_ms: int, end_ms: int, label: str, note: str = "") -> None:
+        """
+        Add a new subsection (section) to the current file.
+        
+        Args:
+            start_ms: Start time in milliseconds
+            end_ms: End time in milliseconds
+            label: Section label (e.g., "Verse", "Chorus")
+            note: Optional note about the subsection
+        """
+        self.addAnnotation(
+            timestamp_ms=start_ms,
+            text=label,
+            category="",
+            important=False,
+            color="#3498db",
+            end_ms=end_ms,
+            subsection=True,
+            subsection_note=note
+        )
     
     @pyqtSlot(result=list)
     def getCategories(self) -> List[str]:

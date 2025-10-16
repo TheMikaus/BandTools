@@ -83,7 +83,6 @@ from backend.waveform_engine import WaveformEngine
 from backend.waveform_view import WaveformView
 from backend.annotation_manager import AnnotationManager
 from backend.clip_manager import ClipManager
-from backend.section_manager import SectionManager
 from backend.folder_notes_manager import FolderNotesManager
 from backend.batch_operations import BatchOperations
 from backend.practice_statistics import PracticeStatistics
@@ -198,7 +197,6 @@ def main():
     waveform_engine = safe_create("WaveformEngine", WaveformEngine)
     annotation_manager = safe_create("AnnotationManager", AnnotationManager)
     clip_manager = safe_create("ClipManager", ClipManager)
-    section_manager = safe_create("SectionManager", SectionManager)
     folder_notes_manager = safe_create("FolderNotesManager", FolderNotesManager)
     batch_operations = safe_create("BatchOperations", BatchOperations)
     practice_statistics = safe_create("PracticeStatistics", PracticeStatistics)
@@ -278,15 +276,6 @@ def main():
             annotation_manager.setCurrentDirectory(Path(directory))
     file_manager.currentDirectoryChanged.connect(update_annotation_manager_directory)
     
-    # Connect section manager to file manager for directory changes
-    def update_section_manager_directory(directory):
-        if directory:
-            section_manager.setCurrentDirectory(Path(directory))
-    file_manager.currentDirectoryChanged.connect(update_section_manager_directory)
-    
-    # Connect section manager to fingerprint engine for auto-detection
-    section_manager.setFingerprintEngine(fingerprint_engine)
-    
     # Connect fingerprint engine to file manager
     file_manager.currentDirectoryChanged.connect(fingerprint_engine.setCurrentDirectory)
     
@@ -332,7 +321,6 @@ def main():
     ctx.setContextProperty("waveformEngine", waveform_engine)
     ctx.setContextProperty("annotationManager", annotation_manager)
     ctx.setContextProperty("clipManager", clip_manager)
-    ctx.setContextProperty("sectionManager", section_manager)
     ctx.setContextProperty("folderNotesManager", folder_notes_manager)
     ctx.setContextProperty("batchOperations", batch_operations)
     ctx.setContextProperty("practiceStatistics", practice_statistics)
