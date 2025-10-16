@@ -556,6 +556,24 @@ class AnnotationManager(QObject):
         annotations = self._annotations.get(self._current_file, [])
         return [a for a in annotations if a.get("important", False)]
     
+    def getImportantAnnotationsForFile(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Get all important annotations for a specific file.
+        This is used by FileListModel to show important annotation indicator.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            List of important annotations for the file
+        """
+        # Load annotations if not already loaded
+        if file_path not in self._annotations:
+            self._load_annotations(file_path)
+        
+        annotations = self._annotations.get(file_path, [])
+        return [a for a in annotations if a.get("important", False)]
+    
     @pyqtSlot(result=list)
     def getCategories(self) -> List[str]:
         """

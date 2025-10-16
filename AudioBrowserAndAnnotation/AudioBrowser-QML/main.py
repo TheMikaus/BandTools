@@ -230,7 +230,7 @@ def main():
     config_dir = Path.home() / ".audiobrowser"
     sync_manager = safe_create("SyncManager", lambda: SyncManager(config_dir))
     log_viewer = safe_create("LogViewer", LogViewer)
-    file_list_model = safe_create("FileListModel", lambda: FileListModel(file_manager=file_manager, tempo_manager=tempo_manager))
+    file_list_model = safe_create("FileListModel", lambda: FileListModel(file_manager=file_manager, tempo_manager=tempo_manager, annotation_manager=annotation_manager))
     annotations_model = safe_create("AnnotationsModel", AnnotationsModel)
     view_model = safe_create("ApplicationViewModel", ApplicationViewModel)
     def update_tempo_directory(directory):

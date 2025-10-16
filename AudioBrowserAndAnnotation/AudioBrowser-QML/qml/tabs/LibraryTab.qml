@@ -441,16 +441,17 @@ Item {
                             }
                         }
                         
-                        // Name column header
+                        // File Name column header
                         Rectangle {
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 300
                             height: parent.height
                             color: "transparent"
                             
                             Label {
                                 anchors.fill: parent
                                 anchors.leftMargin: 4
-                                text: "Name " + (sortField === "filename" ? (sortAscending ? "▲" : "▼") : "")
+                                text: "File Name " + (sortField === "filename" ? (sortAscending ? "▲" : "▼") : "")
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
                                 color: sortField === "filename" ? Theme.accentPrimary : Theme.textColor
@@ -472,67 +473,21 @@ Item {
                             }
                         }
                         
-                        // Duration column header
+                        // Library Name column header
                         Rectangle {
-                            Layout.preferredWidth: 80
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 200
                             height: parent.height
                             color: "transparent"
                             
                             Label {
                                 anchors.fill: parent
-                                anchors.rightMargin: 4
-                                text: "Duration " + (sortField === "duration" ? (sortAscending ? "▲" : "▼") : "")
+                                anchors.leftMargin: 4
+                                text: "Library"
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
-                                color: sortField === "duration" ? Theme.accentPrimary : Theme.textColor
-                                horizontalAlignment: Text.AlignRight
+                                color: Theme.textColor
                                 verticalAlignment: Text.AlignVCenter
-                            }
-                            
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (sortField === "duration") {
-                                        sortAscending = !sortAscending
-                                    } else {
-                                        sortField = "duration"
-                                        sortAscending = false  // Default to longest first
-                                    }
-                                    fileListModel.sortBy(sortField, sortAscending)
-                                }
-                            }
-                        }
-                        
-                        // Size column header
-                        Rectangle {
-                            Layout.preferredWidth: 80
-                            height: parent.height
-                            color: "transparent"
-                            
-                            Label {
-                                anchors.fill: parent
-                                anchors.rightMargin: 4
-                                text: "Size " + (sortField === "filesize" ? (sortAscending ? "▲" : "▼") : "")
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.bold: true
-                                color: sortField === "filesize" ? Theme.accentPrimary : Theme.textColor
-                                horizontalAlignment: Text.AlignRight
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (sortField === "filesize") {
-                                        sortAscending = !sortAscending
-                                    } else {
-                                        sortField = "filesize"
-                                        sortAscending = false  // Default to largest first
-                                    }
-                                    fileListModel.sortBy(sortField, sortAscending)
-                                }
                             }
                         }
                     }
@@ -608,70 +563,36 @@ Item {
                                 }
                             }
                             
-                            // BPM field (editable)
-                            TextField {
-                                id: bpmField
-                                Layout.preferredWidth: 50
-                                text: model.bpm > 0 ? Math.round(model.bpm).toString() : ""
-                                placeholderText: "BPM"
-                                font.pixelSize: Theme.fontSizeSmall
-                                horizontalAlignment: Text.AlignCenter
-                                color: Theme.textColor
-                                background: Rectangle {
-                                    color: bpmField.activeFocus ? Theme.backgroundLight : "transparent"
-                                    border.color: bpmField.activeFocus ? Theme.accentPrimary : Theme.borderColor
-                                    border.width: 1
-                                    radius: 2
-                                }
-                                validator: IntValidator { bottom: 0; top: 300 }
-                                
-                                onEditingFinished: {
-                                    var bpmValue = parseFloat(text)
-                                    if (isNaN(bpmValue) || text === "") {
-                                        bpmValue = 0
-                                    }
-                                    // Get the base filename for the model
-                                    var fileName = model.filename
-                                    // Extract actual filename from path if needed
-                                    var filePath = model.filepath
-                                    var pathParts = filePath.split("/")
-                                    fileName = pathParts[pathParts.length - 1]
-                                    
-                                    tempoManager.setBPM(fileName, bpmValue)
-                                }
-                                
-                                // Prevent mouse area from capturing clicks
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onPressed: function(mouse) {
-                                        bpmField.forceActiveFocus()
-                                        mouse.accepted = false
-                                    }
-                                }
-                            }
-                            
-                            Label {
-                                text: model.filename
-                                font.pixelSize: Theme.fontSizeNormal
-                                color: Theme.textColor
+                            // File Name with important annotation indicator
+                            RowLayout {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 300
+                                spacing: 4
+                                
+                                Label {
+                                    text: model.hasImportantAnnotation ? "⭐" : ""
+                                    font.pixelSize: Theme.fontSizeNormal
+                                    color: Theme.accentWarning
+                                    visible: model.hasImportantAnnotation || false
+                                }
+                                
+                                Label {
+                                    text: model.filename
+                                    font.pixelSize: Theme.fontSizeNormal
+                                    color: Theme.textColor
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                            
+                            // Library Name (folder name)
+                            Label {
+                                text: model.libraryName || ""
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 200
                                 elide: Text.ElideMiddle
-                            }
-                            
-                            Label {
-                                text: formatDuration(model.duration)
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.textSecondary
-                                Layout.preferredWidth: 80
-                                horizontalAlignment: Text.AlignRight
-                            }
-                            
-                            Label {
-                                text: formatFileSize(model.filesize)
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.textSecondary
-                                Layout.preferredWidth: 80
-                                horizontalAlignment: Text.AlignRight
                             }
                         }
                         
@@ -691,20 +612,18 @@ Item {
                                     contextMenu.fileName = model.filename
                                     contextMenu.popup()
                                 } else {
-                                    // Load file on single left-click so it's ready to view in Annotations tab
+                                    // Single click: Load and play the file
                                     audioEngine.loadFile(model.filepath)
+                                    audioEngine.play()
                                 }
                             }
                             
                             onDoubleClicked: {
                                 console.log("Double-clicked file:", model.filepath)
+                                // Double click: Load, play, and switch to Annotations tab
                                 audioEngine.loadFile(model.filepath)
                                 audioEngine.play()
-                                
-                                // Auto-switch to Annotations tab if enabled
-                                if (autoSwitchCheckbox.checked) {
-                                    tabBar.currentIndex = 1  // Switch to Annotations tab
-                                }
+                                tabBar.currentIndex = 1  // Switch to Annotations tab
                             }
                         }
                     }

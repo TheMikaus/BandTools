@@ -18,134 +18,7 @@ Item {
         anchors.margins: Theme.spacingNormal
         spacing: Theme.spacingNormal
         
-        // Toolbar
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.toolbarHeight
-            color: Theme.backgroundLight
-            radius: Theme.radiusSmall
-            
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.spacingNormal
-                anchors.rightMargin: Theme.spacingNormal
-                spacing: Theme.spacingNormal
-                
-                Label {
-                    text: "Waveform Display"
-                    font.pixelSize: Theme.fontSizeNormal
-                    font.bold: true
-                    color: Theme.textColor
-                }
-                
-                Item { Layout.fillWidth: true }
-                
-                // Zoom controls
-                Label {
-                    text: "Zoom:"
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textMuted
-                }
-                
-                StyledButton {
-                    text: "−"
-                    Layout.preferredWidth: 32
-                    enabled: waveformDisplay.zoomLevel > 1.0
-                    onClicked: waveformDisplay.zoomOut()
-                }
-                
-                Label {
-                    text: Math.round(waveformDisplay.zoomLevel * 100) + "%"
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textColor
-                    Layout.preferredWidth: 50
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                
-                StyledButton {
-                    text: "+"
-                    Layout.preferredWidth: 32
-                    enabled: waveformDisplay.zoomLevel < 10.0
-                    onClicked: waveformDisplay.zoomIn()
-                }
-                
-                StyledButton {
-                    text: "Reset"
-                    Layout.preferredWidth: 60
-                    enabled: waveformDisplay.zoomLevel !== 1.0
-                    onClicked: waveformDisplay.resetZoom()
-                }
-                
-                Rectangle {
-                    width: 1
-                    height: parent.height * 0.6
-                    color: Theme.borderColor
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                
-                // Spectrogram toggle
-                CheckBox {
-                    id: spectrogramToggle
-                    text: "Spectrogram"
-                    checked: false
-                    onCheckedChanged: {
-                        waveformDisplay.setSpectrogramMode(checked)
-                    }
-                    
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Show spectrogram view (frequency analysis)"
-                    ToolTip.delay: 500
-                    
-                    contentItem: Text {
-                        text: spectrogramToggle.text
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textColor
-                        leftPadding: spectrogramToggle.indicator.width + spectrogramToggle.spacing
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-                
-                Rectangle {
-                    width: 1
-                    height: parent.height * 0.6
-                    color: Theme.borderColor
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                
-                StyledButton {
-                    text: "Generate"
-                    primary: true
-                    enabled: audioEngine.getCurrentFile() !== ""
-                    onClicked: {
-                        waveformDisplay.generateWaveform()
-                    }
-                }
-                
-                Label {
-                    text: audioEngine.getCurrentFile() !== "" ? 
-                          "Current: " + fileManager.getFileName(audioEngine.getCurrentFile()) :
-                          "No file selected"
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textMuted
-                }
-            }
-        }
-        
-        // Waveform display
-        WaveformDisplay {
-            id: waveformDisplay
-            Layout.fillWidth: true
-            Layout.preferredHeight: 250
-            Layout.minimumHeight: 200
-            autoGenerate: true
-            
-            onAnnotationDoubleClicked: function(annotationData) {
-                var index = annotationsTable.selectedRow
-                if (index >= 0) {
-                    openEditDialog(index)
-                }
-            }
-        }
+
         
         // Annotation table and controls
         Rectangle {
@@ -250,37 +123,9 @@ Item {
                     }
                     
                     Label {
-                        text: "User:"
+                        text: "User: All Users"
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textMuted
-                    }
-                    
-                    ComboBox {
-                        id: userFilter
-                        Layout.preferredWidth: 120
-                        
-                        background: Rectangle {
-                            color: Theme.backgroundColor
-                            border.color: Theme.borderColor
-                            border.width: 1
-                            radius: Theme.radiusSmall
-                        }
-                        
-                        contentItem: Text {
-                            text: userFilter.displayText
-                            color: Theme.textColor
-                            font.pixelSize: Theme.fontSizeSmall
-                            verticalAlignment: Text.AlignVCenter
-                            leftPadding: 8
-                        }
-                        
-                        onCurrentTextChanged: {
-                            refreshAnnotations()
-                        }
-                        
-                        Component.onCompleted: {
-                            updateUserFilter()
-                        }
                     }
                     
                     CheckBox {
@@ -863,12 +708,8 @@ Item {
     }
     
     function refreshAnnotations() {
+        // Get all annotations (no user filtering - always show all users)
         var annotations = annotationManager.getAnnotations()
-        
-        // Apply user filter first (if not "All Users")
-        if (userFilter.currentText !== "All Users" && userFilter.currentText !== "") {
-            annotations = annotationManager.getAnnotationsForUser(userFilter.currentText)
-        }
         
         // Apply filters
         if (showImportantOnly.checked) {
@@ -882,25 +723,12 @@ Item {
         }
         
         annotationsModel.setAnnotations(annotations)
-        waveformDisplay.update()  // Force waveform to redraw markers
-    }
-    
-    function updateUserFilter() {
-        // Get list of users from annotations
-        var users = annotationManager.getAllUsers()
-        var userList = ["All Users"]
-        for (var i = 0; i < users.length; i++) {
-            userList.push(users[i])
-        }
-        userFilter.model = userList
-        userFilter.currentIndex = 0
     }
     
     // Initialize
     Component.onCompleted: {
         if (audioEngine.getCurrentFile() !== "") {
             annotationManager.setCurrentFile(audioEngine.getCurrentFile())
-            updateUserFilter()
             refreshAnnotations()
         }
     }
