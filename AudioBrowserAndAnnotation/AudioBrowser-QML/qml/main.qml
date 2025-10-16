@@ -526,10 +526,33 @@ ApplicationWindow {
             
             LibraryTab {
                 id: libraryTab
+                
+                // Connect context menu signals to switch tabs
+                onRequestAnnotationTab: function(filePath) {
+                    // Switch to Annotations tab
+                    tabBar.currentIndex = 1
+                    // Open the add annotation dialog
+                    annotationsTab.openAddDialog()
+                }
+                
+                onRequestClipsTab: function(filePath) {
+                    // Switch to Clips tab
+                    tabBar.currentIndex = 2
+                    // Open the add clip dialog
+                    clipsTab.openAddClipDialog()
+                }
             }
             
             AnnotationsTab {
                 id: annotationsTab
+                
+                // Connect clip edit request signal
+                onRequestClipEdit: function(clipIndex) {
+                    // Switch to Clips tab
+                    tabBar.currentIndex = 2
+                    // Select and edit the clip
+                    clipsTab.selectAndEditClip(clipIndex)
+                }
             }
             
             ClipsTab {

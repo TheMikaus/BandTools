@@ -529,6 +529,46 @@ Item {
         console.log("Clip markers cleared");
     }
     
+    function openAddClipDialog() {
+        if (!audioEngine || audioEngine.getCurrentFile() === "") {
+            console.warn("No audio file loaded");
+            return;
+        }
+        
+        // Get current playback position for defaults
+        const currentPos = audioEngine.getPosition();
+        const duration = audioEngine.getDuration();
+        
+        // Default: 5 second clip from current position
+        const start = Math.min(currentPos, duration - 5000);
+        const end = Math.min(currentPos + 5000, duration);
+        
+        clipDialog.openDialog(false, -1, start, end, "", "");
+    }
+    
+    function selectAndEditClip(clipIndex) {
+        if (!clipManager || clipIndex < 0 || clipIndex >= clipManager.getClipCount()) {
+            console.warn("Invalid clip index:", clipIndex);
+            return;
+        }
+        
+        // Select the clip
+        selectedClipIndex = clipIndex;
+        
+        // Open edit dialog
+        const clip = clipManager.getClip(clipIndex);
+        if (clip) {
+            clipDialog.openDialog(
+                true,
+                clipIndex,
+                clip.start_ms,
+                clip.end_ms,
+                clip.name,
+                clip.notes
+            );
+        }
+    }
+    
     // ========== Connections ==========
     
     Connections {

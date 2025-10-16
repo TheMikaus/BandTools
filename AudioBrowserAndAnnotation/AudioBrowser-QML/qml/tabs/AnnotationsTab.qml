@@ -11,7 +11,10 @@ import "../styles"
  * Phase 2: Waveform visualization and annotation management
  */
 Item {
-    id: root
+    id: annotationsTab
+    
+    // Signals for cross-tab interactions
+    signal requestClipEdit(int clipIndex)
     
     ColumnLayout {
         anchors.fill: parent
@@ -33,6 +36,25 @@ Item {
                 var index = annotationManager.findAnnotationIndex(annotationData.timestamp_ms)
                 if (index >= 0) {
                     openEditDialog(index)
+                }
+            }
+            
+            onClipClicked: function(clipIndex) {
+                // When a clip marker is clicked, seek to clip start
+                if (clipManager && clipIndex >= 0) {
+                    var clip = clipManager.getClip(clipIndex)
+                    if (clip && audioEngine) {
+                        audioEngine.seek(clip.start_ms)
+                    }
+                }
+            }
+            
+            onClipDoubleClicked: function(clipIndex) {
+                // When a clip marker is double-clicked, switch to Clips tab and select/edit that clip
+                if (clipManager && clipIndex >= 0) {
+                    // Signal to main window to switch tabs
+                    // This will be handled by adding a signal to this tab
+                    annotationsTab.requestClipEdit(clipIndex)
                 }
             }
         }
