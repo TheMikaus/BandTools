@@ -135,7 +135,7 @@ Dialog {
                         wrapMode: Text.WordWrap
                         font.pointSize: 9
                         font.italic: true
-                        color: colorManager.getColor("text_dim")
+                        color: colorManager ? colorManager.getColor("text_dim") : "#808080"
                     }
                 }
             }
@@ -192,7 +192,7 @@ Dialog {
                             wrapMode: Text.WordWrap
                             font.pointSize: 8
                             font.italic: true
-                            color: colorManager.getColor("text_dim")
+                            color: colorManager ? colorManager.getColor("text_dim") : "#808080"
                             visible: !paginationCheckbox.checked
                         }
                     }
@@ -200,7 +200,7 @@ Dialog {
                     Rectangle {
                         Layout.fillWidth: true
                         height: 1
-                        color: colorManager.getColor("border")
+                        color: colorManager ? colorManager.getColor("border") : "#505050"
                     }
                     
                     // Parallel workers setting
@@ -251,7 +251,7 @@ Dialog {
                             wrapMode: Text.WordWrap
                             font.pointSize: 8
                             font.italic: true
-                            color: colorManager.getColor("text_dim")
+                            color: colorManager ? colorManager.getColor("text_dim") : "#808080"
                         }
                     }
                 }
@@ -261,8 +261,8 @@ Dialog {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: infoLayout.implicitHeight + 20
-                color: colorManager.getColor("info_bg")
-                border.color: colorManager.getColor("accent")
+                color: colorManager ? colorManager.getColor("info_bg") : "#1e3a5f"
+                border.color: colorManager ? colorManager.getColor("accent") : "#2563eb"
                 border.width: 1
                 radius: 4
                 
@@ -275,7 +275,7 @@ Dialog {
                     Label {
                         text: "ℹ️ Recommendations"
                         font.bold: true
-                        color: colorManager.getColor("accent")
+                        color: colorManager ? colorManager.getColor("accent") : "#2563eb"
                     }
                     
                     Label {
