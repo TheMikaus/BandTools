@@ -15,6 +15,7 @@ This directory contains all documentation for the AudioBrowser-QML application, 
 End-user documentation and how-to guides:
 
 - [ANNOTATION_GUIDE.md](user_guides/ANNOTATION_GUIDE.md) - Guide to using annotations
+- [ANNOTATION_SETS_GUIDE.md](user_guides/ANNOTATION_SETS_GUIDE.md) - **NEW**: Multi-annotation sets user guide
 - [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
 - [CLOUD_SYNC_SETUP.md](user_guides/CLOUD_SYNC_SETUP.md) - **NEW**: Multi-cloud sync overview and setup
 - [DROPBOX_SYNC_SETUP.md](user_guides/DROPBOX_SYNC_SETUP.md) - **NEW**: Dropbox sync setup guide
