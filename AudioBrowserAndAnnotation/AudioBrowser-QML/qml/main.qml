@@ -388,6 +388,25 @@ ApplicationWindow {
             }
         }
         
+        // Now Playing Panel
+        NowPlayingPanel {
+            id: nowPlayingPanel
+            
+            onAnnotationRequested: function(text) {
+                // Add annotation at current playback position
+                if (audioEngine && audioEngine.getCurrentFile()) {
+                    var timestamp = audioEngine.getPosition()
+                    if (annotationManager) {
+                        annotationManager.addAnnotation(timestamp, text, "General", false)
+                    }
+                    // Switch to annotations tab if auto-switch is enabled
+                    if (settingsManager && settingsManager.getAutoSwitchAnnotations()) {
+                        tabBar.currentIndex = 1
+                    }
+                }
+            }
+        }
+        
         // Tab bar
         TabBar {
             id: tabBar
@@ -527,25 +546,6 @@ ApplicationWindow {
             
             FingerprintsTab {
                 id: fingerprintsTab
-            }
-        }
-        
-        // Now Playing Panel
-        NowPlayingPanel {
-            id: nowPlayingPanel
-            
-            onAnnotationRequested: function(text) {
-                // Add annotation at current playback position
-                if (audioEngine && audioEngine.getCurrentFile()) {
-                    var timestamp = audioEngine.getPosition()
-                    if (annotationManager) {
-                        annotationManager.addAnnotation(timestamp, text, "General", false)
-                    }
-                    // Switch to annotations tab if auto-switch is enabled
-                    if (settingsManager && settingsManager.getAutoSwitchAnnotations()) {
-                        tabBar.currentIndex = 1
-                    }
-                }
             }
         }
         

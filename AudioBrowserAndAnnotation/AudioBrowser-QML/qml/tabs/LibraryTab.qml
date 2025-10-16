@@ -499,12 +499,12 @@ Item {
                             
                             Label {
                                 anchors.fill: parent
-                                anchors.leftMargin: 4
                                 text: "Duration"
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
                                 color: Theme.textColor
                                 verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
                             }
                         }
                     }
@@ -618,7 +618,7 @@ Item {
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textSecondary
                                 Layout.preferredWidth: 80
-                                horizontalAlignment: Text.AlignRight
+                                horizontalAlignment: Text.AlignHCenter
                             }
                         }
                         
@@ -806,6 +806,14 @@ Item {
             propertiesDialog.filePath = contextMenu.filePath
             propertiesDialog.open()
         }
+        
+        onEditLibraryNameRequested: {
+            // Show library name edit dialog
+            editLibraryNameDialog.filePath = contextMenu.filePath
+            editLibraryNameDialog.fileName = contextMenu.fileName
+            editLibraryNameDialog.currentLibraryName = fileManager.getProvidedName(contextMenu.filePath)
+            editLibraryNameDialog.open()
+        }
     }
     
     // ========== File Properties Dialog ==========
@@ -832,6 +840,93 @@ Item {
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
+        }
+        
+        background: Rectangle {
+            color: Theme.backgroundColor
+            border.color: Theme.borderColor
+            border.width: 1
+            radius: Theme.radiusSmall
+        }
+    }
+    
+    // ========== Edit Library Name Dialog ==========
+    
+    Dialog {
+        id: editLibraryNameDialog
+        title: "Edit Library Name"
+        modal: true
+        anchors.centerIn: parent
+        width: 450
+        
+        property string filePath: ""
+        property string fileName: ""
+        property string currentLibraryName: ""
+        
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        
+        ColumnLayout {
+            width: parent.width
+            spacing: Theme.spacingNormal
+            
+            Label {
+                text: "File: " + editLibraryNameDialog.fileName
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            
+            Label {
+                text: "Library Name (Song Title):"
+                color: Theme.textColor
+                font.pixelSize: Theme.fontSizeNormal
+            }
+            
+            TextField {
+                id: libraryNameField
+                Layout.fillWidth: true
+                placeholderText: "Enter library/song name..."
+                text: editLibraryNameDialog.currentLibraryName
+                font.pixelSize: Theme.fontSizeNormal
+                selectByMouse: true
+                
+                background: Rectangle {
+                    color: Theme.backgroundColor
+                    border.color: libraryNameField.activeFocus ? Theme.accentPrimary : Theme.borderColor
+                    border.width: 1
+                    radius: Theme.radiusSmall
+                }
+                
+                color: Theme.textColor
+                
+                Keys.onReturnPressed: editLibraryNameDialog.accept()
+            }
+            
+            Label {
+                text: "Tip: This name will be used to identify the song in your library."
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontSizeSmall
+                font.italic: true
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        
+        onAccepted: {
+            if (fileManager && filePath) {
+                fileManager.setProvidedName(filePath, libraryNameField.text)
+                // Refresh the file list
+                var dir = fileManager.getCurrentDirectory()
+                if (dir.length > 0) {
+                    fileManager.discoverAudioFiles(dir)
+                }
+            }
+        }
+        
+        onOpened: {
+            libraryNameField.forceActiveFocus()
+            libraryNameField.selectAll()
         }
         
         background: Rectangle {
