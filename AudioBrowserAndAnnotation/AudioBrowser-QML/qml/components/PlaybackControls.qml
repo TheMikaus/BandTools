@@ -38,16 +38,35 @@ Item {
                 id: prevButton
                 text: "⏮"
                 enabled: false
-                implicitWidth: 36
-                implicitHeight: 32
+                implicitWidth: 40
+                implicitHeight: 36
+                
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: parent.enabled ? (parent.hovered ? Theme.textColor : Theme.textSecondary) : Theme.textMuted
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             
             StyledButton {
                 id: playPauseButton
                 text: (audioEngine && audioEngine.getPlaybackState() === "playing") ? "⏸" : "▶"
                 primary: true
-                implicitWidth: 40
-                implicitHeight: 32
+                implicitWidth: 44
+                implicitHeight: 36
+                
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 20
+                    font.bold: true
+                    color: "#ffffff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                
                 onClicked: {
                     if (audioEngine) {
                         audioEngine.togglePlayPause()
@@ -58,8 +77,18 @@ Item {
             StyledButton {
                 id: stopButton
                 text: "⏹"
-                implicitWidth: 36
-                implicitHeight: 32
+                implicitWidth: 40
+                implicitHeight: 36
+                
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: parent.enabled ? (parent.hovered ? Theme.textColor : Theme.textSecondary) : Theme.textMuted
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                
                 onClicked: {
                     if (audioEngine) {
                         audioEngine.stop()
@@ -71,8 +100,17 @@ Item {
                 id: nextButton
                 text: "⏭"
                 enabled: false
-                implicitWidth: 36
-                implicitHeight: 32
+                implicitWidth: 40
+                implicitHeight: 36
+                
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: parent.enabled ? (parent.hovered ? Theme.textColor : Theme.textSecondary) : Theme.textMuted
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
         

@@ -18,7 +18,24 @@ Item {
         anchors.margins: Theme.spacingNormal
         spacing: Theme.spacingNormal
         
-
+        // Waveform display
+        WaveformDisplay {
+            id: waveformDisplay
+            Layout.fillWidth: true
+            Layout.preferredHeight: 150
+            Layout.minimumHeight: 100
+            
+            filePath: audioEngine ? audioEngine.getCurrentFile() : ""
+            autoGenerate: true
+            
+            onAnnotationDoubleClicked: function(annotationData) {
+                // Edit annotation when double-clicked on waveform marker
+                var index = annotationManager.findAnnotationIndex(annotationData.timestamp_ms)
+                if (index >= 0) {
+                    openEditDialog(index)
+                }
+            }
+        }
         
         // Annotation table and controls
         Rectangle {

@@ -752,6 +752,45 @@ class FileManager(QObject):
         
         return ""
     
+    @pyqtSlot(str, str)
+    def setProvidedName(self, file_path: str, provided_name: str) -> None:
+        """
+        Set the provided name for a file in metadata.
+        
+        Args:
+            file_path: Path to the audio file
+            provided_name: Library/song name to set (empty string to remove)
+        """
+        try:
+            import json
+            path = Path(file_path)
+            if not path.exists():
+                return
+            
+            directory = path.parent
+            names_file = directory / ".provided_names.json"
+            
+            # Load existing names
+            provided_names = self._load_provided_names(directory)
+            
+            # Update or remove the name
+            filename = path.name
+            if provided_name and provided_name.strip():
+                provided_names[filename] = provided_name.strip()
+            else:
+                # Remove if empty
+                provided_names.pop(filename, None)
+            
+            # Save back to file
+            with open(names_file, 'w', encoding='utf-8') as f:
+                json.dump(provided_names, f, indent=2, ensure_ascii=False)
+            
+            # Emit signal to refresh UI
+            self.filesChanged.emit()
+            
+        except Exception as e:
+            print(f"Error setting provided name: {e}")
+    
     @pyqtSlot(str, result=int)
     def getCachedDuration(self, file_path: str) -> int:
         """
@@ -778,6 +817,89 @@ class FileManager(QObject):
             
             # Try stem (without extension)
             stem = path.stem
+            if stem in duration_cache:
+                return duration_cache[stem]
+                
+        except Exception as e:
+            print(f"Error getting cached duration: {e}")
+        
+        return 0
+    
+    @pyqtSlot(str, result=int)
+    def extractDuration(self, file_path: str) -> int:
+        """
+        Extract duration from an audio file.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Duration in milliseconds, or 0 if extraction fails
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return 0
+            
+            # Try using mutagen to extract duration
+            try:
+                from mutagen import File as MutagenFile
+                audio = MutagenFile(str(path))
+                if audio and hasattr(audio.info, 'length'):
+                    duration_ms = int(audio.info.length * 1000)
+                    # Cache the duration
+                    self._cache_duration(file_path, duration_ms)
+                    return duration_ms
+            except Exception as e:
+                print(f"Mutagen extraction failed for {path.name}: {e}")
+            
+            # Fallback: try using wave module for WAV files
+            if path.suffix.lower() == '.wav':
+                try:
+                    import wave
+                    with wave.open(str(path), 'rb') as wav_file:
+                        frames = wav_file.getnframes()
+                        rate = wav_file.getframerate()
+                        duration_ms = int((frames / rate) * 1000)
+                        # Cache the duration
+                        self._cache_duration(file_path, duration_ms)
+                        return duration_ms
+                except Exception as e:
+                    print(f"Wave extraction failed for {path.name}: {e}")
+                    
+        except Exception as e:
+            print(f"Error extracting duration: {e}")
+        
+        return 0
+    
+    def _cache_duration(self, file_path: str, duration_ms: int) -> None:
+        """
+        Cache duration for a file in .duration_cache.json.
+        
+        Args:
+            file_path: Path to the audio file
+            duration_ms: Duration in milliseconds
+        """
+        try:
+            import json
+            path = Path(file_path)
+            directory = path.parent
+            cache_file = directory / ".duration_cache.json"
+            
+            # Load existing cache
+            duration_cache = self._load_duration_cache(directory)
+            
+            # Update cache
+            duration_cache[path.name] = duration_ms
+            
+            # Save back to file
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(duration_cache, f, indent=2)
+                
+        except Exception as e:
+            print(f"Error caching duration: {e}")
+    
+    @pyqtSlot(str, result=int)
             if stem in duration_cache:
                 return duration_cache[stem]
                 

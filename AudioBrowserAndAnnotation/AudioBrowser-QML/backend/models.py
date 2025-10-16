@@ -127,13 +127,13 @@ class FileListModel(QAbstractListModel):
                 path = Path(file_path)
                 
                 # Extract duration if file_manager is available
-                # Only use cached duration for performance - don't extract on-the-fly
                 duration_ms = 0
                 if self._file_manager is not None:
                     # Try to get cached duration from .duration_cache.json
                     duration_ms = self._file_manager.getCachedDuration(file_path)
-                    # Don't extract from audio file during initial load - this causes 10s delay
-                    # TODO: Extract durations in background thread after initial display
+                    # If not cached, extract it now
+                    if duration_ms == 0:
+                        duration_ms = self._file_manager.extractDuration(file_path)
                 
                 # Always use actual filename for display
                 display_name = path.name
