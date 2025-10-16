@@ -749,6 +749,11 @@ Item {
             populateFolderTree(directory)
         }
         
+        function onFilesDiscovered(files) {
+            // Update the file list model with discovered files
+            fileListModel.setFiles(files)
+        }
+        
         function onErrorOccurred(errorMessage) {
             console.error("File Manager Error:", errorMessage)
         }
