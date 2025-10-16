@@ -32,6 +32,11 @@ Rectangle {
     // Zoom control
     property real zoomLevel: 1.0  // 1.0 = normal, 2.0 = 2x zoom, etc.
     
+    // Handle filePath changes
+    onFilePathChanged: {
+        setFilePath(filePath)
+    }
+    
     // Waveform view
     Flickable {
         id: flickable
@@ -304,6 +309,20 @@ Rectangle {
         function onCurrentFileChanged(path) {
             if (autoGenerate && path !== "" && path === filePath) {
                 generateWaveform()
+            }
+        }
+    }
+    
+    // Timer to regularly update playback position
+    Timer {
+        id: positionUpdateTimer
+        interval: 50  // Update every 50ms for smooth animation
+        running: audioEngine && audioEngine.isPlaying()
+        repeat: true
+        
+        onTriggered: {
+            if (audioEngine) {
+                waveform.positionMs = audioEngine.getPosition()
             }
         }
     }

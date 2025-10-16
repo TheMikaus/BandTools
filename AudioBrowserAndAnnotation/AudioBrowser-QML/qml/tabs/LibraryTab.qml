@@ -639,16 +639,14 @@ Item {
                                     contextMenu.popup()
                                 } else {
                                     // Single click: Load and play the file
-                                    audioEngine.loadFile(model.filepath)
-                                    audioEngine.play()
+                                    audioEngine.loadAndPlay(model.filepath)
                                 }
                             }
                             
                             onDoubleClicked: {
                                 console.log("Double-clicked file:", model.filepath)
                                 // Double click: Load, play, and switch to Annotations tab
-                                audioEngine.loadFile(model.filepath)
-                                audioEngine.play()
+                                audioEngine.loadAndPlay(model.filepath)
                                 tabBar.currentIndex = 1  // Switch to Annotations tab
                             }
                         }

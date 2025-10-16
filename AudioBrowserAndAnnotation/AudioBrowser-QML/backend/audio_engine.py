@@ -44,6 +44,7 @@ class AudioEngine(QObject):
         self._current_file: Optional[Path] = None
         self._volume = 100
         self._playback_speed = 1.0
+        self._autoplay_pending = False  # Flag to track if we should play after loading
         
         # Channel control state
         self._channel_mode = "stereo"  # "stereo", "left", "right", "mono"
@@ -82,11 +83,35 @@ class AudioEngine(QObject):
                 return
             
             self._current_file = path
+            self._autoplay_pending = False  # Reset autoplay flag when explicitly loading
             self._player.setSource(QUrl.fromLocalFile(str(path)))
             self.currentFileChanged.emit(str(path))
             
         except Exception as e:
             self.errorOccurred.emit(f"Error loading file: {e}")
+    
+    @pyqtSlot(str)
+    def loadAndPlay(self, file_path: str) -> None:
+        """
+        Load an audio file and automatically play when ready.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            self._current_file = path
+            self._autoplay_pending = True  # Set flag to play when loaded
+            self._player.setSource(QUrl.fromLocalFile(str(path)))
+            self.currentFileChanged.emit(str(path))
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error loading file: {e}")
+            self._autoplay_pending = False
     
     @pyqtSlot()
     def play(self) -> None:
@@ -327,6 +352,11 @@ class AudioEngine(QObject):
         }
         status_str = status_map.get(status, "unknown")
         self.mediaStatusChanged.emit(status_str)
+        
+        # Auto-play when media is loaded if requested
+        if status == QMediaPlayer.MediaStatus.LoadedMedia and self._autoplay_pending:
+            self._autoplay_pending = False
+            self.play()
     
     # ========== Channel control methods ==========
     

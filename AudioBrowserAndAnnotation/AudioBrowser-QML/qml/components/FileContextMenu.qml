@@ -66,8 +66,7 @@ Menu {
         
         onTriggered: {
             if (audioEngine && filePath) {
-                audioEngine.loadFile(filePath);
-                audioEngine.play();
+                audioEngine.loadAndPlay(filePath);
             }
         }
     }
