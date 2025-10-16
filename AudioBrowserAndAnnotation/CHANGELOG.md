@@ -5,6 +5,12 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 ## [Unreleased]
 
 ### Fixed
+- **AudioBrowser-QML: Mutagen Auto-Installation** - Fixed "No module named 'mutagen'" errors for MP3 metadata extraction
+  - Added `_ensure_import()` function to backend/file_manager.py following the repository's auto-install pattern
+  - Added `HAVE_MUTAGEN` flag at module level that auto-installs mutagen on first import
+  - Modified `extractDuration()` method to use the pre-imported `MutagenFile` function
+  - Eliminates "No module named 'mutagen'" errors that were appearing for all MP3 files being processed
+  - Mutagen is now automatically installed when file_manager module is loaded, similar to how other optional dependencies are handled
 - **AudioBrowser-QML: Folder Selection and QML Property Errors** - Fixed multiple critical UI issues
   - **Folder Selection Now Works**: Added missing `onFilesDiscovered` signal handler in LibraryTab.qml
     - Previously, clicking a folder would only log a message but not display files
