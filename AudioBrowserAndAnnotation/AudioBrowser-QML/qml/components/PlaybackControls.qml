@@ -133,6 +133,50 @@ Item {
                 Layout.preferredWidth: 35
             }
         }
+        
+        // Channel controls
+        RowLayout {
+            spacing: Theme.spacingSmall
+            
+            Rectangle {
+                width: 1
+                height: parent.height * 0.6
+                color: Theme.borderColor
+            }
+            
+            Label {
+                text: "Ch:"
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.textSecondary
+            }
+            
+            // Stereo/Mono toggle
+            ComboBox {
+                id: channelModeCombo
+                Layout.preferredWidth: 80
+                model: ["Stereo", "Mono", "Left", "Right"]
+                currentIndex: 0
+                
+                background: Rectangle {
+                    color: Theme.backgroundColor
+                    border.color: Theme.borderColor
+                    border.width: 1
+                    radius: Theme.radiusSmall
+                }
+                
+                contentItem: Text {
+                    text: channelModeCombo.displayText
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textColor
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 6
+                }
+                
+                onCurrentTextChanged: {
+                    audioEngine.setChannelMode(currentText.toLowerCase())
+                }
+            }
+        }
     }
     
     // Update seek slider when playback position changes

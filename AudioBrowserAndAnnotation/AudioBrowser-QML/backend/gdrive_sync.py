@@ -27,16 +27,41 @@ from .cloud_sync_base import (
     SYNC_EXCLUDED, VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE, ANNOTATION_PATTERNS
 )
 
-# Google Drive API imports (will be auto-installed if needed)
-try:
+# Google Drive API imports (with auto-installation)
+def _ensure_gdrive_import():
+    """Ensure Google Drive libraries are available, installing if needed."""
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+        return True
+    except ImportError:
+        print("Google Drive API not found. Installing google-api-python-client and google-auth...")
+        import subprocess
+        import sys
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "google-api-python-client", "google-auth-httplib2", "google-auth-oauthlib"])
+            from google.auth.transport.requests import Request
+            from google.oauth2.credentials import Credentials
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+            print("Google Drive API installed successfully")
+            return True
+        except Exception as e:
+            print(f"Failed to install Google Drive API: {e}")
+            return False
+
+# Try to import Google Drive API
+GDRIVE_AVAILABLE = _ensure_gdrive_import()
+if GDRIVE_AVAILABLE:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-    GDRIVE_AVAILABLE = True
-except ImportError:
-    GDRIVE_AVAILABLE = False
 
 # Logging setup
 logger = logging.getLogger(__name__)
