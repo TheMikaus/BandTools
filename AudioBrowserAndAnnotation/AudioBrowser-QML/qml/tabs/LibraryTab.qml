@@ -72,7 +72,7 @@ Item {
                         id: directoryField
                         Layout.fillWidth: true
                         placeholderText: "Select a directory..."
-                        text: fileManager.getCurrentDirectory()
+                        text: fileManager ? fileManager.getCurrentDirectory() : ""
                         font.pixelSize: Theme.fontSizeNormal
                         background: Rectangle {
                             color: Theme.backgroundColor
@@ -658,7 +658,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 
                 Label {
-                    text: fileManager.getCurrentDirectory()
+                    text: fileManager ? fileManager.getCurrentDirectory() : ""
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
                     elide: Text.ElideMiddle
@@ -800,7 +800,7 @@ Item {
             spacing: Theme.spacingSmall
             
             Label {
-                text: fileManager.getFileProperties(propertiesDialog.filePath)
+                text: fileManager ? fileManager.getFileProperties(propertiesDialog.filePath) : ""
                 color: Theme.textColor
                 font.pixelSize: Theme.fontSizeNormal
                 wrapMode: Text.WordWrap

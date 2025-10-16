@@ -258,7 +258,7 @@ Item {
             StyledButton {
                 text: "➕ Add Section"
                 primary: true
-                enabled: audioEngine.getCurrentFile() !== ""
+                enabled: audioEngine && audioEngine.getCurrentFile() !== ""
                 
                 onClicked: {
                     sectionDialog.editMode = false
@@ -468,7 +468,7 @@ Item {
         
         // Status message
         Label {
-            text: audioEngine.getCurrentFile() !== "" ? 
+            text: (audioEngine && audioEngine.getCurrentFile() !== "" && fileManager) ? 
                   "Current file: " + fileManager.getFileName(audioEngine.getCurrentFile()) + " | Sections stored as annotations with subsection flag" :
                   "No file selected - select a file to manage sections"
             font.pixelSize: Theme.fontSizeSmall

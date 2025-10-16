@@ -44,11 +44,15 @@ Item {
             
             StyledButton {
                 id: playPauseButton
-                text: audioEngine.getPlaybackState() === "playing" ? "⏸" : "▶"
+                text: (audioEngine && audioEngine.getPlaybackState() === "playing") ? "⏸" : "▶"
                 primary: true
                 implicitWidth: 40
                 implicitHeight: 32
-                onClicked: audioEngine.togglePlayPause()
+                onClicked: {
+                    if (audioEngine) {
+                        audioEngine.togglePlayPause()
+                    }
+                }
             }
             
             StyledButton {
@@ -56,7 +60,11 @@ Item {
                 text: "⏹"
                 implicitWidth: 36
                 implicitHeight: 32
-                onClicked: audioEngine.stop()
+                onClicked: {
+                    if (audioEngine) {
+                        audioEngine.stop()
+                    }
+                }
             }
             
             StyledButton {
@@ -75,7 +83,7 @@ Item {
             
             Label {
                 id: positionLabel
-                text: formatTime(audioEngine.getPosition())
+                text: audioEngine ? formatTime(audioEngine.getPosition()) : "0:00"
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
                 Layout.preferredWidth: 50
@@ -86,18 +94,20 @@ Item {
                 id: seekSlider
                 Layout.fillWidth: true
                 from: 0
-                to: audioEngine.getDuration()
-                value: audioEngine.getPosition()
-                enabled: audioEngine.getDuration() > 0
+                to: audioEngine ? audioEngine.getDuration() : 0
+                value: audioEngine ? audioEngine.getPosition() : 0
+                enabled: audioEngine && audioEngine.getDuration() > 0
                 
                 onMoved: {
-                    audioEngine.seek(value)
+                    if (audioEngine) {
+                        audioEngine.seek(value)
+                    }
                 }
             }
             
             Label {
                 id: durationLabel
-                text: formatTime(audioEngine.getDuration())
+                text: audioEngine ? formatTime(audioEngine.getDuration()) : "0:00"
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
                 Layout.preferredWidth: 50
@@ -118,11 +128,13 @@ Item {
                 id: volumeSlider
                 from: 0
                 to: 100
-                value: audioEngine.getVolume()
+                value: audioEngine ? audioEngine.getVolume() : 50
                 implicitWidth: 80
                 
                 onMoved: {
-                    audioEngine.setVolume(value)
+                    if (audioEngine) {
+                        audioEngine.setVolume(value)
+                    }
                 }
             }
             
@@ -203,10 +215,12 @@ Item {
     // Timer to update position display
     Timer {
         interval: 100
-        running: audioEngine.getPlaybackState() === "playing"
+        running: audioEngine && audioEngine.getPlaybackState() === "playing"
         repeat: true
         onTriggered: {
-            positionLabel.text = formatTime(audioEngine.getPosition())
+            if (audioEngine) {
+                positionLabel.text = formatTime(audioEngine.getPosition())
+            }
         }
     }
     
