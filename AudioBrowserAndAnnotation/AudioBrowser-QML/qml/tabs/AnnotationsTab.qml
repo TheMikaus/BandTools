@@ -50,7 +50,7 @@ Item {
                     StyledButton {
                         text: "Add"
                         primary: true
-                        enabled: audioEngine.getCurrentFile() !== ""
+                        enabled: audioEngine && audioEngine.getCurrentFile() !== ""
                         Layout.preferredWidth: 80
                         onClicked: openAddDialog()
                     }
@@ -489,7 +489,7 @@ Item {
                 id: newSetNameField
                 Layout.fillWidth: true
                 placeholderText: "Enter set name..."
-                text: settingsManager.getCurrentUser()
+                text: settingsManager ? settingsManager.getCurrentUser() : ""
             }
             
             RowLayout {

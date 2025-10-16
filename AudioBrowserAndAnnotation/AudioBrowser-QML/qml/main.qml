@@ -30,17 +30,20 @@ ApplicationWindow {
     // Functions for workspace layout management
     function saveWindowGeometry() {
         // Save window position and size
-        settingsManager.setGeometry(JSON.stringify({
-            x: mainWindow.x,
-            y: mainWindow.y,
-            width: mainWindow.width,
-            height: mainWindow.height
-        }))
-        console.log("Window geometry saved")
+        if (settingsManager) {
+            settingsManager.setGeometry(JSON.stringify({
+                x: mainWindow.x,
+                y: mainWindow.y,
+                width: mainWindow.width,
+                height: mainWindow.height
+            }))
+            console.log("Window geometry saved")
+        }
     }
     
     function restoreWindowGeometry() {
         try {
+            if (!settingsManager) return
             var geometryStr = settingsManager.getGeometry()
             if (geometryStr) {
                 var geometry = JSON.parse(geometryStr)
@@ -90,11 +93,13 @@ ApplicationWindow {
                 
                 // Dynamically populated
                 Instantiator {
-                    model: settingsManager.getRecentFolders()
+                    model: settingsManager ? settingsManager.getRecentFolders() : []
                     delegate: MenuItem {
                         text: modelData
                         onTriggered: {
-                            fileManager.setCurrentDirectory(modelData)
+                            if (fileManager) {
+                                fileManager.setCurrentDirectory(modelData)
+                            }
                             libraryTab.setDirectoryFromCode(modelData)
                         }
                     }
@@ -107,15 +112,17 @@ ApplicationWindow {
                 }
                 
                 MenuSeparator {
-                    visible: settingsManager.getRecentFolders().length > 0
+                    visible: settingsManager ? settingsManager.getRecentFolders().length > 0 : false
                 }
                 
                 MenuItem {
                     text: "Clear Recent Folders"
-                    enabled: settingsManager.getRecentFolders().length > 0
+                    enabled: settingsManager ? settingsManager.getRecentFolders().length > 0 : false
                     onTriggered: {
-                        settingsManager.clearRecentFolders()
-                        recentFoldersMenu.update()
+                        if (settingsManager) {
+                            settingsManager.clearRecentFolders()
+                            recentFoldersMenu.update()
+                        }
                     }
                 }
             }
@@ -146,7 +153,9 @@ ApplicationWindow {
                 checked: !nowPlayingPanel.collapsed
                 onTriggered: {
                     nowPlayingPanel.collapsed = !nowPlayingPanel.collapsed
-                    settingsManager.setNowPlayingCollapsed(nowPlayingPanel.collapsed)
+                    if (settingsManager) {
+                        settingsManager.setNowPlayingCollapsed(nowPlayingPanel.collapsed)
+                    }
                 }
             }
             
@@ -321,7 +330,7 @@ ApplicationWindow {
                 CheckBox {
                     id: autoSwitchCheckbox
                     text: "Auto-switch to Annotations"
-                    checked: settingsManager.getAutoSwitchAnnotations()
+                    checked: settingsManager ? settingsManager.getAutoSwitchAnnotations() : false
                     
                     indicator: Rectangle {
                         implicitWidth: 16
@@ -351,7 +360,9 @@ ApplicationWindow {
                     }
                     
                     onCheckedChanged: {
-                        settingsManager.setAutoSwitchAnnotations(checked)
+                        if (settingsManager) {
+                            settingsManager.setAutoSwitchAnnotations(checked)
+                        }
                     }
                     
                     ToolTip.visible: hovered
@@ -366,10 +377,13 @@ ApplicationWindow {
                     text: "Theme"
                     success: true
                     onClicked: {
-                        var currentTheme = settingsManager.getTheme()
-                        var newTheme = currentTheme === "dark" ? "light" : "dark"
-                        settingsManager.setTheme(newTheme)
-                        Theme.setTheme(newTheme)
+                        if (settingsManager) {
+                            var currentTheme = settingsManager.getTheme()
+                            var newTheme = currentTheme === "dark" ? "light" : "dark"
+                            settingsManager.setTheme(newTheme)
+                            Theme.setTheme(newTheme)
+                        }
+                    }
                     }
                 }
             }
@@ -523,11 +537,13 @@ ApplicationWindow {
             
             onAnnotationRequested: function(text) {
                 // Add annotation at current playback position
-                if (audioEngine.getCurrentFile()) {
+                if (audioEngine && audioEngine.getCurrentFile()) {
                     var timestamp = audioEngine.getPosition()
-                    annotationManager.addAnnotation(timestamp, text, "General", false)
+                    if (annotationManager) {
+                        annotationManager.addAnnotation(timestamp, text, "General", false)
+                    }
                     // Switch to annotations tab if auto-switch is enabled
-                    if (settingsManager.getAutoSwitchAnnotations()) {
+                    if (settingsManager && settingsManager.getAutoSwitchAnnotations()) {
                         tabBar.currentIndex = 1
                     }
                 }
@@ -582,7 +598,7 @@ ApplicationWindow {
         // Export Annotations Dialog
         ExportAnnotationsDialog {
             id: exportAnnotationsDialog
-            currentFile: audioEngine.currentFile
+            currentFile: audioEngine ? audioEngine.currentFile : ""
         }
         
         // About Dialog
@@ -613,8 +629,8 @@ ApplicationWindow {
         // Backup Selection Dialog
         BackupSelectionDialog {
             id: backupDialog
-            currentFolder: fileManager.currentDirectory
-            rootPath: fileManager.currentDirectory
+            currentFolder: fileManager ? fileManager.currentDirectory : ""
+            rootPath: fileManager ? fileManager.currentDirectory : ""
         }
         
         ExportBestTakesDialog {
@@ -639,13 +655,13 @@ ApplicationWindow {
                 spacing: Theme.spacingLarge
                 
                 Label {
-                    text: audioEngine.getPlaybackState() === "playing" ? "Playing" : "Ready"
+                    text: (audioEngine && audioEngine.getPlaybackState() === "playing") ? "Playing" : "Ready"
                     font.pixelSize: Theme.fontSizeSmall
-                    color: audioEngine.getPlaybackState() === "playing" ? Theme.accentSuccess : Theme.textMuted
+                    color: (audioEngine && audioEngine.getPlaybackState() === "playing") ? Theme.accentSuccess : Theme.textMuted
                 }
                 
                 Label {
-                    text: audioEngine.getCurrentFile() ? "File: " + fileManager.getFileName(audioEngine.getCurrentFile()) : ""
+                    text: (audioEngine && audioEngine.getCurrentFile() && fileManager) ? "File: " + fileManager.getFileName(audioEngine.getCurrentFile()) : ""
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
                     elide: Text.ElideMiddle
@@ -653,7 +669,7 @@ ApplicationWindow {
                 }
                 
                 Label {
-                    text: "Phase 7 (Additional Features) • Theme: " + settingsManager.getTheme()
+                    text: settingsManager ? ("Phase 7 (Additional Features) • Theme: " + settingsManager.getTheme()) : "Phase 7 (Additional Features)"
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
                 }
@@ -679,21 +695,31 @@ ApplicationWindow {
                  mainWindow.activeFocusItem.toString().indexOf("TextField") === -1 &&
                  mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
                  mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
-        onActivated: audioEngine.togglePlayPause()
+        onActivated: {
+            if (audioEngine) {
+                audioEngine.togglePlayPause()
+            }
+        }
     }
     
     Shortcut {
         sequence: "Escape"
-        onActivated: audioEngine.stop()
+        onActivated: {
+            if (audioEngine) {
+                audioEngine.stop()
+            }
+        }
     }
     
     Shortcut {
         sequence: "Ctrl+T"
         onActivated: {
-            var currentTheme = settingsManager.getTheme()
-            var newTheme = currentTheme === "dark" ? "light" : "dark"
-            settingsManager.setTheme(newTheme)
-            Theme.setTheme(newTheme)
+            if (settingsManager) {
+                var currentTheme = settingsManager.getTheme()
+                var newTheme = currentTheme === "dark" ? "light" : "dark"
+                settingsManager.setTheme(newTheme)
+                Theme.setTheme(newTheme)
+            }
         }
     }
     
@@ -720,28 +746,40 @@ ApplicationWindow {
     Shortcut {
         sequence: "+"
         onActivated: {
-            var vol = audioEngine.getVolume()
-            audioEngine.setVolume(Math.min(100, vol + 5))
+            if (audioEngine) {
+                var vol = audioEngine.getVolume()
+                audioEngine.setVolume(Math.min(100, vol + 5))
+            }
         }
     }
     
     Shortcut {
         sequence: "-"
         onActivated: {
-            var vol = audioEngine.getVolume()
-            audioEngine.setVolume(Math.max(0, vol - 5))
+            if (audioEngine) {
+                var vol = audioEngine.getVolume()
+                audioEngine.setVolume(Math.max(0, vol - 5))
+            }
         }
     }
     
     // Navigation shortcuts
     Shortcut {
         sequence: "Left"
-        onActivated: audioEngine.seekBackward(5000)  // 5 seconds back
+        onActivated: {
+            if (audioEngine) {
+                audioEngine.seekBackward(5000)  // 5 seconds back
+            }
+        }
     }
     
     Shortcut {
         sequence: "Right"
-        onActivated: audioEngine.seekForward(5000)  // 5 seconds forward
+        onActivated: {
+            if (audioEngine) {
+                audioEngine.seekForward(5000)  // 5 seconds forward
+            }
+        }
     }
     
     // Annotation shortcuts
@@ -753,7 +791,7 @@ ApplicationWindow {
                  mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
                  mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
         onActivated: {
-            if (audioEngine.getCurrentFile() !== "") {
+            if (audioEngine && audioEngine.getCurrentFile() !== "") {
                 annotationsTab.openAddDialog()
             }
         }
@@ -768,7 +806,7 @@ ApplicationWindow {
                  mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
                  mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
         onActivated: {
-            if (audioEngine.getCurrentFile() !== "") {
+            if (audioEngine && audioEngine.getCurrentFile() !== "") {
                 clipsTab.setClipStartMarker()
             }
         }
@@ -782,7 +820,7 @@ ApplicationWindow {
                  mainWindow.activeFocusItem.toString().indexOf("TextArea") === -1 &&
                  mainWindow.activeFocusItem.toString().indexOf("TextEdit") === -1
         onActivated: {
-            if (audioEngine.getCurrentFile() !== "") {
+            if (audioEngine && audioEngine.getCurrentFile() !== "") {
                 clipsTab.setClipEndMarker()
             }
         }

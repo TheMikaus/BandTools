@@ -112,9 +112,9 @@ Rectangle {
             // Current file display
             Label {
                 id: fileLabel
-                text: audioEngine.getCurrentFile() ? "♪ " + fileManager.getFileName(audioEngine.getCurrentFile()) : "No file loaded"
+                text: (audioEngine && audioEngine.getCurrentFile() && fileManager) ? "♪ " + fileManager.getFileName(audioEngine.getCurrentFile()) : "No file loaded"
                 font.pixelSize: Theme.fontSizeSmall
-                font.italic: !audioEngine.getCurrentFile()
+                font.italic: !(audioEngine && audioEngine.getCurrentFile())
                 color: Theme.textSecondary
                 Layout.fillWidth: true
                 elide: Text.ElideMiddle
@@ -125,8 +125,8 @@ Rectangle {
                 id: miniWaveform
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
-                filePath: audioEngine.getCurrentFile()
-                positionMs: audioEngine.getPosition()
+                filePath: audioEngine ? audioEngine.getCurrentFile() : ""
+                positionMs: audioEngine ? audioEngine.getPosition() : 0
             }
             
             // Compact playback controls
@@ -136,12 +136,16 @@ Rectangle {
                 
                 StyledButton {
                     id: playButton
-                    text: audioEngine.getPlaybackState() === "playing" ? "⏸" : "▶"
+                    text: (audioEngine && audioEngine.getPlaybackState() === "playing") ? "⏸" : "▶"
                     primary: true
                     implicitWidth: 32
                     implicitHeight: 32
-                    enabled: audioEngine.getCurrentFile() !== ""
-                    onClicked: audioEngine.togglePlayPause()
+                    enabled: audioEngine && audioEngine.getCurrentFile() !== ""
+                    onClicked: {
+                        if (audioEngine) {
+                            audioEngine.togglePlayPause()
+                        }
+                    }
                     
                     ToolTip.visible: hovered
                     ToolTip.text: "Play/Pause (Space)"
@@ -149,7 +153,7 @@ Rectangle {
                 
                 Label {
                     id: timeLabel
-                    text: formatTime(audioEngine.getPosition()) + " / " + formatTime(audioEngine.getDuration())
+                    text: audioEngine ? (formatTime(audioEngine.getPosition()) + " / " + formatTime(audioEngine.getDuration())) : "0:00 / 0:00"
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textSecondary
                     Layout.preferredWidth: 90
@@ -169,7 +173,7 @@ Rectangle {
                     id: annotationInput
                     Layout.fillWidth: true
                     placeholderText: "Type note + Enter to annotate at current position"
-                    enabled: audioEngine.getCurrentFile() !== ""
+                    enabled: audioEngine && audioEngine.getCurrentFile() !== ""
                     
                     onAccepted: {
                         if (text.trim().length > 0) {
@@ -183,7 +187,7 @@ Rectangle {
                     text: "Add Note"
                     implicitWidth: 80
                     implicitHeight: 28
-                    enabled: audioEngine.getCurrentFile() !== "" && annotationInput.text.trim().length > 0
+                    enabled: audioEngine && audioEngine.getCurrentFile() !== "" && annotationInput.text.trim().length > 0
                     
                     ToolTip.visible: hovered
                     ToolTip.text: "Add annotation at current playback position"
@@ -203,10 +207,12 @@ Rectangle {
     Timer {
         id: updateTimer
         interval: 100
-        running: audioEngine.getPlaybackState() === "playing" && !collapsed
+        running: audioEngine && audioEngine.getPlaybackState() === "playing" && !collapsed
         repeat: true
         onTriggered: {
-            timeLabel.text = formatTime(audioEngine.getPosition()) + " / " + formatTime(audioEngine.getDuration())
+            if (audioEngine) {
+                timeLabel.text = formatTime(audioEngine.getPosition()) + " / " + formatTime(audioEngine.getDuration())
+            }
         }
     }
     
