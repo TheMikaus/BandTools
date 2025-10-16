@@ -47,6 +47,7 @@ def test_audio_engine_methods():
         
         # Check for required methods
         assert hasattr(engine, 'loadFile'), "Missing loadFile method"
+        assert hasattr(engine, 'loadAndPlay'), "Missing loadAndPlay method"
         assert hasattr(engine, 'play'), "Missing play method"
         assert hasattr(engine, 'pause'), "Missing pause method"
         assert hasattr(engine, 'stop'), "Missing stop method"
