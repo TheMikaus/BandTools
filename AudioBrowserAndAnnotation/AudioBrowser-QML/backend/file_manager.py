@@ -7,10 +7,31 @@ Provides file discovery, filtering, and metadata access.
 """
 
 import os
+import sys
 import wave
 from pathlib import Path
 from typing import List, Dict, Optional, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
+
+# Ensure optional dependencies are available
+def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
+    """Try to import a module, installing it if necessary."""
+    if pip_name is None:
+        pip_name = mod_name
+    
+    try:
+        __import__(mod_name)
+        return True
+    except ImportError:
+        print(f"Installing {pip_name}...")
+        import subprocess
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
+            __import__(mod_name)
+            return True
+        except Exception as e:
+            print(f"Failed to install {pip_name}: {e}")
+            return False
 
 # Try to import optional dependencies for MP3 support
 try:
@@ -18,6 +39,11 @@ try:
     HAVE_PYDUB = True
 except ImportError:
     HAVE_PYDUB = False
+
+# Ensure mutagen is available for metadata extraction
+HAVE_MUTAGEN = _ensure_import("mutagen", "mutagen")
+if HAVE_MUTAGEN:
+    from mutagen import File as MutagenFile
 
 
 # Audio file extensions
@@ -841,17 +867,17 @@ class FileManager(QObject):
             if not path.exists():
                 return 0
             
-            # Try using mutagen to extract duration
-            try:
-                from mutagen import File as MutagenFile
-                audio = MutagenFile(str(path))
-                if audio and hasattr(audio.info, 'length'):
-                    duration_ms = int(audio.info.length * 1000)
-                    # Cache the duration
-                    self._cache_duration(file_path, duration_ms)
-                    return duration_ms
-            except Exception as e:
-                print(f"Mutagen extraction failed for {path.name}: {e}")
+            # Try using mutagen to extract duration if available
+            if HAVE_MUTAGEN:
+                try:
+                    audio = MutagenFile(str(path))
+                    if audio and hasattr(audio.info, 'length'):
+                        duration_ms = int(audio.info.length * 1000)
+                        # Cache the duration
+                        self._cache_duration(file_path, duration_ms)
+                        return duration_ms
+                except Exception as e:
+                    print(f"Mutagen extraction failed for {path.name}: {e}")
             
             # Fallback: try using wave module for WAV files
             if path.suffix.lower() == '.wav':
