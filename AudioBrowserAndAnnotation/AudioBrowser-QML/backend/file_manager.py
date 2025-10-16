@@ -10,7 +10,7 @@ import os
 import wave
 from pathlib import Path
 from typing import List, Dict, Optional, Set, Any
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
 
 # Try to import optional dependencies for MP3 support
 try:
@@ -49,6 +49,18 @@ class FileManager(QObject):
         # Best/Partial take tracking
         self._best_takes: Set[str] = set()  # Set of file paths marked as best takes
         self._partial_takes: Set[str] = set()  # Set of file paths marked as partial takes
+    
+    # ========== Properties ==========
+    
+    @pyqtProperty(str, notify=currentDirectoryChanged)
+    def currentDirectory(self) -> str:
+        """
+        Get the current directory as a property.
+        
+        Returns:
+            Current directory path or empty string if not set
+        """
+        return str(self._current_directory) if self._current_directory else ""
     
     # ========== QML-accessible methods ==========
     
