@@ -435,7 +435,7 @@ ApplicationWindow {
             }
             
             TabButton {
-                text: "Folder Notes"
+                text: "Sections"
                 font.pixelSize: Theme.fontSizeNormal
                 
                 background: Rectangle {
@@ -452,7 +452,7 @@ ApplicationWindow {
             }
             
             TabButton {
-                text: "Fingerprints"
+                text: "Folder Notes"
                 font.pixelSize: Theme.fontSizeNormal
                 
                 background: Rectangle {
@@ -463,6 +463,23 @@ ApplicationWindow {
                     text: parent.text
                     font: parent.font
                     color: tabBar.currentIndex === 4 ? Theme.textColor : Theme.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            
+            TabButton {
+                text: "Fingerprints"
+                font.pixelSize: Theme.fontSizeNormal
+                
+                background: Rectangle {
+                    color: tabBar.currentIndex === 5 ? Theme.backgroundColor : Theme.backgroundLight
+                }
+                
+                contentItem: Text {
+                    text: parent.text
+                    font: parent.font
+                    color: tabBar.currentIndex === 5 ? Theme.textColor : Theme.textSecondary
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -485,6 +502,10 @@ ApplicationWindow {
             
             ClipsTab {
                 id: clipsTab
+            }
+            
+            SectionsTab {
+                id: sectionsTab
             }
             
             FolderNotesTab {
