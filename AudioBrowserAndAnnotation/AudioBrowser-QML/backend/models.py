@@ -32,11 +32,13 @@ class FileListModel(QAbstractListModel):
     IsBestTakeRole = Qt.ItemDataRole.UserRole + 7
     IsPartialTakeRole = Qt.ItemDataRole.UserRole + 8
     BPMRole = Qt.ItemDataRole.UserRole + 9
+    LibraryNameRole = Qt.ItemDataRole.UserRole + 10
+    HasImportantAnnotationRole = Qt.ItemDataRole.UserRole + 11
     
     # Signals
     filesChanged = pyqtSignal()
     
-    def __init__(self, parent=None, file_manager=None, tempo_manager=None):
+    def __init__(self, parent=None, file_manager=None, tempo_manager=None, annotation_manager=None):
         """
         Initialize the file list model.
         
@@ -44,11 +46,13 @@ class FileListModel(QAbstractListModel):
             parent: Parent QObject
             file_manager: Optional FileManager for extracting file metadata
             tempo_manager: Optional TempoManager for BPM data
+            annotation_manager: Optional AnnotationManager for important annotation checking
         """
         super().__init__(parent)
         self._files: List[Dict[str, Any]] = []
         self._file_manager = file_manager
         self._tempo_manager = tempo_manager
+        self._annotation_manager = annotation_manager
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """Return the number of files in the model."""
@@ -81,6 +85,10 @@ class FileListModel(QAbstractListModel):
             return file_data.get("isPartialTake", False)
         elif role == self.BPMRole:
             return file_data.get("bpm", 0)
+        elif role == self.LibraryNameRole:
+            return file_data.get("libraryName", "")
+        elif role == self.HasImportantAnnotationRole:
+            return file_data.get("hasImportantAnnotation", False)
         
         return None
     
@@ -97,6 +105,8 @@ class FileListModel(QAbstractListModel):
             self.IsBestTakeRole: b"isBestTake",
             self.IsPartialTakeRole: b"isPartialTake",
             self.BPMRole: b"bpm",
+            self.LibraryNameRole: b"libraryName",
+            self.HasImportantAnnotationRole: b"hasImportantAnnotation",
         }
     
     # ========== QML-accessible methods ==========
@@ -145,6 +155,20 @@ class FileListModel(QAbstractListModel):
                 if self._tempo_manager is not None:
                     bpm = self._tempo_manager.getBPM(path.name)
                 
+                # Get library name (folder name)
+                library_name = path.parent.name if path.parent else ""
+                
+                # Check for important annotations
+                has_important_annotation = False
+                if self._annotation_manager is not None:
+                    # Check if file has any important annotations
+                    try:
+                        important_annotations = self._annotation_manager.getImportantAnnotationsForFile(file_path)
+                        has_important_annotation = len(important_annotations) > 0
+                    except:
+                        # If method doesn't exist or errors, default to False
+                        has_important_annotation = False
+                
                 file_info = {
                     "filepath": str(path),
                     "filename": display_name,  # Use provided name if available
@@ -155,6 +179,8 @@ class FileListModel(QAbstractListModel):
                     "isBestTake": is_best_take,
                     "isPartialTake": is_partial_take,
                     "bpm": bpm,
+                    "libraryName": library_name,
+                    "hasImportantAnnotation": has_important_annotation,
                 }
                 self._files.append(file_info)
             except Exception:

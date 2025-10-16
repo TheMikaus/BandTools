@@ -29,6 +29,7 @@ class AudioEngine(QObject):
     errorOccurred = pyqtSignal(str)  # Error message
     mediaStatusChanged = pyqtSignal(str)  # Media status
     playbackSpeedChanged = pyqtSignal(float)  # Playback speed multiplier
+    channelModeChanged = pyqtSignal(str)  # "stereo", "left", "right", "mono"
     
     def __init__(self, parent=None):
         """Initialize the audio engine."""
@@ -43,6 +44,11 @@ class AudioEngine(QObject):
         self._current_file: Optional[Path] = None
         self._volume = 100
         self._playback_speed = 1.0
+        
+        # Channel control state
+        self._channel_mode = "stereo"  # "stereo", "left", "right", "mono"
+        self._left_muted = False
+        self._right_muted = False
         
         # Clip playback state
         self._clip_start: Optional[int] = None
@@ -321,6 +327,85 @@ class AudioEngine(QObject):
         }
         status_str = status_map.get(status, "unknown")
         self.mediaStatusChanged.emit(status_str)
+    
+    # ========== Channel control methods ==========
+    
+    @pyqtSlot(str)
+    def setChannelMode(self, mode: str) -> None:
+        """
+        Set the channel playback mode.
+        
+        Args:
+            mode: One of "stereo", "left", "right", "mono"
+        """
+        valid_modes = ["stereo", "left", "right", "mono"]
+        if mode not in valid_modes:
+            self.errorOccurred.emit(f"Invalid channel mode: {mode}")
+            return
+        
+        self._channel_mode = mode
+        self.channelModeChanged.emit(mode)
+        
+        # Note: QMediaPlayer doesn't support per-channel muting directly
+        # This setting is used primarily for audio conversion
+    
+    @pyqtSlot(result=str)
+    def getChannelMode(self) -> str:
+        """
+        Get the current channel playback mode.
+        
+        Returns:
+            Current channel mode
+        """
+        return self._channel_mode
+    
+    @pyqtSlot(bool)
+    def setLeftChannelMuted(self, muted: bool) -> None:
+        """
+        Mute or unmute the left channel.
+        
+        Args:
+            muted: True to mute, False to unmute
+        """
+        self._left_muted = muted
+        # Update channel mode based on mute states
+        if self._left_muted and self._right_muted:
+            self.setChannelMode("mono")  # Both muted, use mono
+        elif self._left_muted:
+            self.setChannelMode("right")  # Left muted, use right only
+        elif self._right_muted:
+            self.setChannelMode("left")  # Right muted, use left only
+        else:
+            self.setChannelMode("stereo")  # Neither muted, use stereo
+    
+    @pyqtSlot(result=bool)
+    def isLeftChannelMuted(self) -> bool:
+        """Check if left channel is muted."""
+        return self._left_muted
+    
+    @pyqtSlot(bool)
+    def setRightChannelMuted(self, muted: bool) -> None:
+        """
+        Mute or unmute the right channel.
+        
+        Args:
+            muted: True to mute, False to unmute
+        """
+        self._right_muted = muted
+        # Update channel mode based on mute states
+        if self._left_muted and self._right_muted:
+            self.setChannelMode("mono")  # Both muted, use mono
+        elif self._left_muted:
+            self.setChannelMode("right")  # Left muted, use right only
+        elif self._right_muted:
+            self.setChannelMode("left")  # Right muted, use left only
+        else:
+            self.setChannelMode("stereo")  # Neither muted, use stereo
+    
+    @pyqtSlot(result=bool)
+    def isRightChannelMuted(self) -> bool:
+        """Check if right channel is muted."""
+        return self._right_muted
     
     # ========== Public properties for direct access ==========
     

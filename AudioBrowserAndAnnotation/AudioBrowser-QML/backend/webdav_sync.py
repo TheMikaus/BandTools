@@ -21,12 +21,29 @@ from .cloud_sync_base import (
     SYNC_EXCLUDED, VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE
 )
 
-# WebDAV client imports (will be auto-installed if needed)
-try:
+# WebDAV client imports (with auto-installation)
+def _ensure_webdav_import():
+    """Ensure WebDAV library is available, installing if needed."""
+    try:
+        from webdav3.client import Client
+        return True
+    except ImportError:
+        print("WebDAV library not found. Installing webdavclient3...")
+        import subprocess
+        import sys
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "webdavclient3"])
+            from webdav3.client import Client
+            print("WebDAV library installed successfully")
+            return True
+        except Exception as e:
+            print(f"Failed to install WebDAV library: {e}")
+            return False
+
+# Try to import WebDAV library
+WEBDAV_AVAILABLE = _ensure_webdav_import()
+if WEBDAV_AVAILABLE:
     from webdav3.client import Client
-    WEBDAV_AVAILABLE = True
-except ImportError:
-    WEBDAV_AVAILABLE = False
 
 # Logging setup
 logger = logging.getLogger(__name__)

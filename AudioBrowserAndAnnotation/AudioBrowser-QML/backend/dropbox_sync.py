@@ -19,14 +19,31 @@ from .cloud_sync_base import (
     SYNC_EXCLUDED, VERSION_FILE, SYNC_HISTORY_FILE, SYNC_RULES_FILE
 )
 
-# Dropbox SDK imports (will be auto-installed if needed)
-try:
+# Dropbox SDK imports (with auto-installation)
+def _ensure_dropbox_import():
+    """Ensure dropbox library is available, installing if needed."""
+    try:
+        import dropbox
+        return True
+    except ImportError:
+        print("Dropbox SDK not found. Installing dropbox...")
+        import subprocess
+        import sys
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "dropbox"])
+            import dropbox
+            print("Dropbox SDK installed successfully")
+            return True
+        except Exception as e:
+            print(f"Failed to install Dropbox SDK: {e}")
+            return False
+
+# Try to import dropbox
+DROPBOX_AVAILABLE = _ensure_dropbox_import()
+if DROPBOX_AVAILABLE:
     import dropbox
     from dropbox.exceptions import AuthError, ApiError
     from dropbox.files import WriteMode
-    DROPBOX_AVAILABLE = True
-except ImportError:
-    DROPBOX_AVAILABLE = False
 
 # Logging setup
 logger = logging.getLogger(__name__)
