@@ -135,9 +135,9 @@ AudioBrowser-QML/
 - Automatic persistence
 - Multi-user attribution
 
-### 🚧 Phase 7: Additional Features (In Progress)
+### ✅ Phase 7: Additional Features (Complete)
 
-**Objectives**: Add features from original audio_browser.py for feature parity
+**Objectives**: Add features from original audio_browser.py for feature parity (100% ACHIEVED)
 
 **Completed Tasks**:
 - ✅ Created FolderNotesManager backend module (250 lines)
@@ -154,6 +154,10 @@ AudioBrowser-QML/
 - ✅ Added batch operations toolbar buttons
 - ✅ Integrated batch operations with main application
 - ✅ Comprehensive test suite for batch operations
+- ✅ **Implemented multi-annotation sets system** (~200 lines added to AnnotationManager)
+- ✅ **Added annotation set selector UI** with Add/Rename/Delete dialogs
+- ✅ **Implemented merged view** to show annotations from all visible sets
+- ✅ **Updated AnnotationsModel** to support set column in merged view
 
 **Features**:
 - Folder-level notes with auto-save
@@ -168,6 +172,11 @@ AudioBrowser-QML/
 - Progress tracking for all batch operations
 - Preview before execution for batch rename
 - Error handling and status reporting
+- **Multi-annotation sets** - Create and manage multiple named annotation sets per user
+- **Annotation set switching** - Switch between different annotation contexts
+- **Merged view** - View annotations from all visible sets in a single table
+- **Set-specific colors** - Each annotation set has a distinct color
+- **Set persistence** - Annotation sets saved per directory with user-specific files
 
 ### ✅ Phase 5: Clips System (Complete)
 

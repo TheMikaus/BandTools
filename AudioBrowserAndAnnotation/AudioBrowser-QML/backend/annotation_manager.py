@@ -109,7 +109,7 @@ class AnnotationManager(QObject):
     def addAnnotation(self, timestamp_ms: int, text: str, category: str = "",
                      important: bool = False, color: str = "#3498db") -> None:
         """
-        Add a new annotation to the current file.
+        Add a new annotation to the current file in the current set.
         
         Args:
             timestamp_ms: Timestamp in milliseconds
@@ -126,6 +126,12 @@ class AnnotationManager(QObject):
             self.errorOccurred.emit("Annotation text cannot be empty")
             return
         
+        # Get current set
+        current_set = self._get_current_set_object()
+        if not current_set:
+            self.errorOccurred.emit("No annotation set selected")
+            return
+        
         annotation = {
             "uid": self._next_uid,
             "timestamp_ms": timestamp_ms,
@@ -139,18 +145,21 @@ class AnnotationManager(QObject):
         }
         self._next_uid += 1
         
-        # Ensure file has annotation list
-        if self._current_file not in self._annotations:
-            self._annotations[self._current_file] = []
+        # Get file name from path
+        file_name = Path(self._current_file).name
         
-        # Add annotation
-        self._annotations[self._current_file].append(annotation)
+        # Ensure file data exists in current set
+        if file_name not in current_set["files"]:
+            current_set["files"][file_name] = {"general": "", "notes": []}
+        
+        # Add annotation to current set
+        current_set["files"][file_name]["notes"].append(annotation)
         
         # Sort by timestamp
-        self._annotations[self._current_file].sort(key=lambda a: a["timestamp_ms"])
+        current_set["files"][file_name]["notes"].sort(key=lambda a: a["timestamp_ms"])
         
-        # Save to disk
-        self._save_annotations(self._current_file)
+        # Save annotation sets to disk
+        self._save_annotation_sets()
         
         # Record in undo manager
         if self._undo_manager:
@@ -367,13 +376,51 @@ class AnnotationManager(QObject):
         """
         Get all annotations for the current file.
         
+        If show_all_sets is True, returns annotations from all visible sets with set name.
+        Otherwise, returns annotations from current set only.
+        
         Returns:
             List of annotation dictionaries
         """
         if not self._current_file:
             return []
         
-        return self._annotations.get(self._current_file, [])
+        # Get filename from full path
+        file_name = Path(self._current_file).name
+        
+        if self._show_all_sets:
+            # Merged view: get annotations from all visible sets
+            all_annotations = []
+            for aset in self._annotation_sets:
+                if not aset.get("visible", True):
+                    continue
+                
+                # Get file data from this set
+                file_data = aset.get("files", {}).get(file_name, {})
+                notes = file_data.get("notes", [])
+                
+                # Add set name and color to each annotation
+                for note in notes:
+                    note_copy = note.copy()
+                    note_copy["_set_name"] = aset["name"]
+                    note_copy["_set_color"] = aset["color"]
+                    note_copy["_set_id"] = aset["id"]
+                    all_annotations.append(note_copy)
+            
+            # Sort by timestamp
+            all_annotations.sort(key=lambda a: a.get("timestamp_ms", 0))
+            return all_annotations
+        else:
+            # Single set view: get annotations from current set only
+            if not self._current_set_id:
+                return []
+            
+            current_set = self._get_current_set_object()
+            if not current_set:
+                return []
+            
+            file_data = current_set.get("files", {}).get(file_name, {})
+            return file_data.get("notes", [])
     
     @pyqtSlot(int, result='QVariantMap')
     def getAnnotation(self, index: int) -> Dict[str, Any]:
@@ -755,6 +802,17 @@ class AnnotationManager(QObject):
         # Hash the name to get consistent color
         hash_val = sum(ord(c) for c in name)
         return colors[hash_val % len(colors)]
+    
+    def _get_current_set_object(self) -> Optional[Dict[str, Any]]:
+        """Get the current annotation set object."""
+        if not self._current_set_id:
+            return None
+        
+        for aset in self._annotation_sets:
+            if aset["id"] == self._current_set_id:
+                return aset
+        
+        return None
     
     # ========== Internal methods ==========
     

@@ -382,15 +382,25 @@ class AnnotationsModel(QAbstractTableModel):
     
     Exposes annotations data to QML with columns for timestamp,
     category, text, importance, etc.
+    Supports merged view with annotation set name column.
     """
     
-    # Column indices
+    # Column indices (single set view)
     COL_TIMESTAMP = 0
     COL_CATEGORY = 1
     COL_TEXT = 2
     COL_USER = 3
     COL_IMPORTANCE = 4
     COL_COUNT = 5
+    
+    # Column indices (merged view - with set column)
+    COL_MERGED_SET = 0
+    COL_MERGED_TIMESTAMP = 1
+    COL_MERGED_CATEGORY = 2
+    COL_MERGED_TEXT = 3
+    COL_MERGED_USER = 4
+    COL_MERGED_IMPORTANCE = 5
+    COL_MERGED_COUNT = 6
     
     # Custom roles
     TimestampRole = Qt.ItemDataRole.UserRole + 1
@@ -399,6 +409,8 @@ class AnnotationsModel(QAbstractTableModel):
     UserRole = Qt.ItemDataRole.UserRole + 4
     ImportanceRole = Qt.ItemDataRole.UserRole + 5
     ColorRole = Qt.ItemDataRole.UserRole + 6
+    SetNameRole = Qt.ItemDataRole.UserRole + 7  # For merged view
+    SetColorRole = Qt.ItemDataRole.UserRole + 8  # For merged view
     
     # Signals
     annotationsChanged = pyqtSignal()
@@ -408,6 +420,8 @@ class AnnotationsModel(QAbstractTableModel):
         super().__init__(parent)
         self._annotations: List[Dict[str, Any]] = []
         self._headers = ["Time", "Category", "Text", "User", "Important"]
+        self._merged_headers = ["Set", "Time", "Category", "Text", "User", "Important"]
+        self._show_merged = False  # Whether we're in merged view mode
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """Return the number of annotations."""
@@ -419,7 +433,7 @@ class AnnotationsModel(QAbstractTableModel):
         """Return the number of columns."""
         if parent.isValid():
             return 0
-        return self.COL_COUNT
+        return self.COL_MERGED_COUNT if self._show_merged else self.COL_COUNT
     
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         """Return data for the specified role at the given index."""
@@ -430,16 +444,32 @@ class AnnotationsModel(QAbstractTableModel):
         col = index.column()
         
         if role == Qt.ItemDataRole.DisplayRole:
-            if col == self.COL_TIMESTAMP:
-                return self._format_timestamp(annotation.get("timestamp_ms", 0))
-            elif col == self.COL_CATEGORY:
-                return annotation.get("category", "")
-            elif col == self.COL_TEXT:
-                return annotation.get("text", "")
-            elif col == self.COL_USER:
-                return annotation.get("user", "default_user")
-            elif col == self.COL_IMPORTANCE:
-                return "✓" if annotation.get("important", False) else ""
+            if self._show_merged:
+                # Merged view columns
+                if col == self.COL_MERGED_SET:
+                    return annotation.get("_set_name", "")
+                elif col == self.COL_MERGED_TIMESTAMP:
+                    return self._format_timestamp(annotation.get("timestamp_ms", 0))
+                elif col == self.COL_MERGED_CATEGORY:
+                    return annotation.get("category", "")
+                elif col == self.COL_MERGED_TEXT:
+                    return annotation.get("text", "")
+                elif col == self.COL_MERGED_USER:
+                    return annotation.get("user", "default_user")
+                elif col == self.COL_MERGED_IMPORTANCE:
+                    return "✓" if annotation.get("important", False) else ""
+            else:
+                # Single set view columns
+                if col == self.COL_TIMESTAMP:
+                    return self._format_timestamp(annotation.get("timestamp_ms", 0))
+                elif col == self.COL_CATEGORY:
+                    return annotation.get("category", "")
+                elif col == self.COL_TEXT:
+                    return annotation.get("text", "")
+                elif col == self.COL_USER:
+                    return annotation.get("user", "default_user")
+                elif col == self.COL_IMPORTANCE:
+                    return "✓" if annotation.get("important", False) else ""
         
         elif role == self.TimestampRole:
             return annotation.get("timestamp_ms", 0)
@@ -453,6 +483,10 @@ class AnnotationsModel(QAbstractTableModel):
             return annotation.get("important", False)
         elif role == self.ColorRole:
             return annotation.get("color", "#ffffff")
+        elif role == self.SetNameRole:
+            return annotation.get("_set_name", "")
+        elif role == self.SetColorRole:
+            return annotation.get("_set_color", "#ffffff")
         
         return None
     
@@ -460,8 +494,9 @@ class AnnotationsModel(QAbstractTableModel):
                    role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         """Return header data for the table."""
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            if 0 <= section < len(self._headers):
-                return self._headers[section]
+            headers = self._merged_headers if self._show_merged else self._headers
+            if 0 <= section < len(headers):
+                return headers[section]
         return None
     
     def roleNames(self) -> Dict[int, bytes]:
@@ -474,6 +509,8 @@ class AnnotationsModel(QAbstractTableModel):
             self.UserRole: b"user",
             self.ImportanceRole: b"important",
             self.ColorRole: b"color",
+            self.SetNameRole: b"setName",
+            self.SetColorRole: b"setColor",
         }
     
     # ========== QML-accessible methods ==========
@@ -482,12 +519,17 @@ class AnnotationsModel(QAbstractTableModel):
     def setAnnotations(self, annotations: List[Dict[str, Any]]) -> None:
         """
         Set the list of annotations in the model.
+        Automatically detects merged view if annotations contain _set_name.
         
         Args:
             annotations: List of annotation dictionaries
         """
         self.beginResetModel()
         self._annotations = annotations.copy()
+        
+        # Auto-detect merged view mode
+        self._show_merged = any("_set_name" in a for a in annotations)
+        
         self.endResetModel()
         self.annotationsChanged.emit()
     
