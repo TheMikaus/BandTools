@@ -292,6 +292,23 @@ class SettingsManager(QObject):
         """Set whether to auto-switch to Annotations tab when selecting a file."""
         self.settings.setValue(SETTINGS_KEY_AUTO_SWITCH_ANNOTATIONS, enabled)
     
+    @pyqtSlot(result=str)
+    def getCurrentUser(self) -> str:
+        """
+        Get the current user name for annotations.
+        
+        Returns:
+            The current user name (defaults to system username if not set)
+        """
+        import getpass
+        default_user = getpass.getuser()
+        return self.settings.value("annotations/current_user", default_user, type=str)
+    
+    @pyqtSlot(str)
+    def setCurrentUser(self, username: str):
+        """Set the current user name for annotations."""
+        self.settings.setValue("annotations/current_user", username)
+    
     # Generic setting accessors (for dialogs)
     @pyqtSlot(str, "QVariant", result="QVariant")
     def getSetting(self, key: str, default_value=None):

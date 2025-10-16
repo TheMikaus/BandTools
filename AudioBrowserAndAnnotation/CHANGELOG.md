@@ -4,6 +4,24 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Fixed
+- **AudioBrowser-QML: Folder Selection and QML Property Errors** - Fixed multiple critical UI issues
+  - **Folder Selection Now Works**: Added missing `onFilesDiscovered` signal handler in LibraryTab.qml
+    - Previously, clicking a folder would only log a message but not display files
+    - Now properly updates file list when folder is selected from folder tree
+  - **Fixed Missing QML Properties**: Added missing properties to Theme.qml
+    - Added `fontSizeTitle`, `accentColor`, `accentColorDark`, `accentColorHover`, `accentColorPressed`
+    - Added `accentPrimaryLight`, `successColor`, `errorColor`, `warningColor`, `durationFast`
+    - Added `selectionColor`, `selectionPrimary`, `disabledColor`, `disabledTextColor`, `buttonTextColor`
+    - Added `alternateBackgroundColor`, `foregroundColor`, `surfaceColor`, `inputBackgroundColor`, `secondaryTextColor`
+  - **Fixed Missing Backend Methods**: Added missing QML-accessible methods
+    - ColorManager: Added `getColor(color_name)` method for generic color access from QML
+    - SettingsManager: Added `getCurrentUser()` and `setCurrentUser()` methods
+    - FileManager: Added `currentDirectory` property for QML binding
+  - Eliminated dozens of "Unable to assign [undefined] to QColor" errors on startup
+  - Fixed "Property 'getColor' of object ColorManager is not a function" errors
+  - Fixed "Property 'getCurrentUser' of object SettingsManager is not a function" errors
+
 ### Changed
 - **GitHub Actions CI/CD Pipeline**: Changed release creation to manual-trigger only
   - Releases are now created only when manually triggered via workflow dispatch

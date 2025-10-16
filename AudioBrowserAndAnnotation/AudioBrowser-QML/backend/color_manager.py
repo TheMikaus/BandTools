@@ -232,3 +232,37 @@ class ColorManager(QObject):
     def getBorderColor(self) -> str:
         """Get border color as hex string."""
         return self.get_ui_colors()['border'].name()
+    
+    @pyqtSlot(str, result=str)
+    def getColor(self, color_name: str) -> str:
+        """
+        Get a color by name for QML usage.
+        
+        Args:
+            color_name: Name of the color (e.g., "success", "error", "text_dim")
+            
+        Returns:
+            Hex color string
+        """
+        # Define color mappings
+        color_map = {
+            'success': self.getSuccessColor(),
+            'error': self.getDangerColor(),
+            'danger': self.getDangerColor(),
+            'info': self.getInfoColor(),
+            'warning': self.getWarningColor(),
+            'text': self.get_ui_colors()['text_secondary'].name() if self._theme == "dark" else "#000000",
+            'text_dim': self.get_ui_colors()['text_muted'].name(),
+            'textMuted': self.get_ui_colors()['text_muted'].name(),
+            'border': self.getBorderColor(),
+            'background': self.get_ui_colors()['background_light'].name(),
+            'backgroundAlt': self.get_ui_colors()['background_medium'].name(),
+            'accent': "#2563eb" if self._theme == "dark" else "#1d4ed8",
+            'primary': "#2563eb" if self._theme == "dark" else "#1d4ed8",
+            'hover': "#3b82f6" if self._theme == "dark" else "#2563eb",
+            'info_bg': "#1e3a5f" if self._theme == "dark" else "#dbeafe",
+            'warning_bg': "#4a3a1f" if self._theme == "dark" else "#fef3c7",
+        }
+        
+        # Return the mapped color or a default gray if not found
+        return color_map.get(color_name, "#808080")
