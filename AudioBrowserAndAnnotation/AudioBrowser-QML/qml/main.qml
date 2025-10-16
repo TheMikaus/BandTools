@@ -384,7 +384,6 @@ ApplicationWindow {
                             Theme.setTheme(newTheme)
                         }
                     }
-                    }
                 }
             }
         }
