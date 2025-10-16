@@ -37,6 +37,7 @@ Item {
     Canvas {
         id: starCanvas
         anchors.fill: parent
+        visible: partialTakeIndicator.marked  // Only show when marked
         
         onPaint: {
             var ctx = getContext("2d");
@@ -66,7 +67,7 @@ Item {
             ctx.closePath();
             
             // Fill with light color first
-            ctx.fillStyle = partialTakeIndicator.marked ? "#E0E0E0" : Theme.borderColor;
+            ctx.fillStyle = "#E0E0E0";
             ctx.fill();
             
             // Save context state
@@ -93,16 +94,11 @@ Item {
             }
             ctx.closePath();
             
-            // Fill left half with color based on marked status
-            if (partialTakeIndicator.marked) {
-                // Blue gradient for marked
-                var gradient = ctx.createLinearGradient(0, 0, 0, height);
-                gradient.addColorStop(0, "#4A90E2");  // Light blue
-                gradient.addColorStop(1, "#2E5C8A");  // Dark blue
-                ctx.fillStyle = gradient;
-            } else {
-                ctx.fillStyle = Theme.borderColor;
-            }
+            // Blue gradient for left half
+            var gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, "#4A90E2");  // Light blue
+            gradient.addColorStop(1, "#2E5C8A");  // Dark blue
+            ctx.fillStyle = gradient;
             ctx.fill();
             
             // Restore context
@@ -123,8 +119,53 @@ Item {
                 }
             }
             ctx.closePath();
-            ctx.strokeStyle = partialTakeIndicator.marked ? "#2E5C8A" : Theme.borderColor;
+            ctx.strokeStyle = "#2E5C8A";
             ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+    }
+    
+    // Subtle outline when unmarked
+    Canvas {
+        id: outlineCanvas
+        anchors.fill: parent
+        visible: !partialTakeIndicator.marked && mouseArea.containsMouse  // Only show on hover when unmarked
+        
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            
+            // Calculate star points
+            var centerX = width / 2;
+            var centerY = height / 2;
+            var outerRadius = Math.min(width, height) / 2 - 2;
+            var innerRadius = outerRadius * 0.4;
+            var spikes = 5;
+            
+            // Draw star outline only
+            ctx.beginPath();
+            for (var i = 0; i < spikes * 2; i++) {
+                var radius = (i % 2 === 0) ? outerRadius : innerRadius;
+                var angle = (i * Math.PI) / spikes - Math.PI / 2;
+                var x = centerX + Math.cos(angle) * radius;
+                var y = centerY + Math.sin(angle) * radius;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            
+            // Draw half-fill indication with dashed line
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, height);
+            
+            // Light gray dashed outline
+            ctx.strokeStyle = Theme.borderColor;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
             ctx.stroke();
         }
     }
@@ -153,20 +194,24 @@ Item {
         onEntered: {
             if (partialTakeIndicator.enabled) {
                 starCanvas.opacity = 0.8;
+                outlineCanvas.requestPaint();
             }
         }
         
         onExited: {
             starCanvas.opacity = 1.0;
+            outlineCanvas.requestPaint();
         }
     }
     
     // Redraw canvas when marked status changes
     onMarkedChanged: {
         starCanvas.requestPaint();
+        outlineCanvas.requestPaint();
     }
     
     Component.onCompleted: {
         starCanvas.requestPaint();
+        outlineCanvas.requestPaint();
     }
 }
