@@ -620,7 +620,7 @@ ApplicationWindow {
         // Export Annotations Dialog
         ExportAnnotationsDialog {
             id: exportAnnotationsDialog
-            currentFile: audioEngine ? audioEngine.currentFile : ""
+            currentFile: audioEngine ? audioEngine.getCurrentFile() : ""
         }
         
         // About Dialog
