@@ -318,6 +318,26 @@ class WaveformView(QQuickPaintedItem):
             if self._show_spectrogram:
                 self.update()
     
+    @pyqtSlot('QVariant', int)
+    def setWaveformData(self, peaks, duration_ms: int) -> None:
+        """
+        Set waveform data for display.
+        
+        Args:
+            peaks: List of peak values (min, max pairs)
+            duration_ms: Duration in milliseconds
+        """
+        self._set_peaks(peaks)
+        self._set_duration_ms(duration_ms)
+    
+    @pyqtSlot()
+    def clearWaveform(self) -> None:
+        """Clear the waveform display."""
+        self._peaks = []
+        self._duration_ms = 0
+        self._position_ms = 0
+        self.update()
+    
     # ========== Mouse interaction ==========
     
     def mousePressEvent(self, event) -> None:
