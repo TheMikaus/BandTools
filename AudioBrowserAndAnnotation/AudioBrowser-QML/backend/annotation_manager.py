@@ -465,6 +465,7 @@ class AnnotationManager(QObject):
     def getAnnotation(self, index: int) -> Dict[str, Any]:
         """
         Get a specific annotation by index.
+        Uses getAnnotations() to ensure consistency with annotation retrieval logic.
         
         Args:
             index: Annotation index
@@ -475,7 +476,8 @@ class AnnotationManager(QObject):
         if not self._current_file:
             return {}
         
-        annotations = self._annotations.get(self._current_file, [])
+        # Use getAnnotations() to ensure consistent behavior
+        annotations = self.getAnnotations()
         if 0 <= index < len(annotations):
             return annotations[index]
         
