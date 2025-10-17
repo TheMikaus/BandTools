@@ -77,8 +77,46 @@ ApplicationWindow {
     
     // Menu Bar
     menuBar: MenuBar {
+        // Set background for menu bar
+        background: Rectangle {
+            color: Theme.backgroundLight
+        }
+        
+        // Custom styling for all menus - using Basic controls for proper theming
+        delegate: MenuBarItem {
+            id: menuBarItemDelegate
+            contentItem: Text {
+                text: menuBarItemDelegate.text
+                font: menuBarItemDelegate.font
+                color: Theme.textColor  // Use theme text color for visibility
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+            background: Rectangle {
+                color: menuBarItemDelegate.highlighted ? Theme.accentPrimary : "transparent"
+            }
+        }
+        
         Menu {
             title: "&File"
+            
+            // Custom delegate for menu items
+            delegate: MenuItem {
+                id: menuItemDelegate
+                contentItem: Text {
+                    text: menuItemDelegate.text
+                    font: menuItemDelegate.font
+                    color: menuItemDelegate.enabled ? Theme.textColor : Theme.disabledTextColor
+                    horizontalAlignment: Text.AlignLeft
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 200
+                    implicitHeight: 32
+                    color: menuItemDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
+                }
+            }
             
             MenuItem {
                 text: "Open Folder..."
@@ -90,6 +128,22 @@ ApplicationWindow {
             Menu {
                 id: recentFoldersMenu
                 title: "Recent Folders"
+                
+                delegate: MenuItem {
+                    id: recentFoldersMenuDelegate
+                    contentItem: Text {
+                        text: recentFoldersMenuDelegate.text
+                        font: recentFoldersMenuDelegate.font
+                        color: recentFoldersMenuDelegate.enabled ? Theme.textColor : Theme.disabledTextColor
+                        horizontalAlignment: Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitWidth: 200
+                        implicitHeight: 32
+                        color: recentFoldersMenuDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
+                    }
+                }
                 
                 // Dynamically populated
                 Instantiator {
@@ -147,6 +201,22 @@ ApplicationWindow {
         Menu {
             title: "&View"
             
+            delegate: MenuItem {
+                id: viewMenuItemDelegate
+                contentItem: Text {
+                    text: viewMenuItemDelegate.text
+                    font: viewMenuItemDelegate.font
+                    color: viewMenuItemDelegate.enabled ? Theme.textColor : Theme.disabledTextColor
+                    horizontalAlignment: Text.AlignLeft
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 200
+                    implicitHeight: 32
+                    color: viewMenuItemDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
+                }
+            }
+            
             MenuItem {
                 text: "Toggle Now Playing Panel"
                 checkable: true
@@ -180,6 +250,22 @@ ApplicationWindow {
         
         Menu {
             title: "&Edit"
+            
+            delegate: MenuItem {
+                id: editMenuItemDelegate
+                contentItem: Text {
+                    text: editMenuItemDelegate.text
+                    font: editMenuItemDelegate.font
+                    color: editMenuItemDelegate.enabled ? Theme.textColor : Theme.disabledTextColor
+                    horizontalAlignment: Text.AlignLeft
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 200
+                    implicitHeight: 32
+                    color: editMenuItemDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
+                }
+            }
             
             MenuItem {
                 text: "Undo"
@@ -252,6 +338,22 @@ ApplicationWindow {
         
         Menu {
             title: "&Help"
+            
+            delegate: MenuItem {
+                id: helpMenuItemDelegate
+                contentItem: Text {
+                    text: helpMenuItemDelegate.text
+                    font: helpMenuItemDelegate.font
+                    color: helpMenuItemDelegate.enabled ? Theme.textColor : Theme.disabledTextColor
+                    horizontalAlignment: Text.AlignLeft
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 200
+                    implicitHeight: 32
+                    color: helpMenuItemDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
+                }
+            }
             
             MenuItem {
                 text: "Documentation Browser..."
@@ -620,16 +722,22 @@ ApplicationWindow {
         // Practice Statistics Dialog
         PracticeStatisticsDialog {
             id: practiceStatisticsDialog
+            practiceStatistics: practiceStatistics
+            fileManager: fileManager
         }
         
         // Practice Goals Dialog
         PracticeGoalsDialog {
             id: practiceGoalsDialog
+            practiceGoals: practiceGoals
+            practiceStatistics: practiceStatistics
+            fileManager: fileManager
         }
         
         // Setlist Builder Dialog
         SetlistBuilderDialog {
             id: setlistBuilderDialog
+            setlistManager: setlistManager
         }
         
         // Export Annotations Dialog

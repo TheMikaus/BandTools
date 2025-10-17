@@ -8,10 +8,15 @@ about practice sessions, song frequency, and practice consistency.
 
 import re
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+
+# Set up module logger
+logger = logging.getLogger(__name__)
 
 
 # Constants
@@ -85,14 +90,18 @@ class PracticeStatistics(QObject):
     def __init__(self):
         super().__init__()
         self._root_path: Optional[Path] = None
+        logger.info("PracticeStatistics initialized")
     
     @pyqtSlot(str)
     def setRootPath(self, path: str):
         """Set the root path for discovering practice folders."""
+        logger.info(f"Setting root path for practice statistics: {path}")
         if path:
             self._root_path = Path(path)
+            logger.debug(f"Root path set to: {self._root_path}")
         else:
             self._root_path = None
+            logger.debug("Root path cleared")
     
     @pyqtSlot(result=str)
     def getRootPath(self) -> str:
@@ -109,7 +118,9 @@ class PracticeStatistics(QObject):
             - songs: dict of song names with practice count and dates
             - summary: overall statistics
         """
+        logger.info("Generating practice statistics")
         if not self._root_path or not self._root_path.exists():
+            logger.warning(f"Cannot generate statistics: root path not set or doesn't exist (path: {self._root_path})")
             return json.dumps({
                 "practice_sessions": [],
                 "songs": {},
@@ -122,7 +133,9 @@ class PracticeStatistics(QObject):
                 }
             })
         
+        logger.debug(f"Generating statistics from root path: {self._root_path}")
         stats = self._generate_practice_folder_statistics()
+        logger.info(f"Statistics generated: {stats['summary']['total_sessions']} sessions, {stats['summary']['unique_songs']} unique songs")
         self.statisticsGenerated.emit(stats)
         return json.dumps(stats)
     
@@ -148,6 +161,7 @@ class PracticeStatistics(QObject):
         
         # Discover all directories with audio files
         practice_folders = discover_directories_with_audio_files(self._root_path)
+        logger.debug(f"Discovered {len(practice_folders)} practice folders with audio files")
         
         all_session_dates = []
         
@@ -158,6 +172,7 @@ class PracticeStatistics(QObject):
                 audio_files.extend(list(folder.glob(f"*{ext}")))
             
             if not audio_files:
+                logger.debug(f"Skipping folder with no audio files: {folder}")
                 continue
             
             # Get folder date (use folder modification time or name)

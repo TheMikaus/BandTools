@@ -30,20 +30,23 @@ class LogViewer(QObject):
         self._setup_logging()
     
     def _setup_logging(self):
-        """Set up logging to file."""
-        # Configure logging
+        """Set up logging to file with enhanced formatting."""
+        # Configure logging with more detailed format
         logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
+            level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
+            format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
             handlers=[
                 logging.FileHandler(self._log_file, mode='a', encoding='utf-8', errors='replace'),
             ],
             force=True
         )
         
-        # Log startup message
-        logger = logging.getLogger()
+        # Log startup message with version info
+        logger = logging.getLogger(__name__)
+        logger.info("=" * 80)
         logger.info("AudioBrowser QML application started")
+        logger.info(f"Log file: {self._log_file.absolute()}")
+        logger.info("=" * 80)
     
     @pyqtSlot(result=str)
     def getLogPath(self) -> str:

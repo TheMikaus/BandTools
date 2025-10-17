@@ -40,6 +40,14 @@ Dialog {
     
     standardButtons: Dialog.Close
     
+    // Set background color for better visibility
+    background: Rectangle {
+        color: Theme.backgroundColor
+        border.color: Theme.borderColor
+        border.width: 1
+        radius: Theme.radiusSmall
+    }
+    
     // ========== Content ==========
     
     ColumnLayout {

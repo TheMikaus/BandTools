@@ -6,10 +6,15 @@ Handles audio playback functionality for the AudioBrowser QML application.
 Provides QML-accessible audio playback controls and state management.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot, QTimer
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+
+
+# Set up module logger
+logger = logging.getLogger(__name__)
 
 
 class AudioEngine(QObject):
@@ -77,18 +82,24 @@ class AudioEngine(QObject):
             file_path: Path to the audio file
         """
         try:
+            logger.info(f"Loading audio file: {file_path}")
             path = Path(file_path)
             if not path.exists():
-                self.errorOccurred.emit(f"File not found: {file_path}")
+                error_msg = f"File not found: {file_path}"
+                logger.error(error_msg)
+                self.errorOccurred.emit(error_msg)
                 return
             
             self._current_file = path
             self._autoplay_pending = False  # Reset autoplay flag when explicitly loading
             self._player.setSource(QUrl.fromLocalFile(str(path)))
             self.currentFileChanged.emit(str(path))
+            logger.debug(f"Audio file loaded successfully: {path.name}")
             
         except Exception as e:
-            self.errorOccurred.emit(f"Error loading file: {e}")
+            error_msg = f"Error loading file: {e}"
+            logger.error(error_msg, exc_info=True)
+            self.errorOccurred.emit(error_msg)
     
     @pyqtSlot(str)
     def loadAndPlay(self, file_path: str) -> None:
@@ -99,37 +110,48 @@ class AudioEngine(QObject):
             file_path: Path to the audio file
         """
         try:
+            logger.info(f"Loading and playing audio file: {file_path}")
             path = Path(file_path)
             if not path.exists():
-                self.errorOccurred.emit(f"File not found: {file_path}")
+                error_msg = f"File not found: {file_path}"
+                logger.error(error_msg)
+                self.errorOccurred.emit(error_msg)
                 return
             
             self._current_file = path
             self._autoplay_pending = True  # Set flag to play when loaded
             self._player.setSource(QUrl.fromLocalFile(str(path)))
             self.currentFileChanged.emit(str(path))
+            logger.debug(f"Audio file loaded with autoplay: {path.name}")
             
         except Exception as e:
-            self.errorOccurred.emit(f"Error loading file: {e}")
+            error_msg = f"Error loading file: {e}"
+            logger.error(error_msg, exc_info=True)
+            self.errorOccurred.emit(error_msg)
             self._autoplay_pending = False
     
     @pyqtSlot()
     def play(self) -> None:
         """Start or resume playback."""
         if self._current_file is None:
-            self.errorOccurred.emit("No file loaded")
+            error_msg = "No file loaded"
+            logger.warning(error_msg)
+            self.errorOccurred.emit(error_msg)
             return
         
+        logger.debug(f"Starting playback: {self._current_file.name}")
         self._player.play()
     
     @pyqtSlot()
     def pause(self) -> None:
         """Pause playback."""
+        logger.debug("Pausing playback")
         self._player.pause()
     
     @pyqtSlot()
     def stop(self) -> None:
         """Stop playback and reset position to beginning."""
+        logger.debug("Stopping playback")
         self._player.stop()
     
     @pyqtSlot()

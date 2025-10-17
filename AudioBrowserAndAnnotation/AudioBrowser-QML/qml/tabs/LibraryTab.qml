@@ -103,8 +103,9 @@ Item {
                         
                         MenuItem {
                             text: "Batch Rename"
-                            enabled: fileListModel.count() > 0
+                            enabled: fileListModel && fileListModel.count() > 0
                             onTriggered: {
+                                if (!fileListModel) return
                                 var files = []
                                 for (var i = 0; i < fileListModel.count(); i++) {
                                     var filePath = fileListModel.getFilePath(i)
@@ -118,8 +119,9 @@ Item {
                         
                         MenuItem {
                             text: "Convert WAV→MP3"
-                            enabled: fileListModel.count() > 0
+                            enabled: fileListModel && fileListModel.count() > 0
                             onTriggered: {
+                                if (!fileListModel) return
                                 var wavFiles = []
                                 for (var i = 0; i < fileListModel.count(); i++) {
                                     var filePath = fileListModel.getFilePath(i)
@@ -321,7 +323,7 @@ Item {
                             spacing: Theme.spacingSmall
                             
                             Label {
-                                text: "Files (" + fileListModel.count() + ")"
+                                text: "Files (" + (fileListModel ? fileListModel.count() : 0) + ")"
                                 font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
                                 color: Theme.textColor

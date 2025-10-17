@@ -43,6 +43,14 @@ Dialog {
     
     standardButtons: Dialog.Close
     
+    // Set background color for better visibility
+    background: Rectangle {
+        color: Theme.backgroundColor
+        border.color: Theme.borderColor
+        border.width: 1
+        radius: Theme.radiusSmall
+    }
+    
     // ========== Functions ==========
     
     function refreshSetlists() {
@@ -612,7 +620,7 @@ Dialog {
         }
         
         onAccepted: {
-            if (newSetlistNameField.text.trim()) {
+            if (newSetlistNameField.text.trim() && setlistManager) {
                 setlistManager.createSetlist(newSetlistNameField.text.trim())
                 refreshSetlists()
                 newSetlistNameField.text = ""
