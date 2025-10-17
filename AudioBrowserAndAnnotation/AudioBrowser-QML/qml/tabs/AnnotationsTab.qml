@@ -767,6 +767,12 @@ Item {
         annotationsModel.setAnnotations(annotations)
     }
     
+    function updateUserFilter() {
+        // No-op: User filtering is not currently implemented
+        // All users are always shown (see line 753 comment)
+        // This function exists to prevent ReferenceError when called
+    }
+    
     // Initialize
     Component.onCompleted: {
         if (audioEngine.getCurrentFile() !== "") {
