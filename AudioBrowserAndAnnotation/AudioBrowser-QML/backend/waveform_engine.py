@@ -426,6 +426,10 @@ class WaveformEngine(QObject):
         self._workers: Dict[str, WaveformWorker] = {}
         self._threads: Dict[str, QThread] = {}
     
+    def __del__(self):
+        """Cleanup method to ensure all threads are properly terminated."""
+        self.cleanup()
+    
     @pyqtSlot(str)
     def setCacheDirectory(self, directory: str) -> None:
         """
@@ -466,6 +470,7 @@ class WaveformEngine(QObject):
         worker.finished.connect(thread.quit)
         worker.error.connect(thread.quit)
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(worker.deleteLater)
         
         # Move worker to thread and start
         worker.moveToThread(thread)
@@ -546,6 +551,29 @@ class WaveformEngine(QObject):
         """Clear the waveform cache."""
         self._cache.clear()
         self._save_cache()
+    
+    @pyqtSlot()
+    def cleanup(self) -> None:
+        """
+        Clean up all running threads.
+        
+        This method should be called before the engine is destroyed to ensure
+        all worker threads are properly terminated and waited for.
+        """
+        # Cancel all workers and wait for threads
+        for file_path in list(self._workers.keys()):
+            worker = self._workers[file_path]
+            worker.cancel()
+        
+        # Wait for all threads to finish
+        for file_path, thread in list(self._threads.items()):
+            if thread.isRunning():
+                thread.quit()
+                thread.wait(2000)  # Wait up to 2 seconds for each thread
+        
+        # Clear the dictionaries
+        self._workers.clear()
+        self._threads.clear()
     
     # ========== Private methods ==========
     
