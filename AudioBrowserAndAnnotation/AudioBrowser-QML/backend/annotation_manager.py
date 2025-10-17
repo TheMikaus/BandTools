@@ -162,9 +162,15 @@ class AnnotationManager(QObject):
         # Get file name from path
         file_name = Path(self._current_file).name
         
-        # Ensure file data exists in current set
+        # Ensure file data exists in current set with all required fields
         if file_name not in current_set["files"]:
-            current_set["files"][file_name] = {"general": "", "notes": []}
+            current_set["files"][file_name] = {
+                "general": "",
+                "best_take": False,
+                "partial_take": False,
+                "reference_song": False,
+                "notes": []
+            }
         
         # Add annotation to current set
         current_set["files"][file_name]["notes"].append(annotation)
@@ -1121,7 +1127,8 @@ class AnnotationManager(QObject):
         if not self._current_directory:
             return None
         # Use username-specific file for multi-user support
-        return self._current_directory / f".{self._current_user}_notes.json"
+        # Format: .audio_notes_{username}.json (matches original app format)
+        return self._current_directory / f".audio_notes_{self._current_user}.json"
     
     def _load_annotation_sets(self) -> None:
         """Load annotation sets from disk."""
@@ -1135,9 +1142,10 @@ class AnnotationManager(QObject):
             with open(sets_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Check if it's the new multi-set format
-            if isinstance(data, dict) and "annotation_sets" in data:
-                self._annotation_sets = data["annotation_sets"]
+            # Check if it's the format with "sets" key (original app) or "annotation_sets" (old QML format)
+            if isinstance(data, dict) and ("sets" in data or "annotation_sets" in data):
+                # Support both "sets" (original app) and "annotation_sets" (old QML format)
+                self._annotation_sets = data.get("sets", data.get("annotation_sets", []))
                 if not self._annotation_sets:
                     self._create_default_set()
                 else:
@@ -1158,14 +1166,62 @@ class AnnotationManager(QObject):
             self.currentSetChanged.emit(self._current_set_id)
     
     def _save_annotation_sets(self) -> None:
-        """Save annotation sets to disk."""
+        """Save annotation sets to disk in format compatible with original app."""
         sets_file = self._get_annotation_sets_file_path()
         if not sets_file:
             return
         
         try:
+            # Clean annotation sets to match original app format
+            cleaned_sets = []
+            for aset in self._annotation_sets:
+                cleaned_set = {
+                    "id": aset["id"],
+                    "name": aset["name"],
+                    "color": aset["color"],
+                    "visible": aset.get("visible", True),
+                    "folder_notes": aset.get("folder_notes", ""),
+                    "files": {}
+                }
+                
+                # Clean file data
+                for filename, file_data in aset.get("files", {}).items():
+                    cleaned_files = {
+                        "general": file_data.get("general", ""),
+                        "best_take": file_data.get("best_take", False),
+                        "partial_take": file_data.get("partial_take", False),
+                        "reference_song": file_data.get("reference_song", False),
+                        "notes": []
+                    }
+                    
+                    # Clean notes to only include fields the original app uses
+                    for note in file_data.get("notes", []):
+                        cleaned_note = {
+                            "uid": note.get("uid", 0),
+                            "ms": note.get("ms", note.get("timestamp_ms", 0)),  # Prefer ms, fall back to timestamp_ms
+                            "text": note.get("text", ""),
+                            "important": note.get("important", False)
+                        }
+                        
+                        # Include optional subsection fields if present
+                        if note.get("end_ms") is not None:
+                            cleaned_note["end_ms"] = note["end_ms"]
+                        if note.get("subsection"):
+                            cleaned_note["subsection"] = note["subsection"]
+                        if note.get("subsection_note"):
+                            cleaned_note["subsection_note"] = note["subsection_note"]
+                        
+                        cleaned_files["notes"].append(cleaned_note)
+                    
+                    cleaned_set["files"][filename] = cleaned_files
+                
+                cleaned_sets.append(cleaned_set)
+            
+            # Format data to match original app structure
             data = {
-                "annotation_sets": self._annotation_sets,
+                "version": 3,  # Match original app version
+                "updated": datetime.now().isoformat(timespec="seconds"),
+                "sets": cleaned_sets,  # Use "sets" key, not "annotation_sets"
                 "current_set_id": self._current_set_id
             }
             
@@ -1187,6 +1243,7 @@ class AnnotationManager(QObject):
             "name": set_name,
             "color": color,
             "visible": True,
+            "folder_notes": "",  # Match original app format
             "files": {}
         }
         
