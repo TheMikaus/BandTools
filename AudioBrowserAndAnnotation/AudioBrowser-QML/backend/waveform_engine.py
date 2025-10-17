@@ -179,6 +179,7 @@ class WaveformWorker(QObject):
     progress = pyqtSignal(int, int)  # current, total
     finished = pyqtSignal(str, list, int, int, int)  # path, peaks, duration_ms, size, mtime
     error = pyqtSignal(str, str)  # path, error_message
+    cancelled = pyqtSignal(str)  # path - emitted when generation is cancelled
     
     def __init__(self, path: str, columns: int = WAVEFORM_COLUMNS):
         super().__init__()
@@ -202,6 +203,7 @@ class WaveformWorker(QObject):
             samples, sample_rate, duration_ms = self._decode_audio_samples(p)
             
             if self._cancelled:
+                self.cancelled.emit(self._path)
                 return
             
             # Generate peaks progressively
@@ -211,6 +213,7 @@ class WaveformWorker(QObject):
             
             for chunk_idx, chunk_peaks in enumerate(self._compute_peaks_progressive(samples, self._columns, chunk_size)):
                 if self._cancelled:
+                    self.cancelled.emit(self._path)
                     return
                 
                 start_idx, peak_data = chunk_peaks
@@ -227,7 +230,11 @@ class WaveformWorker(QObject):
             self.finished.emit(self._path, peaks, duration_ms, size, mtime)
             
         except Exception as e:
-            self.error.emit(self._path, str(e))
+            if self._cancelled:
+                # If cancelled during exception handling, emit cancelled signal
+                self.cancelled.emit(self._path)
+            else:
+                self.error.emit(self._path, str(e))
     
     def _decode_audio_samples(self, path: Path) -> Tuple[List[float], int, int]:
         """
@@ -467,10 +474,10 @@ class WaveformEngine(QObject):
         worker.progress.connect(lambda cur, tot: self.waveformProgress.emit(file_path, cur, tot))
         worker.finished.connect(lambda path, peaks, dur, size, mtime: self._on_waveform_finished(path, peaks, dur, size, mtime))
         worker.error.connect(lambda path, err: self._on_waveform_error(path, err))
+        worker.cancelled.connect(lambda path: self._on_waveform_cancelled(path))
         worker.finished.connect(thread.quit)
         worker.error.connect(thread.quit)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(worker.deleteLater)
+        worker.cancelled.connect(thread.quit)
         
         # Move worker to thread and start
         worker.moveToThread(thread)
@@ -560,16 +567,26 @@ class WaveformEngine(QObject):
         This method should be called before the engine is destroyed to ensure
         all worker threads are properly terminated and waited for.
         """
-        # Cancel all workers and wait for threads
+        # Cancel all workers first
         for file_path in list(self._workers.keys()):
-            worker = self._workers[file_path]
-            worker.cancel()
+            worker = self._workers.get(file_path)
+            if worker:
+                worker.cancel()
         
-        # Wait for all threads to finish
+        # Request all threads to quit and wait for them
         for file_path, thread in list(self._threads.items()):
-            if thread.isRunning():
+            if thread and thread.isRunning():
+                # Request the thread to quit
                 thread.quit()
-                thread.wait(2000)  # Wait up to 2 seconds for each thread
+        
+        # Now wait for all threads to actually finish
+        for file_path, thread in list(self._threads.items()):
+            if thread and thread.isRunning():
+                # Wait up to 2 seconds for each thread to finish
+                if not thread.wait(2000):
+                    # If thread doesn't finish, try to terminate it (last resort)
+                    thread.terminate()
+                    thread.wait(1000)  # Give it 1 more second after terminate
         
         # Clear the dictionaries
         self._workers.clear()
@@ -614,25 +631,42 @@ class WaveformEngine(QObject):
         # Save cache
         self._save_cache()
         
-        # Clean up worker
-        if file_path in self._workers:
-            del self._workers[file_path]
-        if file_path in self._threads:
-            del self._threads[file_path]
+        # Clean up worker and thread
+        worker = self._workers.pop(file_path, None)
+        thread = self._threads.pop(file_path, None)
+        
+        if thread:
+            thread.deleteLater()
+        if worker:
+            worker.deleteLater()
         
         # Emit ready signal
         self.waveformReady.emit(file_path)
     
     def _on_waveform_error(self, file_path: str, error_message: str) -> None:
         """Handle waveform generation error."""
-        # Clean up worker
-        if file_path in self._workers:
-            del self._workers[file_path]
-        if file_path in self._threads:
-            del self._threads[file_path]
+        # Clean up worker and thread
+        worker = self._workers.pop(file_path, None)
+        thread = self._threads.pop(file_path, None)
+        
+        if thread:
+            thread.deleteLater()
+        if worker:
+            worker.deleteLater()
         
         # Emit error signal
         self.waveformError.emit(file_path, error_message)
+    
+    def _on_waveform_cancelled(self, file_path: str) -> None:
+        """Handle waveform generation cancellation."""
+        # Clean up worker and thread
+        worker = self._workers.pop(file_path, None)
+        thread = self._threads.pop(file_path, None)
+        
+        if thread:
+            thread.deleteLater()
+        if worker:
+            worker.deleteLater()
     
     def _load_cache(self) -> None:
         """Load waveform cache from disk."""
