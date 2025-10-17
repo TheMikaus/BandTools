@@ -91,10 +91,13 @@ python3 main.py
 ## Keyboard Shortcuts
 
 ### Navigation
-- **Ctrl+1**: Library tab
-- **Ctrl+2**: Annotations tab
-- **Ctrl+3**: Clips tab
+- **Ctrl+1**: Annotations tab
+- **Ctrl+2**: Clips tab
+- **Ctrl+3**: Sections tab
 - **Ctrl+4**: Folder Notes tab
+- **Ctrl+5**: Fingerprints tab
+
+Note: Library is always visible on the left side - no keyboard shortcut needed!
 
 ### Playback
 - **Space**: Play/Pause
