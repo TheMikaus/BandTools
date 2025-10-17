@@ -9,9 +9,14 @@ Provides file discovery, filtering, and metadata access.
 import os
 import sys
 import wave
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Set, Any
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
+
+
+# Set up module logger
+logger = logging.getLogger(__name__)
 
 # Ensure optional dependencies are available
 def _ensure_import(mod_name: str, pip_name: str | None = None) -> bool:
@@ -99,16 +104,22 @@ class FileManager(QObject):
             directory: Path to the directory
         """
         try:
+            logger.info(f"Setting current directory: {directory}")
             path = Path(directory)
             if not path.exists():
-                self.errorOccurred.emit(f"Directory not found: {directory}")
+                error_msg = f"Directory not found: {directory}"
+                logger.error(error_msg)
+                self.errorOccurred.emit(error_msg)
                 return
             
             if not path.is_dir():
-                self.errorOccurred.emit(f"Not a directory: {directory}")
+                error_msg = f"Not a directory: {directory}"
+                logger.error(error_msg)
+                self.errorOccurred.emit(error_msg)
                 return
             
             self._current_directory = path
+            logger.debug(f"Current directory set to: {path}")
             self.currentDirectoryChanged.emit(str(path))
             
             # Load takes metadata for the new directory
@@ -118,7 +129,9 @@ class FileManager(QObject):
             self.discoverAudioFiles(str(path))
             
         except Exception as e:
-            self.errorOccurred.emit(f"Error setting directory: {e}")
+            error_msg = f"Error setting directory: {e}"
+            logger.error(error_msg, exc_info=True)
+            self.errorOccurred.emit(error_msg)
     
     @pyqtSlot(str)
     def discoverAudioFiles(self, directory: str = None) -> None:
@@ -131,14 +144,20 @@ class FileManager(QObject):
         try:
             if directory is None:
                 if self._current_directory is None:
-                    self.errorOccurred.emit("No directory set")
+                    error_msg = "No directory set"
+                    logger.warning(error_msg)
+                    self.errorOccurred.emit(error_msg)
                     return
                 scan_path = self._current_directory
             else:
                 scan_path = Path(directory)
             
+            logger.info(f"Discovering audio files in: {scan_path}")
+            
             if not scan_path.exists() or not scan_path.is_dir():
-                self.errorOccurred.emit(f"Invalid directory: {scan_path}")
+                error_msg = f"Invalid directory: {scan_path}"
+                logger.error(error_msg)
+                self.errorOccurred.emit(error_msg)
                 return
             
             # Load metadata for this directory (best/partial takes)
@@ -153,13 +172,16 @@ class FileManager(QObject):
             files.sort(key=lambda p: p.name.lower())
             
             self._discovered_files = files
+            logger.info(f"Discovered {len(files)} audio files in {scan_path}")
             
             # Emit list of file paths as strings
             file_paths = [str(f) for f in files]
             self.filesDiscovered.emit(file_paths)
             
         except Exception as e:
-            self.errorOccurred.emit(f"Error discovering files: {e}")
+            error_msg = f"Error discovering files: {e}"
+            logger.error(error_msg, exc_info=True)
+            self.errorOccurred.emit(error_msg)
     
     @pyqtSlot(str, result=list)
     def discoverAudioFilesRecursive(self, directory: str) -> list:
