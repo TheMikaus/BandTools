@@ -27,9 +27,6 @@ Menu {
     
     property string folderPath: ""
     property string folderName: ""
-    property var fingerprintEngine: null
-    property var waveformEngine: null
-    property var fileManager: null
     
     // ========== Styling ==========
     

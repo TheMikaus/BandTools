@@ -24,10 +24,6 @@ Dialog {
     
     // ========== Properties ==========
     
-    // References
-    property var setlistManager: null
-    property var fileManager: null
-    
     // Internal state
     property string currentSetlistId: ""
     property var setlistDetails: null

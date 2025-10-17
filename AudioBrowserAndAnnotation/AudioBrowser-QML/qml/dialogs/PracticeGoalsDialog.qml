@@ -20,11 +20,6 @@ Dialog {
     
     // ========== Properties ==========
     
-    // References
-    property var practiceGoals: null
-    property var practiceStatistics: null
-    property var fileManager: null
-    
     // Internal state
     property var goalsData: null
     property var statsData: null

@@ -21,10 +21,6 @@ Dialog {
     
     // ========== Properties ==========
     
-    // References
-    property var practiceStatistics: null
-    property var fileManager: null
-    
     // Internal state
     property string currentStatsJson: ""
     property string currentHtml: ""
@@ -128,18 +124,18 @@ Dialog {
     // ========== Functions ==========
     
     function refreshStatistics() {
-        if (!root.practiceStatistics) {
+        if (!practiceStatistics) {
             root.currentHtml = "<h2>Error</h2><p>Practice statistics manager not initialized</p>"
             return
         }
         
-        if (!root.fileManager) {
+        if (!fileManager) {
             root.currentHtml = "<h2>Error</h2><p>File manager not initialized</p>"
             return
         }
         
         // Set root path from file manager
-        const rootPath = root.fileManager.getCurrentDirectory()
+        const rootPath = fileManager.getCurrentDirectory()
         if (!rootPath || rootPath.length === 0) {
             root.currentHtml = "<h2>No Directory Selected</h2><p>Please select a practice folder directory first.</p>"
             statusLabel.text = "No directory selected"
@@ -149,11 +145,11 @@ Dialog {
         statusLabel.text = "Generating statistics..."
         
         // Set root path and generate statistics
-        root.practiceStatistics.setRootPath(rootPath)
-        root.currentStatsJson = root.practiceStatistics.generateStatistics()
+        practiceStatistics.setRootPath(rootPath)
+        root.currentStatsJson = practiceStatistics.generateStatistics()
         
         // Format as HTML
-        root.currentHtml = root.practiceStatistics.formatStatisticsAsHtml(root.currentStatsJson)
+        root.currentHtml = practiceStatistics.formatStatisticsAsHtml(root.currentStatsJson)
         
         statusLabel.text = "Statistics updated: " + new Date().toLocaleString()
     }

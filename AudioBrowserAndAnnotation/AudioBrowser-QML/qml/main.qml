@@ -734,22 +734,16 @@ ApplicationWindow {
         // Practice Statistics Dialog
         PracticeStatisticsDialog {
             id: practiceStatisticsDialog
-            practiceStatistics: practiceStatistics
-            fileManager: fileManager
         }
         
         // Practice Goals Dialog
         PracticeGoalsDialog {
             id: practiceGoalsDialog
-            practiceGoals: practiceGoals
-            practiceStatistics: practiceStatistics
-            fileManager: fileManager
         }
         
         // Setlist Builder Dialog
         SetlistBuilderDialog {
             id: setlistBuilderDialog
-            setlistManager: setlistManager
         }
         
         // Export Annotations Dialog

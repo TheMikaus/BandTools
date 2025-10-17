@@ -615,9 +615,6 @@ Item {
     
     FolderContextMenu {
         id: folderContextMenu
-        fingerprintEngine: typeof fingerprintEngine !== 'undefined' ? fingerprintEngine : null
-        waveformEngine: typeof waveformEngine !== 'undefined' ? waveformEngine : null
-        fileManager: typeof fileManager !== 'undefined' ? fileManager : null
         
         onGenerateFingerprintsRequested: {
             if (folderContextMenu.folderPath && fileManager && fingerprintEngine) {
