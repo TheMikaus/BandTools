@@ -275,7 +275,7 @@ Dialog {
                     Label {
                         text: "ℹ️ Recommendations"
                         font.bold: true
-                        color: colorManager ? colorManager.getColor("accent") : "#2563eb"
+                        color: "#ffffff"  // White for better readability
                     }
                     
                     Label {
@@ -286,6 +286,7 @@ Dialog {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         font.pointSize: 9
+                        color: "#ffffff"  // White text for better readability on blue background
                     }
                 }
             }

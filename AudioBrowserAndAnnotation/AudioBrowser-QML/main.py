@@ -125,6 +125,8 @@ class ApplicationViewModel(QObject):
 
 def main():
     """Main application entry point."""
+    import logging
+    
     app = QGuiApplication(sys.argv)
     
     # Set application metadata
@@ -175,16 +177,22 @@ def main():
     # Create QML engine
     engine = QQmlApplicationEngine()
 
-    # Create backend managers with error checks
+    # Create backend managers with error checks and enhanced logging
     def safe_create(name, ctor):
         try:
+            logging.info(f"Creating {name}...")
             obj = ctor()
             if obj is None:
-                print(f"ERROR: {name} is None after construction", file=sys.stderr)
+                error_msg = f"{name} is None after construction"
+                logging.error(error_msg)
+                print(f"ERROR: {error_msg}", file=sys.stderr)
                 sys.exit(2)
+            logging.info(f"{name} created successfully")
             return obj
         except Exception as e:
-            print(f"ERROR: Failed to construct {name}: {e}", file=sys.stderr)
+            error_msg = f"Failed to construct {name}: {e}"
+            logging.error(error_msg, exc_info=True)
+            print(f"ERROR: {error_msg}", file=sys.stderr)
             import traceback
             traceback.print_exc()
             sys.exit(2)
@@ -204,9 +212,13 @@ def main():
 
     # Connect practice goals to practice statistics
     try:
+        logging.info("Connecting PracticeGoals to PracticeStatistics...")
         practice_goals.setPracticeStatistics(practice_statistics)
+        logging.info("PracticeGoals connected to PracticeStatistics successfully")
     except Exception as e:
-        print(f"ERROR: Failed to connect PracticeGoals to PracticeStatistics: {e}", file=sys.stderr)
+        error_msg = f"Failed to connect PracticeGoals to PracticeStatistics: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(f"ERROR: {error_msg}", file=sys.stderr)
         sys.exit(2)
 
     setlist_manager = safe_create("SetlistManager", lambda: SetlistManager(Path.home()))
@@ -216,16 +228,24 @@ def main():
     documentation_manager = safe_create("DocumentationManager", DocumentationManager)
     undo_manager = safe_create("UndoManager", UndoManager)
     try:
+        logging.info("Configuring UndoManager...")
         undo_manager.setFileManager(file_manager)
         undo_manager.setAnnotationManager(annotation_manager)
         undo_manager.setCapacity(settings_manager.getUndoLimit())
+        logging.info("UndoManager configured successfully")
     except Exception as e:
-        print(f"ERROR: Failed to configure UndoManager: {e}", file=sys.stderr)
+        error_msg = f"Failed to configure UndoManager: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(f"ERROR: {error_msg}", file=sys.stderr)
         sys.exit(2)
     try:
+        logging.info("Connecting AnnotationManager to UndoManager...")
         annotation_manager.setUndoManager(undo_manager)
+        logging.info("AnnotationManager connected to UndoManager successfully")
     except Exception as e:
-        print(f"ERROR: Failed to connect AnnotationManager to UndoManager: {e}", file=sys.stderr)
+        error_msg = f"Failed to connect AnnotationManager to UndoManager: {e}"
+        logging.error(error_msg, exc_info=True)
+        print(f"ERROR: {error_msg}", file=sys.stderr)
         sys.exit(2)
     config_dir = Path.home() / ".audiobrowser"
     sync_manager = safe_create("SyncManager", lambda: SyncManager(config_dir))
@@ -309,6 +329,7 @@ def main():
     audio_engine.setVolume(settings_manager.getVolume())
 
     # Expose backend objects to QML before loading QML file
+    logging.info("Exposing backend objects to QML context...")
     ctx = engine.rootContext()
     ctx.setContextProperty("appViewModel", view_model)
     ctx.setContextProperty("settingsManager", settings_manager)
@@ -333,22 +354,30 @@ def main():
     ctx.setContextProperty("undoManager", undo_manager)
     ctx.setContextProperty("syncManager", sync_manager)
     ctx.setContextProperty("logViewer", log_viewer)
+    logging.info("Backend objects exposed to QML successfully")
 
     # Load saved root directory on startup
     saved_root = settings_manager.getRootDir()
     if saved_root and Path(saved_root).exists():
+        logging.info(f"Loading saved root directory: {saved_root}")
         file_manager.setCurrentDirectory(saved_root)
+    else:
+        logging.info("No saved root directory found or directory doesn't exist")
 
     # Load QML file
     qml_file = Path(__file__).parent / "qml" / "main.qml"
+    logging.info(f"Loading QML file: {qml_file}")
     print(f"Loading QML file: {qml_file}")
     engine.load(QUrl.fromLocalFile(str(qml_file)))
 
     # Check if QML loaded successfully
     if not engine.rootObjects():
-        print("Error: Failed to load QML file")
+        error_msg = "Failed to load QML file"
+        logging.error(error_msg)
+        print(f"Error: {error_msg}")
         return 1
 
+    logging.info("AudioBrowser QML Phase 7 - Application started successfully")
     print("AudioBrowser QML Phase 7 - Application started successfully")
     sys.stdout.flush()  # Ensure message is printed immediately
     return app.exec()
