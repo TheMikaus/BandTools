@@ -47,225 +47,148 @@ Item {
     
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingNormal
-        spacing: Theme.spacingNormal
+        anchors.margins: Theme.spacingSmall
+        spacing: Theme.spacingSmall
         
-        // Toolbar - organized into two rows
-        ColumnLayout {
+        // Compact toolbar - single row with essential controls
+        Rectangle {
             Layout.fillWidth: true
-            spacing: Theme.spacingSmall
+            Layout.preferredHeight: Theme.toolbarHeight
+            color: Theme.backgroundLight
+            radius: Theme.radiusSmall
             
-            // First row: Directory selection
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Theme.toolbarHeight
-                color: Theme.backgroundLight
-                radius: Theme.radiusSmall
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: Theme.spacingSmall
+                spacing: Theme.spacingSmall
                 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: Theme.spacingSmall
-                    spacing: Theme.spacingNormal
-                    
-                    Label {
-                        text: "Directory:"
-                        font.pixelSize: Theme.fontSizeNormal
-                        color: Theme.textColor
+                StyledButton {
+                    text: "📁"
+                    onClicked: {
+                        folderDialog.open()
                     }
-                    
-                    TextField {
-                        id: directoryField
-                        Layout.fillWidth: true
-                        placeholderText: "Select a directory..."
-                        text: fileManager ? fileManager.getCurrentDirectory() : ""
-                        font.pixelSize: Theme.fontSizeNormal
-                        background: Rectangle {
-                            color: Theme.backgroundColor
-                            border.color: Theme.borderColor
-                            border.width: 1
-                            radius: Theme.radiusSmall
-                        }
-                        color: Theme.textColor
-                        
-                        onAccepted: {
-                            if (text.length > 0) {
-                                fileManager.setCurrentDirectory(text)
-                            } else {
-                                promptForDirectory()
-                            }
-                        }
-                    }
-                    
-                    StyledButton {
-                        text: "Browse..."
-                        onClicked: {
-                            folderDialog.open()
-                        }
-                    }
-                    
-                    StyledButton {
-                        text: "Refresh"
-                        success: true
-                        onClicked: {
-                            var dir = fileManager.getCurrentDirectory()
-                            if (dir.length > 0) {
-                                fileManager.discoverAudioFiles(dir)
-                            } else {
-                                promptForDirectory()
-                            }
-                        }
-                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Browse for folder"
+                    ToolTip.delay: 500
                 }
-            }
-            
-            // Second row: Actions and filters
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Theme.toolbarHeight
-                color: Theme.backgroundLight
-                radius: Theme.radiusSmall
                 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: Theme.spacingSmall
-                    spacing: Theme.spacingNormal
-                    
-                    Label {
-                        text: "Actions:"
-                        font.pixelSize: Theme.fontSizeNormal
-                        color: Theme.textColor
+                StyledButton {
+                    text: "🔄"
+                    success: true
+                    onClicked: {
+                        var dir = fileManager.getCurrentDirectory()
+                        if (dir.length > 0) {
+                            fileManager.discoverAudioFiles(dir)
+                        } else {
+                            promptForDirectory()
+                        }
                     }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Refresh"
+                    ToolTip.delay: 500
+                }
+                
+                Item { Layout.fillWidth: true }
+                
+                // More menu button
+                StyledButton {
+                    text: "⋮"
+                    onClicked: moreMenu.popup()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "More options"
+                    ToolTip.delay: 500
                     
-                    // Batch operations buttons
-                    StyledButton {
-                        text: "Batch Rename"
-                        info: true
-                        enabled: fileListModel.count() > 0
-                        onClicked: {
-                            // Get all files from the model
-                            var files = []
-                            for (var i = 0; i < fileListModel.count(); i++) {
-                                var filePath = fileListModel.getFilePath(i)
-                                if (filePath) {
-                                    files.push(filePath)
+                    Menu {
+                        id: moreMenu
+                        
+                        MenuItem {
+                            text: "Batch Rename"
+                            enabled: fileListModel.count() > 0
+                            onTriggered: {
+                                var files = []
+                                for (var i = 0; i < fileListModel.count(); i++) {
+                                    var filePath = fileListModel.getFilePath(i)
+                                    if (filePath) {
+                                        files.push(filePath)
+                                    }
                                 }
+                                batchRenameDialog.openDialog(files)
                             }
-                            batchRenameDialog.openDialog(files)
                         }
-                    }
-                    
-                    StyledButton {
-                        text: "Convert WAV→MP3"
-                        warning: true
-                        enabled: fileListModel.count() > 0
-                        onClicked: {
-                            // Get all WAV files from the model
-                            var wavFiles = []
-                            for (var i = 0; i < fileListModel.count(); i++) {
-                                var filePath = fileListModel.getFilePath(i)
-                                if (filePath && filePath.toLowerCase().endsWith(".wav")) {
-                                    wavFiles.push(filePath)
+                        
+                        MenuItem {
+                            text: "Convert WAV→MP3"
+                            enabled: fileListModel.count() > 0
+                            onTriggered: {
+                                var wavFiles = []
+                                for (var i = 0; i < fileListModel.count(); i++) {
+                                    var filePath = fileListModel.getFilePath(i)
+                                    if (filePath && filePath.toLowerCase().endsWith(".wav")) {
+                                        wavFiles.push(filePath)
+                                    }
                                 }
+                                if (wavFiles.length === 0) {
+                                    console.log("No WAV files found")
+                                    return
+                                }
+                                batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
                             }
-                            if (wavFiles.length === 0) {
-                                console.log("No WAV files found")
-                                return
+                        }
+                        
+                        MenuSeparator {}
+                        
+                        MenuItem {
+                            text: filterBestTakes ? "★ Best Takes ✓" : "★ Best Takes"
+                            checkable: true
+                            checked: filterBestTakes
+                            onTriggered: {
+                                filterBestTakes = !filterBestTakes
+                                updateFileList()
                             }
-                            batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
+                        }
+                        
+                        MenuItem {
+                            text: filterPartialTakes ? "◐ Partial Takes ✓" : "◐ Partial Takes"
+                            checkable: true
+                            checked: filterPartialTakes
+                            onTriggered: {
+                                filterPartialTakes = !filterPartialTakes
+                                updateFileList()
+                            }
+                        }
+                        
+                        MenuSeparator {}
+                        
+                        MenuItem {
+                            text: "📊 Practice Stats"
+                            onTriggered: practiceStatisticsDialog.open()
+                        }
+                        
+                        MenuItem {
+                            text: "🎯 Practice Goals"
+                            onTriggered: practiceGoalsDialog.open()
+                        }
+                        
+                        MenuItem {
+                            text: "🎵 Setlist Builder"
+                            onTriggered: setlistBuilderDialog.open()
                         }
                     }
-                    
-                    // Separator
-                    Rectangle {
-                        width: 1
-                        Layout.fillHeight: true
-                        Layout.margins: 4
-                        color: Theme.borderColor
-                    }
-                    
-                    Label {
-                        text: "Filters:"
-                        font.pixelSize: Theme.fontSizeNormal
-                        color: Theme.textColor
-                    }
-                    
-                    // Filter: Best Takes
-                    StyledButton {
-                        text: filterBestTakes ? "★ Best Takes ✓" : "★ Best Takes"
-                        info: filterBestTakes
-                        onClicked: {
-                            filterBestTakes = !filterBestTakes
-                            updateFileList()
-                        }
-                    }
-                    
-                    // Filter: Partial Takes
-                    StyledButton {
-                        text: filterPartialTakes ? "◐ Partial Takes ✓" : "◐ Partial Takes"
-                        info: filterPartialTakes
-                        onClicked: {
-                            filterPartialTakes = !filterPartialTakes
-                            updateFileList()
-                        }
-                    }
-                    
-                    // Separator
-                    Rectangle {
-                        width: 1
-                        Layout.fillHeight: true
-                        Layout.margins: 4
-                        color: Theme.borderColor
-                    }
-                    
-                    Label {
-                        text: "Tools:"
-                        font.pixelSize: Theme.fontSizeNormal
-                        color: Theme.textColor
-                    }
-                    
-                    // Practice Statistics button
-                    StyledButton {
-                        text: "📊 Stats"
-                        info: true
-                        onClicked: {
-                            practiceStatisticsDialog.open()
-                        }
-                    }
-                    
-                    // Practice Goals button
-                    StyledButton {
-                        text: "🎯 Goals"
-                        info: true
-                        onClicked: {
-                            practiceGoalsDialog.open()
-                        }
-                    }
-                    
-                    // Setlist Builder button
-                    StyledButton {
-                        text: "🎵 Setlist"
-                        info: true
-                        onClicked: {
-                            setlistBuilderDialog.open()
-                        }
-                    }
-                    
-                    // Add spacing at the end
-                    Item { Layout.fillWidth: true }
                 }
             }
         }
         
-        // Split view: Folders on left, Files on right
-        RowLayout {
+        // Compact split view: Folders on top, Files on bottom (vertical stacking for side panel)
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: Theme.spacingNormal
+            spacing: Theme.spacingSmall
             
-            // Folders panel (left side)
+            // Folders panel (top, compact)
             Rectangle {
-                Layout.preferredWidth: 250
-                Layout.fillHeight: true
+                Layout.fillWidth: true
+                Layout.preferredHeight: 150
+                Layout.minimumHeight: 100
                 color: Theme.backgroundColor
                 border.color: Theme.borderColor
                 border.width: 1
@@ -276,17 +199,17 @@ Item {
                     anchors.margins: Theme.spacingSmall
                     spacing: 0
                     
-                    // Header
+                    // Compact header
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Theme.buttonHeight
+                        Layout.preferredHeight: 24
                         color: Theme.backgroundLight
                         
                         Label {
                             anchors.fill: parent
-                            anchors.leftMargin: Theme.spacingNormal
+                            anchors.leftMargin: Theme.spacingSmall
                             text: "Folders"
-                            font.pixelSize: Theme.fontSizeMedium
+                            font.pixelSize: Theme.fontSizeSmall
                             font.bold: true
                             color: Theme.textColor
                             verticalAlignment: Text.AlignVCenter
@@ -306,7 +229,7 @@ Item {
                         
                         delegate: Rectangle {
                             width: folderListView.width
-                            height: 28
+                            height: 24
                             color: folderMouseArea.containsMouse ? Theme.backgroundLight : 
                                    (model.isSelected ? Theme.backgroundMedium : "transparent")
                             
@@ -314,14 +237,18 @@ Item {
                             
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingSmall + (model.level * 16)
+                                anchors.leftMargin: Theme.spacingSmall + (model.level * 12)
                                 anchors.rightMargin: Theme.spacingSmall
-                                spacing: 4
+                                spacing: 2
                                 
                                 Label {
-                                    text: model.isRoot ? "📁 " + model.name : 
-                                          (model.hasAudio ? "📂 " + model.name : "📁 " + model.name)
-                                    font.pixelSize: Theme.fontSizeNormal
+                                    text: model.isRoot ? "📁" : (model.hasAudio ? "📂" : "📁")
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+                                
+                                Label {
+                                    text: model.name
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textColor
                                     Layout.fillWidth: true
                                     elide: Text.ElideMiddle
@@ -367,7 +294,7 @@ Item {
                 }
             }
             
-            // Files panel (right side)
+            // Files panel (bottom)
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -381,141 +308,29 @@ Item {
                     anchors.margins: Theme.spacingSmall
                     spacing: 0
                     
-                    // Header with column labels
+                    // Compact header with file count
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Theme.buttonHeight
+                        Layout.preferredHeight: 24
                         color: Theme.backgroundLight
                         
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: Theme.spacingNormal
-                            anchors.rightMargin: Theme.spacingNormal
-                            spacing: Theme.spacingNormal
+                            anchors.leftMargin: Theme.spacingSmall
+                            anchors.rightMargin: Theme.spacingSmall
+                            spacing: Theme.spacingSmall
                             
                             Label {
                                 text: "Files (" + fileListModel.count() + ")"
-                                font.pixelSize: Theme.fontSizeMedium
+                                font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
                                 color: Theme.textColor
                                 Layout.fillWidth: true
                             }
-                            
-                            TextField {
-                                id: filterField
-                                Layout.preferredWidth: 200
-                                placeholderText: "Filter..."
-                                font.pixelSize: Theme.fontSizeNormal
-                                background: Rectangle {
-                                    color: Theme.backgroundColor
-                                    border.color: Theme.borderColor
-                                    border.width: 1
-                                    radius: Theme.radiusSmall
-                                }
-                                color: Theme.textColor
-                            }
                         }
                     }
                 
-                // Column Headers (clickable for sorting)
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 28
-                    color: Theme.backgroundMedium
-                    
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingNormal
-                        anchors.rightMargin: Theme.spacingNormal
-                        spacing: Theme.spacingNormal
-                        
-                        // Indicators column header
-                        Rectangle {
-                            Layout.preferredWidth: 60
-                            height: parent.height
-                            color: "transparent"
-                            
-                            Label {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                text: "Take"
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.bold: true
-                                color: Theme.textColor
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                        
-                        // File Name column header
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 300
-                            height: parent.height
-                            color: "transparent"
-                            
-                            Label {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                text: "File Name " + (sortField === "filename" ? (sortAscending ? "▲" : "▼") : "")
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.bold: true
-                                color: sortField === "filename" ? Theme.accentPrimary : Theme.textColor
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (sortField === "filename") {
-                                        sortAscending = !sortAscending
-                                    } else {
-                                        sortField = "filename"
-                                        sortAscending = true
-                                    }
-                                    fileListModel.sortBy(sortField, sortAscending)
-                                }
-                            }
-                        }
-                        
-                        // Library Name column header
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 200
-                            height: parent.height
-                            color: "transparent"
-                            
-                            Label {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                text: "Library"
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.bold: true
-                                color: Theme.textColor
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                        
-                        // Duration column header
-                        Rectangle {
-                            Layout.preferredWidth: 80
-                            height: parent.height
-                            color: "transparent"
-                            
-                            Label {
-                                anchors.fill: parent
-                                text: "Duration"
-                                font.pixelSize: Theme.fontSizeSmall
-                                font.bold: true
-                                color: Theme.textColor
-                                verticalAlignment: Text.AlignVCenter
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-                        }
-                    }
-                }
-                
-                // File ListView
+                // File ListView (compact, no column headers for space saving)
                 ListView {
                     id: fileListView
                     Layout.fillWidth: true
@@ -526,7 +341,7 @@ Item {
                     
                     delegate: Rectangle {
                         width: fileListView.width
-                        height: 32
+                        height: 28
                         color: index % 2 === 0 ? Theme.backgroundColor : Theme.backgroundMedium
                         
                         // Hover effect
@@ -549,81 +364,54 @@ Item {
                         
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: Theme.spacingNormal
-                            anchors.rightMargin: Theme.spacingNormal
-                            spacing: Theme.spacingNormal
+                            anchors.leftMargin: Theme.spacingSmall
+                            anchors.rightMargin: Theme.spacingSmall
+                            spacing: 4
                             
-                            // Take indicators
-                            RowLayout {
-                                Layout.preferredWidth: 60
-                                spacing: 4
-                                
-                                BestTakeIndicator {
-                                    marked: model.isBestTake || false
-                                    onClicked: {
-                                        if (model.isBestTake) {
-                                            fileManager.unmarkAsBestTake(model.filepath)
-                                        } else {
-                                            fileManager.markAsBestTake(model.filepath)
-                                        }
-                                        // Refresh the file list to update indicators
-                                        fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
+                            // Compact take indicators
+                            BestTakeIndicator {
+                                marked: model.isBestTake || false
+                                Layout.preferredWidth: 16
+                                Layout.preferredHeight: 16
+                                onClicked: {
+                                    if (model.isBestTake) {
+                                        fileManager.unmarkAsBestTake(model.filepath)
+                                    } else {
+                                        fileManager.markAsBestTake(model.filepath)
                                     }
-                                }
-                                
-                                PartialTakeIndicator {
-                                    marked: model.isPartialTake || false
-                                    onClicked: {
-                                        if (model.isPartialTake) {
-                                            fileManager.unmarkAsPartialTake(model.filepath)
-                                        } else {
-                                            fileManager.markAsPartialTake(model.filepath)
-                                        }
-                                        // Refresh the file list to update indicators
-                                        fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
-                                    }
+                                    fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
                                 }
                             }
                             
-                            // File Name with important annotation indicator
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 300
-                                spacing: 4
-                                
-                                Label {
-                                    text: model.hasImportantAnnotation ? "⭐" : ""
-                                    font.pixelSize: Theme.fontSizeNormal
-                                    color: Theme.accentWarning
-                                    visible: model.hasImportantAnnotation || false
-                                }
-                                
-                                Label {
-                                    text: model.filename
-                                    font.pixelSize: Theme.fontSizeNormal
-                                    color: Theme.textColor
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideMiddle
+                            PartialTakeIndicator {
+                                marked: model.isPartialTake || false
+                                Layout.preferredWidth: 16
+                                Layout.preferredHeight: 16
+                                onClicked: {
+                                    if (model.isPartialTake) {
+                                        fileManager.unmarkAsPartialTake(model.filepath)
+                                    } else {
+                                        fileManager.markAsPartialTake(model.filepath)
+                                    }
+                                    fileManager.discoverAudioFiles(fileManager.getCurrentDirectory())
                                 }
                             }
                             
-                            // Library Name (folder name)
+                            // File name (compact, with important indicator)
                             Label {
-                                text: model.libraryName || ""
+                                text: (model.hasImportantAnnotation ? "⭐ " : "") + model.filename
                                 font.pixelSize: Theme.fontSizeSmall
-                                color: Theme.textSecondary
+                                color: Theme.textColor
                                 Layout.fillWidth: true
-                                Layout.preferredWidth: 200
                                 elide: Text.ElideMiddle
                             }
                             
-                            // Duration
+                            // Duration (compact)
                             Label {
                                 text: formatDuration(model.duration || 0)
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textSecondary
-                                Layout.preferredWidth: 80
-                                horizontalAlignment: Text.AlignHCenter
+                                Layout.preferredWidth: 50
                             }
                         }
                         
@@ -669,36 +457,6 @@ Item {
             }  // End of Files panel ColumnLayout
         }  // End of Files panel Rectangle
         }  // End of RowLayout (split view)
-        
-        // Status bar
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.statusBarHeight
-            color: Theme.backgroundLight
-            radius: Theme.radiusSmall
-            
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.spacingNormal
-                anchors.rightMargin: Theme.spacingNormal
-                spacing: Theme.spacingLarge
-                
-                Label {
-                    text: "Ready"
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textMuted
-                }
-                
-                Item { Layout.fillWidth: true }
-                
-                Label {
-                    text: fileManager ? fileManager.getCurrentDirectory() : ""
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textMuted
-                    elide: Text.ElideMiddle
-                }
-            }
-        }
     }
     
     // Prompt user to select a directory
