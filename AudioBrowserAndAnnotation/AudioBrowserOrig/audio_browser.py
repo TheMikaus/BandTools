@@ -2804,6 +2804,32 @@ def toggle_file_fingerprint_exclusion(dirpath: Path, filename: str) -> bool:
     save_fingerprint_cache(dirpath, cache)
     return is_excluded
 
+def is_folder_reference(dirpath: Path) -> bool:
+    """Check if a folder is marked as a reference folder (higher matching weight)."""
+    cache = load_fingerprint_cache(dirpath)
+    return cache.get("is_reference_folder", False)
+
+def toggle_folder_reference(dirpath: Path) -> bool:
+    """Toggle reference folder status. Returns new reference status."""
+    cache = load_fingerprint_cache(dirpath)
+    current_status = cache.get("is_reference_folder", False)
+    cache["is_reference_folder"] = not current_status
+    save_fingerprint_cache(dirpath, cache)
+    return cache["is_reference_folder"]
+
+def is_folder_ignored(dirpath: Path) -> bool:
+    """Check if a folder is marked to be ignored for fingerprint matching."""
+    cache = load_fingerprint_cache(dirpath)
+    return cache.get("ignore_fingerprints", False)
+
+def toggle_folder_ignore(dirpath: Path) -> bool:
+    """Toggle folder ignore status. Returns new ignore status."""
+    cache = load_fingerprint_cache(dirpath)
+    current_status = cache.get("ignore_fingerprints", False)
+    cache["ignore_fingerprints"] = not current_status
+    save_fingerprint_cache(dirpath, cache)
+    return cache["ignore_fingerprints"]
+
 def discover_practice_folders_with_fingerprints(root_path: Path) -> List[Path]:
     """
     Discover all subdirectories that contain fingerprint cache files.
@@ -2919,12 +2945,12 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
         reference_dir: Optional reference directory (files from here get higher weight)
     
     Returns:
-        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name, is_reference_folder, is_reference_song}
+        Dictionary mapping filename -> list of {fingerprint, folder_path, file_data, provided_name, is_global_reference_folder, is_per_folder_reference, is_reference_song}
         All fingerprints in the result were generated using the same algorithm.
         Format: {
             "song1.mp3": [
-                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name", "is_reference_folder": True, "is_reference_song": False},
-                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}, "provided_name": "Song Name", "is_reference_folder": False, "is_reference_song": True}
+                {"fingerprint": [...], "folder": Path("/path/to/folder1"), "data": {...}, "provided_name": "Song Name", "is_global_reference_folder": True, "is_per_folder_reference": False, "is_reference_song": False},
+                {"fingerprint": [...], "folder": Path("/path/to/folder2"), "data": {...}, "provided_name": "Song Name", "is_global_reference_folder": False, "is_per_folder_reference": True, "is_reference_song": True}
             ]
         }
     """
@@ -2938,8 +2964,15 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
         files_data = cache.get("files", {})
         excluded_files = cache.get("excluded_files", [])
         
-        # Check if this is the reference folder
-        is_reference_folder = reference_dir and folder_path.resolve() == reference_dir.resolve()
+        # Check if folder should be ignored
+        if cache.get("ignore_fingerprints", False):
+            continue  # Skip this folder entirely
+        
+        # Check if this is the global reference folder (primary)
+        is_global_reference_folder = reference_dir and folder_path.resolve() == reference_dir.resolve()
+        
+        # Check if this folder is marked as a reference folder (secondary)
+        is_per_folder_reference = cache.get("is_reference_folder", False)
         
         # Load provided names from this folder
         names_json_path = folder_path / NAMES_JSON
@@ -2984,7 +3017,8 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
                     "folder": folder_path,
                     "data": file_data,
                     "provided_name": provided_name,
-                    "is_reference_folder": is_reference_folder,
+                    "is_global_reference_folder": is_global_reference_folder,
+                    "is_per_folder_reference": is_per_folder_reference,
                     "is_reference_song": is_reference_song
                 })
     
@@ -2994,10 +3028,11 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     """
     Find the best match for a target fingerprint across multiple folders.
     Prioritizes matches in the following order:
-    1. Files marked as reference songs (anywhere)
-    2. Files from reference folder
-    3. Files appearing in only one folder (unique identification)
-    4. Highest similarity score
+    1. Files from global reference folder (primary - 15% boost)
+    2. Files from folders marked as reference (secondary - 10% boost)
+    3. Files marked as reference songs (10% boost)
+    4. Files appearing in only one folder (unique identification)
+    5. Highest similarity score
     
     Args:
         target_fingerprint: The fingerprint to match against
@@ -3007,8 +3042,13 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     Returns:
         Tuple of (filename, similarity_score, source_folder, provided_name) or None if no match above threshold
     """
-    # Weight boost for reference sources (10% boost to similarity score)
-    REFERENCE_BOOST = 0.10
+    # Tiered weight boosts for reference sources:
+    # - Global reference folder (primary): 15% boost
+    # - Per-folder reference flag (secondary): 10% boost  
+    # - Reference song: 10% boost
+    GLOBAL_REFERENCE_BOOST = 0.15
+    PER_FOLDER_REFERENCE_BOOST = 0.10
+    REFERENCE_SONG_BOOST = 0.10
     
     best_matches = []  # List of (filename, weighted_score, raw_score, folder, folder_count, provided_name, is_reference)
     
@@ -3025,13 +3065,30 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         for entry in fingerprint_entries:
             score = compare_fingerprints(target_fingerprint, entry["fingerprint"])
             
-            # Apply weighting based on reference status
+            # Apply tiered weighting based on reference status
             weighted_score = score
-            entry_is_reference = entry.get("is_reference_song", False) or entry.get("is_reference_folder", False)
+            boost = 0.0
             
-            if entry_is_reference:
-                # Boost the score for reference songs and reference folder files
-                weighted_score = min(1.0, score + REFERENCE_BOOST)
+            # Check for global reference folder (highest priority)
+            if entry.get("is_global_reference_folder", False):
+                boost = max(boost, GLOBAL_REFERENCE_BOOST)
+            
+            # Check for per-folder reference flag (medium priority)
+            if entry.get("is_per_folder_reference", False):
+                boost = max(boost, PER_FOLDER_REFERENCE_BOOST)
+            
+            # Check for reference song (medium priority, same as per-folder)
+            if entry.get("is_reference_song", False):
+                boost = max(boost, REFERENCE_SONG_BOOST)
+            
+            # Apply the boost
+            if boost > 0:
+                weighted_score = min(1.0, score + boost)
+            
+            # Track if this is from any reference source for sorting
+            entry_is_reference = (entry.get("is_global_reference_folder", False) or 
+                                 entry.get("is_per_folder_reference", False) or 
+                                 entry.get("is_reference_song", False))
             
             if weighted_score > best_weighted_score:
                 best_weighted_score = weighted_score
