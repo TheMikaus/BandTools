@@ -15,11 +15,14 @@ Item {
     property bool sortAscending: true
     property bool filterBestTakes: false
     property bool filterPartialTakes: false
+    property var batchRenameDialogRef: null
+    property var batchConvertDialogRef: null
     
     // Signals for context menu actions that need to switch tabs
     signal requestAnnotationTab(string filePath)
     signal requestClipsTab(string filePath)
     signal switchToAnnotationsTab()
+    signal requestFingerprintsTab()
     
     // Functions accessible from outside
     function openFolderDialog() {
@@ -101,11 +104,18 @@ Item {
                     Menu {
                         id: moreMenu
                         
+                        property int fileCount: 0
+                        
+                        onAboutToShow: {
+                            // Update file count when menu is about to show
+                            fileCount = fileListModel ? fileListModel.count() : 0
+                        }
+                        
                         MenuItem {
                             text: "Batch Rename"
-                            enabled: fileListModel && fileListModel.count() > 0
+                            enabled: moreMenu.fileCount > 0
                             onTriggered: {
-                                if (!fileListModel) return
+                                if (!fileListModel || !batchRenameDialogRef) return
                                 var files = []
                                 for (var i = 0; i < fileListModel.count(); i++) {
                                     var filePath = fileListModel.getFilePath(i)
@@ -113,15 +123,15 @@ Item {
                                         files.push(filePath)
                                     }
                                 }
-                                batchRenameDialog.openDialog(files)
+                                batchRenameDialogRef.openDialog(files)
                             }
                         }
                         
                         MenuItem {
                             text: "Convert WAV→MP3"
-                            enabled: fileListModel && fileListModel.count() > 0
+                            enabled: moreMenu.fileCount > 0
                             onTriggered: {
-                                if (!fileListModel) return
+                                if (!fileListModel || !batchConvertDialogRef) return
                                 var wavFiles = []
                                 for (var i = 0; i < fileListModel.count(); i++) {
                                     var filePath = fileListModel.getFilePath(i)
@@ -133,7 +143,7 @@ Item {
                                     console.log("No WAV files found")
                                     return
                                 }
-                                batchConvertDialog.openDialog("wav_to_mp3", wavFiles, "")
+                                batchConvertDialogRef.openDialog("wav_to_mp3", wavFiles, "")
                             }
                         }
                         
@@ -268,22 +278,30 @@ Item {
                                 id: folderMouseArea
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 
-                                onClicked: {
-                                    // Clear previous selection
-                                    for (var i = 0; i < folderListView.count; i++) {
-                                        folderListView.itemAtIndex(i).isSelected = false
-                                    }
-                                    // Set new selection
-                                    isSelected = true
-                                    
-                                    // Load files from this folder
-                                    console.log("Selected folder:", model.path)
-                                    fileManager.discoverAudioFiles(model.path)
-                                    
-                                    // Load folder notes for this folder
-                                    if (folderNotesManager) {
-                                        folderNotesManager.loadNotesForFolder(model.path)
+                                onClicked: function(mouse) {
+                                    // Handle right-click for context menu
+                                    if (mouse.button === Qt.RightButton) {
+                                        folderContextMenu.folderPath = model.path
+                                        folderContextMenu.folderName = model.name
+                                        folderContextMenu.popup()
+                                    } else {
+                                        // Clear previous selection
+                                        for (var i = 0; i < folderListView.count; i++) {
+                                            folderListView.itemAtIndex(i).isSelected = false
+                                        }
+                                        // Set new selection
+                                        isSelected = true
+                                        
+                                        // Load files from this folder
+                                        console.log("Selected folder:", model.path)
+                                        fileManager.discoverAudioFiles(model.path)
+                                        
+                                        // Load folder notes for this folder
+                                        if (folderNotesManager) {
+                                            folderNotesManager.loadNotesForFolder(model.path)
+                                        }
                                     }
                                 }
                             }
@@ -592,6 +610,45 @@ Item {
             editLibraryNameDialog.fileName = contextMenu.fileName
             editLibraryNameDialog.currentLibraryName = fileManager ? fileManager.getProvidedName(contextMenu.filePath) : ""
             editLibraryNameDialog.open()
+        }
+    }
+    
+    FolderContextMenu {
+        id: folderContextMenu
+        fingerprintEngine: typeof fingerprintEngine !== 'undefined' ? fingerprintEngine : null
+        waveformEngine: typeof waveformEngine !== 'undefined' ? waveformEngine : null
+        fileManager: typeof fileManager !== 'undefined' ? fileManager : null
+        
+        onGenerateFingerprintsRequested: {
+            if (folderContextMenu.folderPath && fileManager && fingerprintEngine) {
+                // Get all audio files in this folder
+                var files = fileManager.discoverAudioFilesRecursive(folderContextMenu.folderPath)
+                if (files && files.length > 0) {
+                    console.log("Generating fingerprints for", files.length, "files in", folderContextMenu.folderPath)
+                    fingerprintEngine.generateFingerprints(files)
+                    // Switch to Fingerprints tab
+                    // This will be handled by the parent component
+                    libraryTab.requestFingerprintsTab()
+                } else {
+                    console.log("No audio files found in folder:", folderContextMenu.folderPath)
+                }
+            }
+        }
+        
+        onGenerateWaveformsRequested: {
+            if (folderContextMenu.folderPath && fileManager && waveformEngine) {
+                // Get all audio files in this folder
+                var files = fileManager.discoverAudioFilesRecursive(folderContextMenu.folderPath)
+                if (files && files.length > 0) {
+                    console.log("Generating waveforms for", files.length, "files in", folderContextMenu.folderPath)
+                    // Generate waveforms for all files in background
+                    for (var i = 0; i < files.length; i++) {
+                        waveformEngine.generateWaveform(files[i])
+                    }
+                } else {
+                    console.log("No audio files found in folder:", folderContextMenu.folderPath)
+                }
+            }
         }
     }
     

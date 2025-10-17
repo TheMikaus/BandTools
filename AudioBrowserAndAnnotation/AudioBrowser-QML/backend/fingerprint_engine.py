@@ -594,6 +594,36 @@ def is_file_excluded_from_fingerprinting(dirpath: Path, filename: str) -> bool:
     return filename in excluded_files
 
 
+def is_folder_reference(dirpath: Path) -> bool:
+    """Check if a folder is marked as a reference folder (higher matching weight)."""
+    cache = load_fingerprint_cache(dirpath)
+    return cache.get("is_reference_folder", False)
+
+
+def toggle_folder_reference(dirpath: Path) -> bool:
+    """Toggle reference folder status. Returns new reference status."""
+    cache = load_fingerprint_cache(dirpath)
+    current_status = cache.get("is_reference_folder", False)
+    cache["is_reference_folder"] = not current_status
+    save_fingerprint_cache(dirpath, cache)
+    return cache["is_reference_folder"]
+
+
+def is_folder_ignored(dirpath: Path) -> bool:
+    """Check if a folder is marked to be ignored for fingerprint matching."""
+    cache = load_fingerprint_cache(dirpath)
+    return cache.get("ignore_fingerprints", False)
+
+
+def toggle_folder_ignore(dirpath: Path) -> bool:
+    """Toggle folder ignore status. Returns new ignore status."""
+    cache = load_fingerprint_cache(dirpath)
+    current_status = cache.get("ignore_fingerprints", False)
+    cache["ignore_fingerprints"] = not current_status
+    save_fingerprint_cache(dirpath, cache)
+    return cache["ignore_fingerprints"]
+
+
 def toggle_file_fingerprint_exclusion(dirpath: Path, filename: str) -> bool:
     """Toggle fingerprint exclusion status for a file. Returns new exclusion status."""
     cache = load_fingerprint_cache(dirpath)
@@ -858,3 +888,23 @@ class FingerprintEngine(QObject):
     def isFileExcluded(self, directory: str, filename: str) -> bool:
         """Check if file is excluded."""
         return is_file_excluded_from_fingerprinting(Path(directory), filename)
+    
+    @pyqtSlot(str, result=bool)
+    def isFolderReference(self, directory: str) -> bool:
+        """Check if folder is marked as reference folder."""
+        return is_folder_reference(Path(directory))
+    
+    @pyqtSlot(str, result=bool)
+    def toggleFolderReference(self, directory: str) -> bool:
+        """Toggle folder reference status."""
+        return toggle_folder_reference(Path(directory))
+    
+    @pyqtSlot(str, result=bool)
+    def isFolderIgnored(self, directory: str) -> bool:
+        """Check if folder is ignored for fingerprint matching."""
+        return is_folder_ignored(Path(directory))
+    
+    @pyqtSlot(str, result=bool)
+    def toggleFolderIgnore(self, directory: str) -> bool:
+        """Toggle folder ignore status."""
+        return toggle_folder_ignore(Path(directory))

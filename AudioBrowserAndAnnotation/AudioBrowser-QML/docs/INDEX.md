@@ -19,6 +19,7 @@ End-user documentation and how-to guides:
 - [BATCH_OPERATIONS_GUIDE.md](user_guides/BATCH_OPERATIONS_GUIDE.md) - Batch operations guide
 - [CLOUD_SYNC_SETUP.md](user_guides/CLOUD_SYNC_SETUP.md) - **NEW**: Multi-cloud sync overview and setup
 - [DROPBOX_SYNC_SETUP.md](user_guides/DROPBOX_SYNC_SETUP.md) - **NEW**: Dropbox sync setup guide
+- [FOLDER_CONTEXT_MENU.md](user_guides/folder_context_menu.md) - **NEW**: Folder context menu operations guide
 - [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - Folder navigation and hierarchical browsing guide
 - [GOOGLE_DRIVE_SYNC_README.md](user_guides/GOOGLE_DRIVE_SYNC_README.md) - Google Drive sync setup guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
@@ -55,6 +56,7 @@ Developer and technical documentation:
 
 #### Bug Fixes and Improvements
 - [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - Error logging improvements
+- [FOLDER_CONTEXT_MENU_IMPLEMENTATION.md](technical/folder_context_menu_implementation.md) - **NEW**: Folder context menu technical implementation
 - [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - UI improvements for toolbar and folder navigation
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
