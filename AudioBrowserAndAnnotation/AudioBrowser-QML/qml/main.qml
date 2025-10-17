@@ -529,6 +529,10 @@ ApplicationWindow {
                         id: libraryTab
                         anchors.fill: parent
                         
+                        // Pass batch operation dialogs as properties
+                        property var batchRenameDialogRef: batchRenameDialog
+                        property var batchConvertDialogRef: batchConvertDialog
+                        
                         // Connect context menu signals to switch tabs
                         onRequestAnnotationTab: function(filePath) {
                             // Switch to Annotations tab (now index 0)
@@ -547,6 +551,18 @@ ApplicationWindow {
                         // Connect signal for double-click on file to switch to Annotations tab
                         onSwitchToAnnotationsTab: {
                             tabBar.currentIndex = 0  // Annotations is now index 0
+                        }
+                        
+                        onRequestFingerprintsTab: {
+                            // Switch to Fingerprints tab
+                            // Find the index of Fingerprints tab
+                            for (var i = 0; i < tabBar.count; i++) {
+                                var tabButton = tabBar.itemAt(i)
+                                if (tabButton && tabButton.text === "Fingerprints") {
+                                    tabBar.currentIndex = i
+                                    break
+                                }
+                            }
                         }
                     }
                 }
