@@ -401,7 +401,7 @@ class AnnotationManager(QObject):
         Get all annotations for the current file.
         
         If show_all_sets is True, returns annotations from all visible sets with set name.
-        Otherwise, returns annotations from current set only.
+        Otherwise, returns annotations from current set only, or legacy annotations if sets are not in use.
         
         Returns:
             List of annotation dictionaries
@@ -412,7 +412,10 @@ class AnnotationManager(QObject):
         # Get filename from full path
         file_name = Path(self._current_file).name
         
-        if self._show_all_sets:
+        # Check if we have annotation sets with data
+        has_annotation_sets = len(self._annotation_sets) > 0
+        
+        if self._show_all_sets and has_annotation_sets:
             # Merged view: get annotations from all visible sets
             all_annotations = []
             for aset in self._annotation_sets:
@@ -433,18 +436,30 @@ class AnnotationManager(QObject):
             
             # Sort by timestamp
             all_annotations.sort(key=lambda a: a.get("timestamp_ms", 0))
+            
+            # If no annotations found in sets, fall back to legacy format
+            if not all_annotations:
+                return self._annotations.get(self._current_file, [])
+            
             return all_annotations
-        else:
+        elif has_annotation_sets and self._current_set_id:
             # Single set view: get annotations from current set only
-            if not self._current_set_id:
-                return []
-            
             current_set = self._get_current_set_object()
-            if not current_set:
-                return []
+            if current_set:
+                file_data = current_set.get("files", {}).get(file_name, {})
+                annotations = file_data.get("notes", [])
+                
+                # If no annotations found in sets, fall back to legacy format
+                if not annotations:
+                    return self._annotations.get(self._current_file, [])
+                
+                return annotations
             
-            file_data = current_set.get("files", {}).get(file_name, {})
-            return file_data.get("notes", [])
+            # No current set found, fall back to legacy format
+            return self._annotations.get(self._current_file, [])
+        else:
+            # No annotation sets or not using sets, use legacy format
+            return self._annotations.get(self._current_file, [])
     
     @pyqtSlot(int, result='QVariantMap')
     def getAnnotation(self, index: int) -> Dict[str, Any]:
@@ -470,6 +485,7 @@ class AnnotationManager(QObject):
     def getAnnotationCount(self) -> int:
         """
         Get the number of annotations for the current file.
+        Uses the same logic as getAnnotations() to ensure consistency.
         
         Returns:
             Annotation count
@@ -477,7 +493,8 @@ class AnnotationManager(QObject):
         if not self._current_file:
             return 0
         
-        return len(self._annotations.get(self._current_file, []))
+        # Use getAnnotations() to ensure consistent behavior
+        return len(self.getAnnotations())
     
     @pyqtSlot(result=list)
     def getAllUsers(self) -> List[str]:
