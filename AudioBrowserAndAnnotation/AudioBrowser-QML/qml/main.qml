@@ -387,10 +387,6 @@ ApplicationWindow {
                 }
             }
         }
-        
-        background: Rectangle {
-            color: Theme.backgroundLight
-        }
     }
     
     // Main content area with tabs
