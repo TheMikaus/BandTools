@@ -74,22 +74,35 @@ def test_destructor_calls_cleanup():
         return False
 
 def test_worker_deletelater_connected():
-    """Test that worker deleteLater is connected to thread.finished signal."""
-    print("\nTesting worker deleteLater connection...")
+    """Test that worker and thread cleanup is properly handled."""
+    print("\nTesting worker and thread cleanup handling...")
     try:
         # This test verifies the code fix by checking the source code
         # We can't easily test the signal connections at runtime without creating actual threads
         
         import inspect
-        source = inspect.getsource(WaveformEngine.generateWaveform)
         
-        # Check that both thread and worker deleteLater are connected
-        assert 'thread.finished.connect(thread.deleteLater)' in source, \
-            "thread.deleteLater should be connected"
-        assert 'thread.finished.connect(worker.deleteLater)' in source, \
-            "worker.deleteLater should be connected"
+        # Check that cancelled signal is connected
+        gen_source = inspect.getsource(WaveformEngine.generateWaveform)
+        assert 'worker.cancelled.connect' in gen_source, \
+            "worker.cancelled signal should be connected"
+        assert 'worker.cancelled.connect(thread.quit)' in gen_source, \
+            "cancelled signal should trigger thread.quit"
         
-        print("✓ Both thread and worker deleteLater are properly connected")
+        # Check that cleanup handlers properly call deleteLater
+        finished_source = inspect.getsource(WaveformEngine._on_waveform_finished)
+        assert 'deleteLater()' in finished_source, \
+            "finished handler should call deleteLater()"
+        
+        error_source = inspect.getsource(WaveformEngine._on_waveform_error)
+        assert 'deleteLater()' in error_source, \
+            "error handler should call deleteLater()"
+        
+        cancelled_source = inspect.getsource(WaveformEngine._on_waveform_cancelled)
+        assert 'deleteLater()' in cancelled_source, \
+            "cancelled handler should call deleteLater()"
+        
+        print("✓ Worker and thread cleanup is properly handled in all handlers")
         return True
     except Exception as e:
         print(f"✗ Test failed: {e}")
