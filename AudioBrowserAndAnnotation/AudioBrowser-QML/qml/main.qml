@@ -407,150 +407,20 @@ ApplicationWindow {
             }
         }
         
-        // Main content area split: Tabs on top, Library on bottom
+        // Main content area split: Library on left, Tabs on right
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
                 spacing: Theme.spacingSmall
                 
-                // Tab bar (without Library)
-                TabBar {
-                    id: tabBar
-                    Layout.fillWidth: true
-                    background: Rectangle {
-                        color: Theme.backgroundLight
-                    }
-                    
-                    TabButton {
-                        text: "Annotations"
-                        font.pixelSize: Theme.fontSizeNormal
-                        
-                        background: Rectangle {
-                            color: tabBar.currentIndex === 0 ? Theme.backgroundColor : Theme.backgroundLight
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: tabBar.currentIndex === 0 ? Theme.textColor : Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    
-                    TabButton {
-                        text: "Clips"
-                        font.pixelSize: Theme.fontSizeNormal
-                        
-                        background: Rectangle {
-                            color: tabBar.currentIndex === 1 ? Theme.backgroundColor : Theme.backgroundLight
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: tabBar.currentIndex === 1 ? Theme.textColor : Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    
-                    TabButton {
-                        text: "Sections"
-                        font.pixelSize: Theme.fontSizeNormal
-                        
-                        background: Rectangle {
-                            color: tabBar.currentIndex === 2 ? Theme.backgroundColor : Theme.backgroundLight
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: tabBar.currentIndex === 2 ? Theme.textColor : Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    
-                    TabButton {
-                        text: "Folder Notes"
-                        font.pixelSize: Theme.fontSizeNormal
-                        
-                        background: Rectangle {
-                            color: tabBar.currentIndex === 3 ? Theme.backgroundColor : Theme.backgroundLight
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: tabBar.currentIndex === 3 ? Theme.textColor : Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    
-                    TabButton {
-                        text: "Fingerprints"
-                        font.pixelSize: Theme.fontSizeNormal
-                        
-                        background: Rectangle {
-                            color: tabBar.currentIndex === 4 ? Theme.backgroundColor : Theme.backgroundLight
-                        }
-                        
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: tabBar.currentIndex === 4 ? Theme.textColor : Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-                
-                // Tab content (without Library)
-                StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredHeight: 250
-                    currentIndex: tabBar.currentIndex
-                    
-                    AnnotationsTab {
-                        id: annotationsTab
-                        
-                        // Connect clip edit request signal
-                        onRequestClipEdit: function(clipIndex) {
-                            // Switch to Clips tab (index 1 now since Library is removed)
-                            tabBar.currentIndex = 1
-                            // Select and edit the clip
-                            clipsTab.selectAndEditClip(clipIndex)
-                        }
-                    }
-                    
-                    ClipsTab {
-                        id: clipsTab
-                    }
-                    
-                    SectionsTab {
-                        id: sectionsTab
-                    }
-                    
-                    FolderNotesTab {
-                        id: folderNotesTab
-                    }
-                    
-                    FingerprintsTab {
-                        id: fingerprintsTab
-                    }
-                }
-                
-                // Library panel (always visible at bottom)
+                // Library panel (always visible on left side)
                 Rectangle {
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: 350
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 200
+                    Layout.minimumWidth: 250
                     color: Theme.backgroundLight
                     
                     LibraryTab {
@@ -575,6 +445,142 @@ ApplicationWindow {
                         // Connect signal for double-click on file to switch to Annotations tab
                         onSwitchToAnnotationsTab: {
                             tabBar.currentIndex = 0  // Annotations is now index 0
+                        }
+                    }
+                }
+                
+                // Right side: Tab bar and content
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: Theme.spacingSmall
+                    
+                    // Tab bar (without Library)
+                    TabBar {
+                        id: tabBar
+                        Layout.fillWidth: true
+                        background: Rectangle {
+                            color: Theme.backgroundLight
+                        }
+                        
+                        TabButton {
+                            text: "Annotations"
+                            font.pixelSize: Theme.fontSizeNormal
+                            
+                            background: Rectangle {
+                                color: tabBar.currentIndex === 0 ? Theme.backgroundColor : Theme.backgroundLight
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: tabBar.currentIndex === 0 ? Theme.textColor : Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "Clips"
+                            font.pixelSize: Theme.fontSizeNormal
+                            
+                            background: Rectangle {
+                                color: tabBar.currentIndex === 1 ? Theme.backgroundColor : Theme.backgroundLight
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: tabBar.currentIndex === 1 ? Theme.textColor : Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "Sections"
+                            font.pixelSize: Theme.fontSizeNormal
+                            
+                            background: Rectangle {
+                                color: tabBar.currentIndex === 2 ? Theme.backgroundColor : Theme.backgroundLight
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: tabBar.currentIndex === 2 ? Theme.textColor : Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "Folder Notes"
+                            font.pixelSize: Theme.fontSizeNormal
+                            
+                            background: Rectangle {
+                                color: tabBar.currentIndex === 3 ? Theme.backgroundColor : Theme.backgroundLight
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: tabBar.currentIndex === 3 ? Theme.textColor : Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        
+                        TabButton {
+                            text: "Fingerprints"
+                            font.pixelSize: Theme.fontSizeNormal
+                            
+                            background: Rectangle {
+                                color: tabBar.currentIndex === 4 ? Theme.backgroundColor : Theme.backgroundLight
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: tabBar.currentIndex === 4 ? Theme.textColor : Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                    
+                    // Tab content (without Library)
+                    StackLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        currentIndex: tabBar.currentIndex
+                        
+                        AnnotationsTab {
+                            id: annotationsTab
+                            
+                            // Connect clip edit request signal
+                            onRequestClipEdit: function(clipIndex) {
+                                // Switch to Clips tab (index 1 now since Library is removed)
+                                tabBar.currentIndex = 1
+                                // Select and edit the clip
+                                clipsTab.selectAndEditClip(clipIndex)
+                            }
+                        }
+                        
+                        ClipsTab {
+                            id: clipsTab
+                        }
+                        
+                        SectionsTab {
+                            id: sectionsTab
+                        }
+                        
+                        FolderNotesTab {
+                            id: folderNotesTab
+                        }
+                        
+                        FingerprintsTab {
+                            id: fingerprintsTab
                         }
                     }
                 }

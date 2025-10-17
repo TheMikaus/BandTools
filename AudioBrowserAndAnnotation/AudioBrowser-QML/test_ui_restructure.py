@@ -29,9 +29,9 @@ def test_qml_structure():
     else:
         print("  ✓ Library removed from TabBar")
     
-    # Verify Library is always visible
-    if 'LibraryTab {' in main_content and '// Library panel (always visible at bottom)' in main_content:
-        print("  ✓ Library panel is always visible")
+    # Verify Library is always visible on the left side
+    if 'LibraryTab {' in main_content and '// Library panel (always visible on left side)' in main_content:
+        print("  ✓ Library panel is always visible on left side")
     else:
         print("  ✗ FAIL: Library panel not found or not always visible")
         return False
@@ -160,8 +160,8 @@ def main():
     if test1_passed and test2_passed:
         print("\n✓ All tests passed!")
         print("\nExpected behavior:")
-        print("  - Library panel is always visible at the bottom")
-        print("  - Annotations, Clips, Sections, Folder Notes, and Fingerprints tabs are at the top")
+        print("  - Library panel is always visible on the left side (350px width)")
+        print("  - Annotations, Clips, Sections, Folder Notes, and Fingerprints tabs are on the right")
         print("  - Double-clicking a file in Library switches to Annotations tab")
         print("  - Single-clicking a file with auto-switch enabled switches to Annotations tab")
         return 0
