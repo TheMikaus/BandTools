@@ -126,7 +126,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
                 filePath: audioEngine ? audioEngine.getCurrentFile() : ""
-                positionMs: audioEngine ? audioEngine.getPosition() : 0
+                positionMs: 0  // Updated via onPositionChanged signal
             }
             
             // Compact playback controls
@@ -237,6 +237,11 @@ Rectangle {
         
         function onDurationChanged(duration) {
             timeLabel.text = formatTime(audioEngine.getPosition()) + " / " + formatTime(duration)
+        }
+        
+        function onPositionChanged(position) {
+            // Update mini waveform playback position
+            miniWaveform.positionMs = position
         }
     }
     
