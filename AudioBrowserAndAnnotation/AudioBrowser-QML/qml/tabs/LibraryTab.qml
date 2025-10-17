@@ -824,7 +824,7 @@ Item {
             // Show library name edit dialog
             editLibraryNameDialog.filePath = contextMenu.filePath
             editLibraryNameDialog.fileName = contextMenu.fileName
-            editLibraryNameDialog.currentLibraryName = fileManager.getProvidedName(contextMenu.filePath)
+            editLibraryNameDialog.currentLibraryName = fileManager ? fileManager.getProvidedName(contextMenu.filePath) : ""
             editLibraryNameDialog.open()
         }
     }
