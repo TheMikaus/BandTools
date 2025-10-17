@@ -19,6 +19,7 @@ Item {
     // Signals for context menu actions that need to switch tabs
     signal requestAnnotationTab(string filePath)
     signal requestClipsTab(string filePath)
+    signal switchToAnnotationsTab()
     
     // Functions accessible from outside
     function openFolderDialog() {
@@ -644,6 +645,11 @@ Item {
                                 } else {
                                     // Single click: Load and play the file
                                     audioEngine.loadAndPlay(model.filepath)
+                                    
+                                    // Auto-switch to Annotations tab if enabled
+                                    if (settingsManager && settingsManager.getAutoSwitchAnnotations()) {
+                                        libraryTab.switchToAnnotationsTab()
+                                    }
                                 }
                             }
                             
@@ -651,7 +657,7 @@ Item {
                                 console.log("Double-clicked file:", model.filepath)
                                 // Double click: Load, play, and switch to Annotations tab
                                 audioEngine.loadAndPlay(model.filepath)
-                                tabBar.currentIndex = 1  // Switch to Annotations tab
+                                libraryTab.switchToAnnotationsTab()
                             }
                         }
                     }
