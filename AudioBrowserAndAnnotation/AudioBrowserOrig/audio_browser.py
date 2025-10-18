@@ -6614,8 +6614,11 @@ class AudioBrowser(QMainWindow):
     def _set_current_practice_folder(self, folder: Path):
         """Update the current practice folder (distinct from root band practice folder)."""
         if folder.exists() and folder.is_dir():
+            # Check if folder is actually changing
+            folder_changed = self.current_practice_folder != folder
+            
             # Reset backup flag when changing to a different folder
-            if self.current_practice_folder != folder:
+            if folder_changed:
                 # Practice statistics no longer use session tracking
                 # (removed _end_practice_session call)
                 
@@ -6632,6 +6635,14 @@ class AudioBrowser(QMainWindow):
             
             # Practice statistics are now generated on-demand from folder analysis
             # (removed _load_practice_stats call)
+            
+            # Load metadata from the new folder when folder changes
+            if folder_changed and self._initialization_complete:
+                self._load_names()
+                self._load_song_renames()
+                self._load_notes()
+                self._ensure_uids()
+                self._refresh_set_combo()
             
             # Update file watcher for new folder
             if self._initialization_complete:
