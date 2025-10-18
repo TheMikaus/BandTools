@@ -86,7 +86,7 @@ ApplicationWindow {
         delegate: MenuBarItem {
             id: menuBarItemDelegate
             contentItem: Text {
-                text: menuBarItemDelegate.text
+                text: menuBarItemDelegate.text.replace(/&/g, "")
                 font: menuBarItemDelegate.font
                 color: Theme.textColor  // Use theme text color for visibility
                 horizontalAlignment: Text.AlignLeft
@@ -216,6 +216,15 @@ ApplicationWindow {
                     color: viewMenuItemDelegate.highlighted ? Theme.accentPrimary : Theme.backgroundColor
                 }
             }
+            
+            MenuItem {
+                text: "Audio Output Device..."
+                onTriggered: {
+                    audioOutputDialog.open()
+                }
+            }
+            
+            MenuSeparator {}
             
             MenuItem {
                 text: "Toggle Now Playing Panel"
@@ -791,6 +800,11 @@ ApplicationWindow {
         // Cloud Sync Dialog (supports multiple providers)
         SyncDialog {
             id: syncDialog
+        }
+        
+        // Audio Output Dialog
+        AudioOutputDialog {
+            id: audioOutputDialog
         }
         
         // Status bar

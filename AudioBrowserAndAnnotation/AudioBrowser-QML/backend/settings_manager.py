@@ -20,6 +20,7 @@ SETTINGS_KEY_THEME = "preferences/theme"
 SETTINGS_KEY_VOLUME = "audio/volume"
 SETTINGS_KEY_VOLUME_BOOST = "audio/volume_boost"
 SETTINGS_KEY_PLAYBACK_SPEED = "audio/playback_speed"
+SETTINGS_KEY_AUDIO_OUTPUT_DEVICE = "audio/output_device"
 SETTINGS_KEY_CUR_SET = "annotations/current_set"
 SETTINGS_KEY_SHOW_ALL = "annotations/show_all_sets"
 SETTINGS_KEY_SHOW_ALL_FOLDER_NOTES = "annotations/show_all_folder_notes"
@@ -186,6 +187,16 @@ class SettingsManager(QObject):
     def setPlaybackSpeed(self, speed: float):
         """Set playback speed (1.0 = normal)."""
         self.settings.setValue(SETTINGS_KEY_PLAYBACK_SPEED, speed)
+    
+    @pyqtSlot(result=str)
+    def getAudioOutputDevice(self) -> str:
+        """Get the saved audio output device ID."""
+        return self.settings.value(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, "", type=str)
+    
+    @pyqtSlot(str)
+    def setAudioOutputDevice(self, device_id: str):
+        """Set the audio output device ID."""
+        self.settings.setValue(SETTINGS_KEY_AUDIO_OUTPUT_DEVICE, device_id)
     
     # Current annotation set
     @pyqtSlot(result=str)

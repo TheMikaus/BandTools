@@ -341,8 +341,9 @@ Item {
                             switch(column) {
                                 case 0: return 100  // Time
                                 case 1: return 100  // Category
-                                case 2: return width - 250  // Text (fill remaining)
-                                case 3: return 80   // Important
+                                case 2: return width - 330  // Text (fill remaining)
+                                case 3: return 100  // User
+                                case 4: return 80   // Important
                                 default: return 100
                             }
                         }

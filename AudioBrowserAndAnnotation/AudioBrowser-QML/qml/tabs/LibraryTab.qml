@@ -261,6 +261,7 @@ Item {
                                 Label {
                                     text: model.name
                                     font.pixelSize: Theme.fontSizeSmall
+                                    font.bold: isSelected
                                     color: Theme.textColor
                                     Layout.fillWidth: true
                                     elide: Text.ElideMiddle
@@ -421,6 +422,7 @@ Item {
                             Label {
                                 text: (model.hasImportantAnnotation ? "⭐ " : "") + model.filename
                                 font.pixelSize: Theme.fontSizeSmall
+                                font.bold: fileListView.currentIndex === index
                                 color: Theme.textColor
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
