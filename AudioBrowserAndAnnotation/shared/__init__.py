@@ -5,4 +5,4 @@ This package contains common functionality used by both AudioBrowserOrig
 and AudioBrowser-QML applications to avoid code duplication.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
