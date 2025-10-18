@@ -36,6 +36,7 @@ from shared.metadata_constants import (
 )
 from shared.file_utils import sanitize as _shared_sanitize, sanitize_library_name as _shared_sanitize_library_name
 from shared import backup_utils
+from shared.metadata_manager import MetadataManager
 
 # Windows subprocess flag to hide console windows
 if sys.platform == "win32":
@@ -6118,6 +6119,9 @@ class AudioBrowser(QMainWindow):
         # Annotation sets
         self.annotation_sets: List[Dict[str, Any]] = []
         self.current_set_id: Optional[str] = None
+        
+        # Initialize shared metadata manager with user-specific configuration
+        self._metadata_manager = MetadataManager(username=self._resolve_user_display_name())
 
         # For current set fields
         self.notes_by_file: Dict[str, List[Dict]] = {}
@@ -6690,7 +6694,7 @@ class AudioBrowser(QMainWindow):
         self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.folder_notes = ""
 
         
-        # Check for migration from legacy file
+        # Check for migration from legacy file using shared metadata manager
         user_notes_path = self._notes_json_path()
         # Always use current_practice_folder for consistency, not current_audio_file.parent
         legacy_notes_path = self.current_practice_folder / NOTES_JSON
@@ -6698,16 +6702,22 @@ class AudioBrowser(QMainWindow):
         # If user-specific file doesn't exist but legacy file does, migrate it
         if not user_notes_path.exists() and legacy_notes_path.exists():
             try:
-                legacy_data = load_json(legacy_notes_path, {})
-                if legacy_data:  # Only migrate if there's actual data
-                    # Mark file to ignore change notification during migration
-                    self._ignore_next_change.add(str(user_notes_path))
-                    save_json(user_notes_path, legacy_data)
+                # Use shared metadata manager for migration
+                success = self._metadata_manager.migrate_legacy_to_sets(
+                    self.current_practice_folder,
+                    username=self._resolve_user_display_name()
+                )
+                if success:
                     log_print(f"Migrated annotations from {legacy_notes_path.name} to {user_notes_path.name}")
             except Exception as e:
                 log_print(f"Warning: Could not migrate legacy annotations: {e}")
         
-        data = load_json(user_notes_path, {})
+        # Load annotation sets using shared metadata manager
+        data = self._metadata_manager.load_annotation_sets(
+            self.current_practice_folder,
+            username=self._resolve_user_display_name()
+        )
+        
         try:
             if isinstance(data, dict) and "sets" in data:
                 # Handle migration from global folder_notes to per-set folder_notes
@@ -6754,7 +6764,7 @@ class AudioBrowser(QMainWindow):
                     self.current_set_id = cur
                     self._load_current_set_into_fields()
             else:
-                # Legacy single-set file
+                # Legacy single-set file - create default with any data that may exist
                 legacy_folder_notes = str(data.get("folder_notes", "") or "")
                 fgen, fnote = {}, {}
                 if isinstance(data, dict) and "files" in data:
@@ -6791,7 +6801,18 @@ class AudioBrowser(QMainWindow):
             # Mark the file we're about to save to ignore change notification
             notes_path = self._notes_json_path()
             self._ignore_next_change.add(str(notes_path))
-            save_json(notes_path, payload)
+            
+            # Use shared metadata manager for saving with automatic backup
+            success = self._metadata_manager.save_annotation_sets(
+                self.current_practice_folder,
+                payload,
+                username=self._resolve_user_display_name(),
+                create_backup=False  # We already called _create_backup_if_needed above
+            )
+            
+            if not success:
+                raise Exception("Failed to save annotation sets")
+            
             # Update our tracking of modification time
             try:
                 self._watched_annotation_files[str(notes_path)] = notes_path.stat().st_mtime
