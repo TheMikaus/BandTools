@@ -2262,15 +2262,22 @@ def compute_audio_fingerprint(samples: List[float], sr: int) -> List[float]:
         
         return fingerprint[:144]  # Limit length
 
-def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
+def compare_fingerprints(fp1: List[float], fp2: List[float], debug: bool = False) -> float:
     """
     Compare two fingerprints and return similarity score (0.0 to 1.0).
     Higher values indicate more similarity.
     
     Note: This function assumes both fingerprints were generated using the same algorithm.
     The calling code is responsible for ensuring algorithm consistency.
+    
+    Args:
+        fp1: First fingerprint
+        fp2: Second fingerprint
+        debug: If True, log detailed comparison information
     """
     if not fp1 or not fp2:
+        if debug:
+            log_print(f"  [FP Compare] Empty fingerprint: fp1 length={len(fp1) if fp1 else 0}, fp2 length={len(fp2) if fp2 else 0}")
         return 0.0
     
     # Safety check: warn if fingerprints have very different lengths, which might indicate different algorithms
@@ -2278,6 +2285,9 @@ def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
     if abs(len1 - len2) > max(len1, len2) * 0.5:  # More than 50% size difference
         log_print(f"Warning: Comparing fingerprints of very different lengths ({len1} vs {len2}). "
                  f"This might indicate different algorithms were used.")
+    
+    if debug:
+        log_print(f"  [FP Compare] Lengths: fp1={len1}, fp2={len2}")
     
     # Align lengths by truncating to shorter
     min_len = min(len1, len2)
@@ -2293,9 +2303,17 @@ def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
         norm1 = np.linalg.norm(arr1)
         norm2 = np.linalg.norm(arr2)
         
+        if debug:
+            log_print(f"  [FP Compare] Norms: norm1={norm1:.6f}, norm2={norm2:.6f}, dot_product={dot_product:.6f}")
+        
         if norm1 > 0 and norm2 > 0:
-            return float(dot_product / (norm1 * norm2))
+            similarity = float(dot_product / (norm1 * norm2))
+            if debug:
+                log_print(f"  [FP Compare] Similarity: {similarity:.6f}")
+            return similarity
         else:
+            if debug:
+                log_print(f"  [FP Compare] Zero norm detected, returning 0.0")
             return 0.0
     else:
         # Manual cosine similarity
@@ -2303,9 +2321,17 @@ def compare_fingerprints(fp1: List[float], fp2: List[float]) -> float:
         norm1 = sum(a * a for a in fp1_trunc) ** 0.5
         norm2 = sum(b * b for b in fp2_trunc) ** 0.5
         
+        if debug:
+            log_print(f"  [FP Compare] Norms: norm1={norm1:.6f}, norm2={norm2:.6f}, dot_product={dot_product:.6f}")
+        
         if norm1 > 0 and norm2 > 0:
-            return dot_product / (norm1 * norm2)
+            similarity = dot_product / (norm1 * norm2)
+            if debug:
+                log_print(f"  [FP Compare] Similarity: {similarity:.6f}")
+            return similarity
         else:
+            if debug:
+                log_print(f"  [FP Compare] Zero norm detected, returning 0.0")
             return 0.0
 
 # ========== Multiple fingerprinting algorithms ==========
@@ -3025,7 +3051,7 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
     
     return fingerprint_map
 
-def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float) -> Optional[Tuple[str, float, Path, str]]:
+def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float, debug: bool = False) -> Optional[Tuple[str, float, Path, str]]:
     """
     Find the best match for a target fingerprint across multiple folders.
     Prioritizes matches in the following order:
@@ -3039,6 +3065,7 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         target_fingerprint: The fingerprint to match against
         fingerprint_map: Dictionary from collect_fingerprints_from_folders
         threshold: Minimum similarity threshold (0.0 to 1.0)
+        debug: If True, log detailed matching information
     
     Returns:
         Tuple of (filename, similarity_score, source_folder, provided_name) or None if no match above threshold
@@ -3051,7 +3078,14 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     PER_FOLDER_REFERENCE_BOOST = 0.10
     REFERENCE_SONG_BOOST = 0.10
     
+    if debug:
+        log_print(f"\n[FP Match] Starting fingerprint matching")
+        log_print(f"[FP Match] Target fingerprint length: {len(target_fingerprint) if target_fingerprint else 0}")
+        log_print(f"[FP Match] Threshold: {threshold:.2%}")
+        log_print(f"[FP Match] Number of files to compare against: {len(fingerprint_map)}")
+    
     best_matches = []  # List of (filename, weighted_score, raw_score, folder, folder_count, provided_name, is_reference)
+    all_comparisons = []  # For debugging - track all comparisons
     
     for filename, fingerprint_entries in fingerprint_map.items():
         folder_count = len(fingerprint_entries)
@@ -3064,7 +3098,7 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         is_from_reference = False
         
         for entry in fingerprint_entries:
-            score = compare_fingerprints(target_fingerprint, entry["fingerprint"])
+            score = compare_fingerprints(target_fingerprint, entry["fingerprint"], debug=False)  # Don't spam with per-comparison debug
             
             # Apply tiered weighting based on reference status
             weighted_score = score
@@ -3091,6 +3125,18 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
                                  entry.get("is_per_folder_reference", False) or 
                                  entry.get("is_reference_song", False))
             
+            # Store comparison details for debugging
+            if debug:
+                all_comparisons.append({
+                    'filename': filename,
+                    'folder': entry["folder"],
+                    'provided_name': entry["provided_name"],
+                    'raw_score': score,
+                    'weighted_score': weighted_score,
+                    'boost': boost,
+                    'is_reference': entry_is_reference
+                })
+            
             if weighted_score > best_weighted_score:
                 best_weighted_score = weighted_score
                 best_score_for_file = score  # Keep raw score for reporting
@@ -3101,7 +3147,32 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         if best_weighted_score >= threshold:
             best_matches.append((filename, best_weighted_score, best_score_for_file, best_folder_for_file, folder_count, best_provided_name, is_from_reference))
     
+    # Debug logging
+    if debug:
+        log_print(f"\n[FP Match] Comparison results summary:")
+        log_print(f"[FP Match] Total comparisons: {len(all_comparisons)}")
+        log_print(f"[FP Match] Matches above threshold ({threshold:.2%}): {len(best_matches)}")
+        
+        # Show top 10 scores regardless of threshold
+        log_print(f"\n[FP Match] Top 10 scores (sorted by weighted score):")
+        sorted_comparisons = sorted(all_comparisons, key=lambda x: x['weighted_score'], reverse=True)
+        for i, comp in enumerate(sorted_comparisons[:10], 1):
+            ref_indicator = " [REF]" if comp['is_reference'] else ""
+            boost_str = f" +{comp['boost']:.0%}" if comp['boost'] > 0 else ""
+            log_print(f"  {i}. {comp['filename']} -> '{comp['provided_name']}' from {comp['folder'].name}")
+            log_print(f"     Raw score: {comp['raw_score']:.4f}, Weighted: {comp['weighted_score']:.4f}{boost_str}{ref_indicator}")
+        
+        # Show scores near threshold
+        if threshold > 0:
+            near_threshold = [c for c in all_comparisons if 0.5 * threshold <= c['weighted_score'] < threshold]
+            if near_threshold:
+                log_print(f"\n[FP Match] Scores just below threshold (≥50% of threshold, <threshold):")
+                for comp in sorted(near_threshold, key=lambda x: x['weighted_score'], reverse=True)[:5]:
+                    log_print(f"  {comp['filename']} -> '{comp['provided_name']}': {comp['weighted_score']:.4f}")
+    
     if not best_matches:
+        if debug:
+            log_print(f"[FP Match] No matches found above threshold {threshold:.2%}")
         return None
     
     # Sort by priority: 
@@ -3112,6 +3183,17 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
     best_matches.sort(key=lambda x: (-1 if x[6] else 0, -1 if x[4] == 1 else 0, x[1], x[0]), reverse=True)
     
     best_match = best_matches[0]
+    
+    if debug:
+        log_print(f"\n[FP Match] SELECTED MATCH:")
+        log_print(f"  Filename: {best_match[0]}")
+        log_print(f"  Provided name: '{best_match[5]}'")
+        log_print(f"  Raw score: {best_match[2]:.4f}")
+        log_print(f"  Weighted score: {best_match[1]:.4f}")
+        log_print(f"  Source folder: {best_match[3]}")
+        log_print(f"  Folder count: {best_match[4]}")
+        log_print(f"  Is reference: {best_match[6]}")
+    
     # Return: filename, raw_score (not weighted), folder, provided_name
     return (best_match[0], best_match[2], best_match[3], best_match[5])
 
@@ -11931,7 +12013,8 @@ class AudioBrowser(QMainWindow):
                     continue
             
             # Find best match across all practice folders
-            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold)
+            log_print(f"\n[Auto-Label Subsections] Matching fingerprint for: {audio_file.name}")
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True)
             
             if match_result:
                 matched_filename, score, source_folder, provided_name = match_result
@@ -13257,7 +13340,8 @@ class AudioBrowser(QMainWindow):
                     continue
             
             # Find best match across all practice folders
-            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold)
+            log_print(f"\n[Auto-Label Files] Matching fingerprint for: {audio_file.name}")
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True)
             
             if match_result:
                 matched_filename, score, source_folder, provided_name = match_result
