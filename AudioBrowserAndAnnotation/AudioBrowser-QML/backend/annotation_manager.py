@@ -8,12 +8,18 @@ and multi-user support. Provides QML integration via signals and slots.
 Enhanced with multi-annotation sets support for feature parity with original application.
 """
 
+import sys
 import json
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, pyqtProperty
+
+# Add parent directory to path to import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared.metadata_manager import MetadataManager
 
 
 class AnnotationManager(QObject):
@@ -63,6 +69,9 @@ class AnnotationManager(QObject):
         self._current_set_id: Optional[str] = None  # ID of the currently active set
         self._show_all_sets: bool = False  # Whether to show annotations from all visible sets
         
+        # Initialize shared metadata manager
+        self._metadata_manager = MetadataManager(username=self._current_user)
+        
     # ========== QML-accessible methods ==========
     
     @pyqtSlot(str)
@@ -95,6 +104,7 @@ class AnnotationManager(QObject):
             username: Username for annotation attribution
         """
         self._current_user = username if username else "default_user"
+        self._metadata_manager.set_username(self._current_user)
     
     @pyqtSlot(result=str)
     def getCurrentUser(self) -> str:
@@ -921,23 +931,9 @@ class AnnotationManager(QObject):
     
     # ========== Internal methods ==========
     
-    def _get_annotation_file_path(self, audio_file_path: str) -> Path:
-        """
-        Get the path to the annotation file for a given audio file.
-        
-        Args:
-            audio_file_path: Path to the audio file
-            
-        Returns:
-            Path to the annotation JSON file
-        """
-        audio_path = Path(audio_file_path)
-        annotation_file = audio_path.parent / f".{audio_path.stem}_annotations.json"
-        return annotation_file
-    
     def _load_annotations(self, file_path: str) -> None:
         """
-        Load annotations from disk for a file.
+        Load annotations from disk for a file (legacy format).
         
         Args:
             file_path: Path to the audio file
@@ -945,52 +941,27 @@ class AnnotationManager(QObject):
         if not file_path:
             return
         
-        annotation_file = self._get_annotation_file_path(file_path)
+        # Use shared metadata manager for loading
+        audio_path = Path(file_path)
+        annotations = self._metadata_manager.load_legacy_annotations(audio_path)
         
-        if annotation_file.exists():
-            try:
-                with open(annotation_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
-                # Support both old and new formats
-                if isinstance(data, list):
-                    self._annotations[file_path] = data
-                elif isinstance(data, dict):
-                    # Multi-user format: {"users": {"user1": [...], "user2": [...]}}
-                    # For now, merge all users' annotations
-                    all_annotations = []
-                    if "users" in data:
-                        for user, user_annotations in data["users"].items():
-                            for annotation in user_annotations:
-                                annotation["user"] = user
-                                all_annotations.append(annotation)
-                    elif "annotations" in data:
-                        all_annotations = data["annotations"]
-                    
-                    self._annotations[file_path] = all_annotations
-                    
-                # Add UIDs to any annotations that don't have them
-                for annotation in self._annotations[file_path]:
-                    if 'uid' not in annotation:
-                        annotation['uid'] = self._next_uid
-                        self._next_uid += 1
-                    else:
-                        # Track max UID to avoid conflicts
-                        if annotation['uid'] >= self._next_uid:
-                            self._next_uid = annotation['uid'] + 1
-                
-                # Sort by timestamp
-                self._annotations[file_path].sort(key=lambda a: a.get("timestamp_ms", 0))
-                
-            except Exception as e:
-                self.errorOccurred.emit(f"Failed to load annotations: {str(e)}")
-                self._annotations[file_path] = []
-        else:
-            self._annotations[file_path] = []
+        # Add UIDs to any annotations that don't have them
+        for annotation in annotations:
+            if 'uid' not in annotation:
+                annotation['uid'] = self._next_uid
+                self._next_uid += 1
+            else:
+                # Track max UID to avoid conflicts
+                if annotation['uid'] >= self._next_uid:
+                    self._next_uid = annotation['uid'] + 1
+        
+        # Sort by timestamp
+        annotations.sort(key=lambda a: a.get("timestamp_ms", 0))
+        self._annotations[file_path] = annotations
     
     def _save_annotations(self, file_path: str) -> None:
         """
-        Save annotations to disk for a file.
+        Save annotations to disk for a file (legacy format).
         
         Args:
             file_path: Path to the audio file
@@ -998,16 +969,14 @@ class AnnotationManager(QObject):
         if not file_path or file_path not in self._annotations:
             return
         
-        annotation_file = self._get_annotation_file_path(file_path)
-        
+        # Use shared metadata manager for saving
+        audio_path = Path(file_path)
         try:
-            # Create parent directory if it doesn't exist
-            annotation_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Save as simple list format
-            with open(annotation_file, 'w', encoding='utf-8') as f:
-                json.dump(self._annotations[file_path], f, indent=2, ensure_ascii=False)
-                
+            self._metadata_manager.save_legacy_annotations(
+                audio_path, 
+                self._annotations[file_path],
+                create_backup=True
+            )
         except Exception as e:
             self.errorOccurred.emit(f"Failed to save annotations: {str(e)}")
     
@@ -1126,21 +1095,24 @@ class AnnotationManager(QObject):
         """Get the path to the annotation sets file for current directory."""
         if not self._current_directory:
             return None
-        # Use username-specific file for multi-user support
-        # Format: .audio_notes_{username}.json (matches original app format)
-        return self._current_directory / f".audio_notes_{self._current_user}.json"
+        # Use shared metadata manager for path resolution
+        return self._metadata_manager.get_annotation_sets_file_path(
+            self._current_directory, 
+            username=self._current_user
+        )
     
     def _load_annotation_sets(self) -> None:
-        """Load annotation sets from disk."""
-        sets_file = self._get_annotation_sets_file_path()
-        if not sets_file or not sets_file.exists():
-            # Create default set if no file exists
+        """Load annotation sets from disk using shared metadata manager."""
+        if not self._current_directory:
             self._create_default_set()
             return
         
+        # Use shared metadata manager for loading
         try:
-            with open(sets_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = self._metadata_manager.load_annotation_sets(
+                self._current_directory,
+                username=self._current_user
+            )
             
             # Check if it's the format with "sets" key (original app) or "annotation_sets" (old QML format)
             if isinstance(data, dict) and ("sets" in data or "annotation_sets" in data):
@@ -1157,7 +1129,7 @@ class AnnotationManager(QObject):
                 # Legacy single-set format - convert to multi-set
                 self._convert_legacy_to_multi_set(data)
         
-        except (json.JSONDecodeError, IOError) as e:
+        except Exception as e:
             print(f"Error loading annotation sets: {e}")
             self._create_default_set()
         
@@ -1166,9 +1138,8 @@ class AnnotationManager(QObject):
             self.currentSetChanged.emit(self._current_set_id)
     
     def _save_annotation_sets(self) -> None:
-        """Save annotation sets to disk in format compatible with original app."""
-        sets_file = self._get_annotation_sets_file_path()
-        if not sets_file:
+        """Save annotation sets to disk in format compatible with original app using shared metadata manager."""
+        if not self._current_directory:
             return
         
         try:
@@ -1225,10 +1196,18 @@ class AnnotationManager(QObject):
                 "current_set_id": self._current_set_id
             }
             
-            with open(sets_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Use shared metadata manager for saving
+            success = self._metadata_manager.save_annotation_sets(
+                self._current_directory,
+                data,
+                username=self._current_user,
+                create_backup=True
+            )
+            
+            if not success:
+                self.errorOccurred.emit("Failed to save annotation sets")
         
-        except IOError as e:
+        except Exception as e:
             print(f"Error saving annotation sets: {e}")
             self.errorOccurred.emit(f"Failed to save annotation sets: {e}")
     
