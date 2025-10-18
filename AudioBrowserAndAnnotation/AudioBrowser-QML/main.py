@@ -327,6 +327,11 @@ def main():
 
     # Set initial volume from settings
     audio_engine.setVolume(settings_manager.getVolume())
+    
+    # Set initial audio output device from settings
+    saved_device = settings_manager.getAudioOutputDevice()
+    if saved_device:
+        audio_engine.setAudioOutputDevice(saved_device)
 
     # Expose backend objects to QML before loading QML file
     logging.info("Exposing backend objects to QML context...")

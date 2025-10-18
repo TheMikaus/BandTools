@@ -8,9 +8,9 @@ Provides QML-accessible audio playback controls and state management.
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot, QTimer
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QAudioDevice, QMediaDevices
 
 
 # Set up module logger
@@ -35,6 +35,7 @@ class AudioEngine(QObject):
     mediaStatusChanged = pyqtSignal(str)  # Media status
     playbackSpeedChanged = pyqtSignal(float)  # Playback speed multiplier
     channelModeChanged = pyqtSignal(str)  # "stereo", "left", "right", "mono"
+    audioOutputDevicesChanged = pyqtSignal()  # Audio output devices changed
     
     def __init__(self, parent=None):
         """Initialize the audio engine."""
@@ -67,6 +68,9 @@ class AudioEngine(QObject):
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.errorOccurred.connect(self._on_error_occurred)
         self._player.mediaStatusChanged.connect(self._on_media_status_changed)
+        
+        # Connect to audio device changes
+        QMediaDevices.audioOutputsChanged.connect(self._on_audio_outputs_changed)
         
         # Set initial volume
         self._audio_output.setVolume(self._volume / 100.0)
@@ -458,6 +462,80 @@ class AudioEngine(QObject):
     def isRightChannelMuted(self) -> bool:
         """Check if right channel is muted."""
         return self._right_muted
+    
+    # ========== Audio Output Device Management ==========
+    
+    @pyqtSlot(result=list)
+    def getAudioOutputDevices(self) -> List[dict]:
+        """
+        Get list of available audio output devices.
+        
+        Returns:
+            List of dictionaries with device information (id, description)
+        """
+        devices = []
+        for device in QMediaDevices.audioOutputs():
+            devices.append({
+                "id": device.id().data().decode('utf-8') if device.id() else "",
+                "description": device.description()
+            })
+        return devices
+    
+    @pyqtSlot(result=str)
+    def getCurrentAudioOutputDevice(self) -> str:
+        """
+        Get the currently selected audio output device ID.
+        
+        Returns:
+            Device ID string, or empty string for default device
+        """
+        device = self._audio_output.device()
+        if device.id():
+            return device.id().data().decode('utf-8')
+        return ""
+    
+    @pyqtSlot(str)
+    def setAudioOutputDevice(self, device_id: str) -> None:
+        """
+        Set the audio output device.
+        
+        Args:
+            device_id: Device ID string, or empty string for default device
+        """
+        try:
+            # Find the device with matching ID
+            selected_device = None
+            if device_id:
+                for device in QMediaDevices.audioOutputs():
+                    if device.id() and device.id().data().decode('utf-8') == device_id:
+                        selected_device = device
+                        break
+            else:
+                # Use default device
+                selected_device = QMediaDevices.defaultAudioOutput()
+            
+            if selected_device:
+                # Save current volume
+                current_volume = self._audio_output.volume()
+                
+                # Create new audio output with selected device
+                self._audio_output = QAudioOutput(selected_device)
+                self._audio_output.setVolume(current_volume)
+                self._player.setAudioOutput(self._audio_output)
+                
+                logger.info(f"Audio output device changed to: {selected_device.description()}")
+            else:
+                logger.warning(f"Audio output device not found: {device_id}")
+                
+        except Exception as e:
+            error_msg = f"Error setting audio output device: {e}"
+            logger.error(error_msg, exc_info=True)
+            self.errorOccurred.emit(error_msg)
+    
+    def _on_audio_outputs_changed(self) -> None:
+        """Handle audio output devices list change."""
+        logger.info("Audio output devices changed")
+        self.audioOutputDevicesChanged.emit()
     
     # ========== Public properties for direct access ==========
     
