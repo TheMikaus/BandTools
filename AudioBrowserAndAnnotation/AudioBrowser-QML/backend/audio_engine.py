@@ -46,6 +46,9 @@ class AudioEngine(QObject):
         self._audio_output = QAudioOutput()
         self._player.setAudioOutput(self._audio_output)
         
+        # Create media devices instance for monitoring device changes
+        self._media_devices = QMediaDevices()
+        
         # State tracking
         self._current_file: Optional[Path] = None
         self._volume = 100
@@ -69,8 +72,8 @@ class AudioEngine(QObject):
         self._player.errorOccurred.connect(self._on_error_occurred)
         self._player.mediaStatusChanged.connect(self._on_media_status_changed)
         
-        # Connect to audio device changes
-        QMediaDevices.audioOutputsChanged.connect(self._on_audio_outputs_changed)
+        # Connect to audio device changes from the instance
+        self._media_devices.audioOutputsChanged.connect(self._on_audio_outputs_changed)
         
         # Set initial volume
         self._audio_output.setVolume(self._volume / 100.0)
