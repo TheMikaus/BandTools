@@ -5304,7 +5304,7 @@ class FileInfoProxyModel(QSortFilterProxyModel):
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        """Filter out .backup, .backups, .waveforms, and .audiobrowser_temp folders, and apply text filter."""
+        """Filter out .backup, .backups, .waveforms, and .audiobrowser_temp folders, apply text filter, and filter hidden songs."""
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         file_info = model.fileInfo(index)
@@ -5329,6 +5329,13 @@ class FileInfoProxyModel(QSortFilterProxyModel):
                     filter_pos += 1
             if filter_pos < len(filter_text):
                 return False  # Not all filter characters found
+        
+        # Filter out hidden songs unless show_hidden_songs is enabled
+        if not file_info.isDir() and f".{file_info.suffix().lower()}" in AUDIO_EXTS:
+            filename = file_info.fileName()
+            if hasattr(self.audio_browser, 'show_hidden_songs') and not self.audio_browser.show_hidden_songs:
+                if self._is_file_hidden(filename):
+                    return False
         
         return True
 
@@ -5394,6 +5401,15 @@ class FileInfoProxyModel(QSortFilterProxyModel):
                 if file_meta.get("partial_take", False):
                     return True
             return False
+        except Exception:
+            return False
+    
+    def _is_file_hidden(self, filename: str) -> bool:
+        """Check if a file is marked as hidden in the current annotation set."""
+        try:
+            if not hasattr(self.audio_browser, 'file_hidden_songs'):
+                return False
+            return self.audio_browser.file_hidden_songs.get(filename, False)
         except Exception:
             return False
 
@@ -6630,6 +6646,7 @@ class AudioBrowser(QMainWindow):
         self._refresh_important_table()
         self._refresh_annotation_legend()
         self._update_fingerprint_ui()
+        self.file_proxy.invalidateFilter()  # Re-evaluate filter with newly loaded hidden songs
         self.waveform.clear()
     
     def _get_recent_folders(self) -> list[str]:
@@ -8332,7 +8349,8 @@ class AudioBrowser(QMainWindow):
         self._update_folder_notes_ui()  # Update folder notes UI when set changes
         self._refresh_right_table()  # Refresh table to show current set's best takes with border
         
-        # Refresh tree display to show best take/partial take formatting for the new set
+        # Refresh tree display to show best take/partial take formatting and hidden songs for the new set
+        self.file_proxy.invalidateFilter()  # Re-evaluate filter with new set's hidden songs
         self._refresh_tree_display()
 
     def _on_set_visible_toggled(self, _state):
@@ -8992,6 +9010,7 @@ class AudioBrowser(QMainWindow):
         
         # Refresh UI to reflect hidden status (will filter out if not showing hidden)
         self._refresh_right_table()
+        self.file_proxy.invalidateFilter()  # Re-evaluate filter to show/hide the file
         self._refresh_tree_display()
         
         # Show confirmation message
@@ -9004,8 +9023,9 @@ class AudioBrowser(QMainWindow):
         """Toggle the visibility of hidden songs."""
         self.show_hidden_songs = self.show_hidden_songs_action.isChecked()
         
-        # Refresh the file list to apply the filter
+        # Refresh the file list and tree to apply the filter
         self._refresh_right_table()
+        self.file_proxy.invalidateFilter()  # Re-evaluate filter to show/hide hidden songs
         self._refresh_tree_display()
 
 
