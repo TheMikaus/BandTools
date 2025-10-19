@@ -2512,36 +2512,26 @@ def compute_chromaprint_fingerprint(samples: List[float], sr: int) -> List[float
         smoothed_frame = np.mean(chroma_matrix[start_idx:end_idx], axis=0)
         smoothed_chroma.append(smoothed_frame)
     
-    # Quantize and create hash-like features
-    # ChromaPrint-style: compare adjacent frames to create binary features
-    hash_features = []
-    for i in range(len(smoothed_chroma) - 1):
-        current_frame = smoothed_chroma[i]
-        next_frame = smoothed_chroma[i + 1]
-        
-        # Create binary-like features by comparing chroma values
-        frame_hash = []
-        for c in range(n_chroma):
-            # Compare current vs next frame for each chroma class
-            diff = next_frame[c] - current_frame[c]
-            # Convert to quantized feature (0.0 or 1.0)
-            feature = 1.0 if diff > 0 else 0.0
-            frame_hash.append(feature)
-        
-        hash_features.extend(frame_hash)
+    # Use actual chroma features instead of binary hash for better similarity matching
+    # Flatten the smoothed chroma frames to create the fingerprint
+    # This provides continuous values (0.0 to 1.0) rather than binary, 
+    # which works much better with cosine similarity comparison
+    flattened_features = []
+    for frame in smoothed_chroma:
+        flattened_features.extend(frame.tolist())
     
     # Limit to consistent size (12 chroma classes * 12 time frames = 144 features)
     target_size = 144
-    if len(hash_features) > target_size:
+    if len(flattened_features) > target_size:
         # Downsample by taking every nth element
-        step = len(hash_features) / target_size
-        downsampled = [hash_features[int(i * step)] for i in range(target_size)]
+        step = len(flattened_features) / target_size
+        downsampled = [flattened_features[int(i * step)] for i in range(target_size)]
         return downsampled
-    elif len(hash_features) < target_size:
+    elif len(flattened_features) < target_size:
         # Pad with zeros
-        return hash_features + [0.0] * (target_size - len(hash_features))
+        return flattened_features + [0.0] * (target_size - len(flattened_features))
     else:
-        return hash_features
+        return flattened_features
 
 def compute_audfprint_fingerprint(samples: List[float], sr: int) -> List[float]:
     """
@@ -3028,13 +3018,16 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
             # Get fingerprint for the selected algorithm using safer method
             fingerprint = get_fingerprint_for_algorithm(file_data, algorithm)
             if fingerprint:  # Only include files with fingerprint for this algorithm
+                # Get the provided name for this file
+                provided_name = provided_names.get(filename, "").strip()
+                
+                # IMPORTANT: Skip files without a library name (provided_name)
+                # Files without names should never be used as match targets
+                if not provided_name:
+                    continue
+                
                 if filename not in fingerprint_map:
                     fingerprint_map[filename] = []
-                
-                # Get the provided name for this file, fallback to filename stem
-                provided_name = provided_names.get(filename, "").strip()
-                if not provided_name:
-                    provided_name = Path(filename).stem
                 
                 # Check if this file is marked as a reference song
                 is_reference_song = reference_songs_in_folder.get(filename, False)
@@ -3051,7 +3044,7 @@ def collect_fingerprints_from_folders(folder_paths: List[Path], algorithm: str, 
     
     return fingerprint_map
 
-def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float, debug: bool = False) -> Optional[Tuple[str, float, Path, str]]:
+def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_map: Dict[str, List[Dict]], threshold: float, debug: bool = False, exclude_filename: Optional[str] = None) -> Optional[Tuple[str, float, Path, str]]:
     """
     Find the best match for a target fingerprint across multiple folders.
     Prioritizes matches in the following order:
@@ -3066,6 +3059,7 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         fingerprint_map: Dictionary from collect_fingerprints_from_folders
         threshold: Minimum similarity threshold (0.0 to 1.0)
         debug: If True, log detailed matching information
+        exclude_filename: Optional filename to exclude from matching (prevents self-matching)
     
     Returns:
         Tuple of (filename, similarity_score, source_folder, provided_name) or None if no match above threshold
@@ -3083,11 +3077,20 @@ def find_best_cross_folder_match(target_fingerprint: List[float], fingerprint_ma
         log_print(f"[FP Match] Target fingerprint length: {len(target_fingerprint) if target_fingerprint else 0}")
         log_print(f"[FP Match] Threshold: {threshold:.2%}")
         log_print(f"[FP Match] Number of files to compare against: {len(fingerprint_map)}")
+        if exclude_filename:
+            log_print(f"[FP Match] Excluding filename from matching: {exclude_filename}")
     
     best_matches = []  # List of (filename, weighted_score, raw_score, folder, folder_count, provided_name, is_reference)
     all_comparisons = []  # For debugging - track all comparisons
     
     for filename, fingerprint_entries in fingerprint_map.items():
+        # IMPORTANT: Never match against the same filename (prevents self-matching)
+        # This ensures a file never uses itself as a reference, even if it appears in other folders
+        if exclude_filename and filename == exclude_filename:
+            if debug:
+                log_print(f"[FP Match] Skipping self-match: {filename}")
+            continue
+            
         folder_count = len(fingerprint_entries)
         
         # Find best score for this filename across all its instances
@@ -12014,7 +12017,7 @@ class AudioBrowser(QMainWindow):
             
             # Find best match across all practice folders
             log_print(f"\n[Auto-Label Subsections] Matching fingerprint for: {audio_file.name}")
-            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True)
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True, exclude_filename=audio_file.name)
             
             if match_result:
                 matched_filename, score, source_folder, provided_name = match_result
@@ -13341,7 +13344,7 @@ class AudioBrowser(QMainWindow):
             
             # Find best match across all practice folders
             log_print(f"\n[Auto-Label Files] Matching fingerprint for: {audio_file.name}")
-            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True)
+            match_result = find_best_cross_folder_match(current_fp, fingerprint_map, self.fingerprint_threshold, debug=True, exclude_filename=audio_file.name)
             
             if match_result:
                 matched_filename, score, source_folder, provided_name = match_result
