@@ -43,9 +43,17 @@ class WaveformView(QQuickPaintedItem):
     
     # Signals
     seekRequested = pyqtSignal(int)  # Position in milliseconds
+    peaksChanged = pyqtSignal()  # Emitted when peaks data changes
+    durationMsChanged = pyqtSignal()  # Emitted when duration changes
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        # Set render target to FramebufferObject for better compatibility
+        self.setRenderTarget(QQuickPaintedItem.RenderTarget.FramebufferObject)
+        
+        # Enable antialiasing for smoother waveforms
+        self.setAntialiasing(True)
         
         # Waveform data
         self._peaks: List[List[float]] = []
@@ -82,11 +90,29 @@ class WaveformView(QQuickPaintedItem):
         return self._peaks
     
     def _set_peaks(self, peaks: List[List[float]]) -> None:
-        if peaks != self._peaks:
-            self._peaks = peaks if peaks else []
-            self.update()
+        # Convert QML/JavaScript array to Python list if needed
+        if peaks is not None and not isinstance(peaks, list):
+            try:
+                peaks = list(peaks)
+            except (TypeError, ValueError):
+                peaks = []
+        
+        # Normalize empty peaks
+        if not peaks:
+            peaks = []
+        
+        # Check if peaks actually changed (simple length check to avoid deep comparison)
+        peaks_changed = (len(peaks) != len(self._peaks))
+        
+        # Update peaks
+        self._peaks = peaks
+        
+        # Only emit signals and update if changed
+        if peaks_changed:
+            self.peaksChanged.emit()  # Notify QML of the change
+            self.update()  # Request repaint
     
-    peaks = pyqtProperty('QVariant', _get_peaks, _set_peaks)
+    peaks = pyqtProperty('QVariant', _get_peaks, _set_peaks, notify=peaksChanged)
     
     def _get_duration_ms(self) -> int:
         return self._duration_ms
@@ -94,9 +120,10 @@ class WaveformView(QQuickPaintedItem):
     def _set_duration_ms(self, duration: int) -> None:
         if duration != self._duration_ms:
             self._duration_ms = int(duration)
-            self.update()
+            self.durationMsChanged.emit()  # Notify QML of the change
+            self.update()  # Request repaint
     
-    durationMs = pyqtProperty(int, _get_duration_ms, _set_duration_ms)
+    durationMs = pyqtProperty(int, _get_duration_ms, _set_duration_ms, notify=durationMsChanged)
     
     def _get_position_ms(self) -> int:
         return self._position_ms
