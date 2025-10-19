@@ -15,6 +15,7 @@ Item {
     property bool sortAscending: true
     property bool filterBestTakes: false
     property bool filterPartialTakes: false
+    property bool showHiddenSongs: false
     property var batchRenameDialogRef: null
     property var batchConvertDialogRef: null
     
@@ -165,6 +166,16 @@ Item {
                             checked: filterPartialTakes
                             onTriggered: {
                                 filterPartialTakes = !filterPartialTakes
+                                updateFileList()
+                            }
+                        }
+                        
+                        MenuItem {
+                            text: showHiddenSongs ? "👁 Show Hidden Songs ✓" : "👁 Show Hidden Songs"
+                            checkable: true
+                            checked: showHiddenSongs
+                            onTriggered: {
+                                showHiddenSongs = !showHiddenSongs
                                 updateFileList()
                             }
                         }
@@ -493,14 +504,29 @@ Item {
             return
         }
         
-        // If no filters, refresh normally
+        // Get all files
+        var allFiles = fileManager.getDiscoveredFiles()
+        
+        // If no filters and not showing hidden, filter out hidden songs
         if (!filterBestTakes && !filterPartialTakes) {
-            fileManager.discoverAudioFiles(currentDir)
+            if (!showHiddenSongs) {
+                // Filter out hidden songs
+                var visibleFiles = []
+                for (var i = 0; i < allFiles.length; i++) {
+                    var filePath = allFiles[i]
+                    var isHidden = fileManager.isHidden(filePath)
+                    if (!isHidden) {
+                        visibleFiles.push(filePath)
+                    }
+                }
+                fileListModel.setFiles(visibleFiles)
+            } else {
+                // Show all files
+                fileManager.discoverAudioFiles(currentDir)
+            }
             return
         }
         
-        // Get all files
-        var allFiles = fileManager.getDiscoveredFiles()
         var filteredFiles = []
         
         // Apply filters
@@ -508,6 +534,12 @@ Item {
             var filePath = allFiles[i]
             var isBest = fileManager.isBestTake(filePath)
             var isPartial = fileManager.isPartialTake(filePath)
+            var isHidden = fileManager.isHidden(filePath)
+            
+            // Skip hidden songs unless explicitly showing them
+            if (!showHiddenSongs && isHidden) {
+                continue
+            }
             
             // Include file if it matches any active filter
             if ((filterBestTakes && isBest) || (filterPartialTakes && isPartial)) {

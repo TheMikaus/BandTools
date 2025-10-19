@@ -193,6 +193,35 @@ Menu {
         }
     }
     
+    MenuItem {
+        text: fileManager && fileManager.isHidden(filePath) ? "👁 Unhide Song" : "🚫 Hide Song"
+        enabled: filePath !== ""
+        
+        background: Rectangle {
+            implicitWidth: 200
+            implicitHeight: 30
+            color: parent.hovered ? Theme.backgroundLight : "transparent"
+        }
+        
+        contentItem: Text {
+            text: parent.text
+            font.pixelSize: Theme.fontSizeNormal
+            color: parent.enabled ? Theme.foregroundColor : Theme.textMuted
+            leftPadding: 10
+            verticalAlignment: Text.AlignVCenter
+        }
+        
+        onTriggered: {
+            if (fileManager && filePath) {
+                if (fileManager.isHidden(filePath)) {
+                    fileManager.unmarkAsHidden(filePath);
+                } else {
+                    fileManager.markAsHidden(filePath);
+                }
+            }
+        }
+    }
+    
     MenuSeparator {
         background: Rectangle {
             implicitHeight: 1

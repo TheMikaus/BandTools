@@ -6214,10 +6214,12 @@ class AudioBrowser(QMainWindow):
         self.file_best_takes: Dict[str, bool] = {}  # Track best takes per file in current set
         self.file_partial_takes: Dict[str, bool] = {}  # Track partial takes per file in current set
         self.file_reference_songs: Dict[str, bool] = {}  # Track reference songs per file in current set
+        self.file_hidden_songs: Dict[str, bool] = {}  # Track hidden songs per file in current set
         self.folder_notes: str = ""
 
         # Show-all toggle
         self.show_all_sets: bool = self.config.get_show_all_sets()
+        self.show_hidden_songs: bool = False  # Default to hiding hidden songs
         
         # Show-all folder notes toggle
         self.show_all_folder_notes: bool = self.config.get_show_all_folder_notes()
@@ -6935,29 +6937,31 @@ class AudioBrowser(QMainWindow):
 
     def _load_current_set_into_fields(self):
         aset = self._get_current_set()
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.file_hidden_songs = {}
         if aset:
             for fname, meta in aset.get("files", {}).items():
                 self.file_general[fname] = str(meta.get("general", "") or "")
                 self.file_best_takes[fname] = bool(meta.get("best_take", False))
                 self.file_partial_takes[fname] = bool(meta.get("partial_take", False))
                 self.file_reference_songs[fname] = bool(meta.get("reference_song", False))
+                self.file_hidden_songs[fname] = bool(meta.get("hidden_song", False))
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
-            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
+            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.file_hidden_songs = {}
         self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
         if not aset: return
         files = {}
-        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys()) | set(self.file_reference_songs.keys())
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys()) | set(self.file_reference_songs.keys()) | set(self.file_hidden_songs.keys())
         for fname in all_files:
             files[fname] = {
                 "general": self.file_general.get(fname, ""),
                 "best_take": self.file_best_takes.get(fname, False),
                 "partial_take": self.file_partial_takes.get(fname, False),
                 "reference_song": self.file_reference_songs.get(fname, False),
+                "hidden_song": self.file_hidden_songs.get(fname, False),
                 "notes": self.notes_by_file.get(fname, []),
             }
         aset["files"] = files
@@ -9895,7 +9899,17 @@ class AudioBrowser(QMainWindow):
         """List audio files in the directory containing the currently selected song, or current practice folder if no song selected."""
         target_dir = self.current_practice_folder
         if not target_dir.exists(): return []
-        return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+        all_files = [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+        
+        # Filter out hidden songs unless show_hidden_songs is enabled
+        if not self.show_hidden_songs:
+            visible_files = []
+            for file_path in all_files:
+                if not self.file_hidden_songs.get(file_path.name, False):
+                    visible_files.append(file_path)
+            return visible_files
+        
+        return all_files
 
     def _get_all_best_takes_for_file(self, filename: str) -> List[Dict[str, Any]]:
         """Get all annotation sets that have marked this file as a best take, along with their colors."""

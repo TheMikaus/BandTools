@@ -34,6 +34,7 @@ class FileListModel(QAbstractListModel):
     BPMRole = Qt.ItemDataRole.UserRole + 9
     LibraryNameRole = Qt.ItemDataRole.UserRole + 10
     HasImportantAnnotationRole = Qt.ItemDataRole.UserRole + 11
+    IsHiddenRole = Qt.ItemDataRole.UserRole + 12
     
     # Signals
     filesChanged = pyqtSignal()
@@ -89,6 +90,8 @@ class FileListModel(QAbstractListModel):
             return file_data.get("libraryName", "")
         elif role == self.HasImportantAnnotationRole:
             return file_data.get("hasImportantAnnotation", False)
+        elif role == self.IsHiddenRole:
+            return file_data.get("isHidden", False)
         
         return None
     
@@ -107,6 +110,7 @@ class FileListModel(QAbstractListModel):
             self.BPMRole: b"bpm",
             self.LibraryNameRole: b"libraryName",
             self.HasImportantAnnotationRole: b"hasImportantAnnotation",
+            self.IsHiddenRole: b"isHidden",
         }
     
     # ========== QML-accessible methods ==========
@@ -148,9 +152,11 @@ class FileListModel(QAbstractListModel):
                 # Get best/partial take status
                 is_best_take = False
                 is_partial_take = False
+                is_hidden = False
                 if self._file_manager is not None:
                     is_best_take = self._file_manager.isBestTake(file_path)
                     is_partial_take = self._file_manager.isPartialTake(file_path)
+                    is_hidden = self._file_manager.isHidden(file_path)
                 
                 # Get BPM from tempo manager
                 bpm = 0
@@ -180,6 +186,7 @@ class FileListModel(QAbstractListModel):
                     "bpm": bpm,
                     "libraryName": library_name,
                     "hasImportantAnnotation": has_important_annotation,
+                    "isHidden": is_hidden,
                 }
                 self._files.append(file_info)
             except Exception:
