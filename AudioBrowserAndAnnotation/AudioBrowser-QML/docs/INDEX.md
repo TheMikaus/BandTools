@@ -64,6 +64,7 @@ Developer and technical documentation:
 - [WAVEFORM_VIEW_PROPERTY_FIX.md](technical/WAVEFORM_VIEW_PROPERTY_FIX.md) - WaveformView peaks property type fix
 - [WAVEFORM_AND_PLAYBACK_FIXES.md](technical/WAVEFORM_AND_PLAYBACK_FIXES.md) - **NEW**: Waveform display and playback fixes
 - [WAVEFORM_DISPLAY_FIX.md](technical/WAVEFORM_DISPLAY_FIX.md) - **NEW**: Waveform display NOTIFY signals fix
+- [QMEDIADEVICES_FIX.md](technical/QMEDIADEVICES_FIX.md) - **NEW**: QMediaDevices signal connection fix
 - [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
 - [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
 - [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
