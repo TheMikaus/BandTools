@@ -80,6 +80,7 @@ class FileManager(QObject):
         # Best/Partial take tracking
         self._best_takes: Set[str] = set()  # Set of file paths marked as best takes
         self._partial_takes: Set[str] = set()  # Set of file paths marked as partial takes
+        self._hidden_songs: Set[str] = set()  # Set of file paths marked as hidden
     
     # ========== Properties ==========
     
@@ -970,9 +971,9 @@ class FileManager(QObject):
             directory: Directory to check for metadata
             
         Returns:
-            Dictionary with 'best_takes' and 'partial_takes' lists
+            Dictionary with 'best_takes', 'partial_takes', and 'hidden_songs' lists
         """
-        result = {"best_takes": [], "partial_takes": []}
+        result = {"best_takes": [], "partial_takes": [], "hidden_songs": []}
         
         try:
             import json
@@ -1039,6 +1040,7 @@ class FileManager(QObject):
         # Clear existing state
         self._best_takes.clear()
         self._partial_takes.clear()
+        self._hidden_songs.clear()
         
         # Load best takes (convert to full paths)
         for filename in metadata.get("best_takes", []):
@@ -1049,6 +1051,11 @@ class FileManager(QObject):
         for filename in metadata.get("partial_takes", []):
             file_path = directory / filename
             self._partial_takes.add(str(file_path))
+        
+        # Load hidden songs (convert to full paths)
+        for filename in metadata.get("hidden_songs", []):
+            file_path = directory / filename
+            self._hidden_songs.add(str(file_path))
     
     @pyqtSlot(str)
     def markAsBestTake(self, file_path: str) -> None:
@@ -1191,6 +1198,77 @@ class FileManager(QObject):
             True if marked as partial take
         """
         return file_path in self._partial_takes
+    
+    @pyqtSlot(str)
+    def markAsHidden(self, file_path: str) -> None:
+        """
+        Mark a file as hidden.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Add to hidden songs set
+            self._hidden_songs.add(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename not in metadata.get("hidden_songs", []):
+                metadata.setdefault("hidden_songs", []).append(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error marking song as hidden: {e}")
+    
+    @pyqtSlot(str)
+    def unmarkAsHidden(self, file_path: str) -> None:
+        """
+        Unmark a file as hidden.
+        
+        Args:
+            file_path: Path to the audio file
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                self.errorOccurred.emit(f"File not found: {file_path}")
+                return
+            
+            # Remove from hidden songs set
+            self._hidden_songs.discard(file_path)
+            
+            # Save metadata
+            directory = path.parent
+            metadata = self._load_takes_metadata(directory)
+            filename = path.name
+            
+            if filename in metadata.get("hidden_songs", []):
+                metadata["hidden_songs"].remove(filename)
+                self._save_takes_metadata(directory, metadata)
+            
+        except Exception as e:
+            self.errorOccurred.emit(f"Error unmarking song as hidden: {e}")
+    
+    @pyqtSlot(str, result=bool)
+    def isHidden(self, file_path: str) -> bool:
+        """
+        Check if a file is marked as hidden.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            True if marked as hidden
+        """
+        return file_path in self._hidden_songs
     
     @pyqtSlot(result=list)
     def getBestTakes(self) -> List[str]:

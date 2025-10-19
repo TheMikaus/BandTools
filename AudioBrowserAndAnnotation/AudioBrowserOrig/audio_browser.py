@@ -6214,10 +6214,12 @@ class AudioBrowser(QMainWindow):
         self.file_best_takes: Dict[str, bool] = {}  # Track best takes per file in current set
         self.file_partial_takes: Dict[str, bool] = {}  # Track partial takes per file in current set
         self.file_reference_songs: Dict[str, bool] = {}  # Track reference songs per file in current set
+        self.file_hidden_songs: Dict[str, bool] = {}  # Track hidden songs per file in current set
         self.folder_notes: str = ""
 
         # Show-all toggle
         self.show_all_sets: bool = self.config.get_show_all_sets()
+        self.show_hidden_songs: bool = False  # Default to hiding hidden songs
         
         # Show-all folder notes toggle
         self.show_all_folder_notes: bool = self.config.get_show_all_folder_notes()
@@ -6935,29 +6937,31 @@ class AudioBrowser(QMainWindow):
 
     def _load_current_set_into_fields(self):
         aset = self._get_current_set()
-        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
+        self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.file_hidden_songs = {}
         if aset:
             for fname, meta in aset.get("files", {}).items():
                 self.file_general[fname] = str(meta.get("general", "") or "")
                 self.file_best_takes[fname] = bool(meta.get("best_take", False))
                 self.file_partial_takes[fname] = bool(meta.get("partial_take", False))
                 self.file_reference_songs[fname] = bool(meta.get("reference_song", False))
+                self.file_hidden_songs[fname] = bool(meta.get("hidden_song", False))
                 self.notes_by_file[fname] = [dict(n) for n in (meta.get("notes", []) or [])]
         else:
-            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}
+            self.notes_by_file = {}; self.file_general = {}; self.file_best_takes = {}; self.file_partial_takes = {}; self.file_reference_songs = {}; self.file_hidden_songs = {}
         self._update_general_label()
 
     def _sync_fields_into_current_set(self):
         aset = self._get_current_set()
         if not aset: return
         files = {}
-        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys()) | set(self.file_reference_songs.keys())
+        all_files = set(self.notes_by_file.keys()) | set(self.file_general.keys()) | set(self.file_best_takes.keys()) | set(self.file_partial_takes.keys()) | set(self.file_reference_songs.keys()) | set(self.file_hidden_songs.keys())
         for fname in all_files:
             files[fname] = {
                 "general": self.file_general.get(fname, ""),
                 "best_take": self.file_best_takes.get(fname, False),
                 "partial_take": self.file_partial_takes.get(fname, False),
                 "reference_song": self.file_reference_songs.get(fname, False),
+                "hidden_song": self.file_hidden_songs.get(fname, False),
                 "notes": self.notes_by_file.get(fname, []),
             }
         aset["files"] = files
@@ -7503,6 +7507,13 @@ class AudioBrowser(QMainWindow):
         reset_layout_action = QAction("Reset to &Default Layout", self)
         reset_layout_action.triggered.connect(self._reset_workspace_layout)
         view_menu.addAction(reset_layout_action)
+        
+        view_menu.addSeparator()
+        
+        self.show_hidden_songs_action = QAction("Show &Hidden Songs", self, checkable=True)
+        self.show_hidden_songs_action.setChecked(False)
+        self.show_hidden_songs_action.triggered.connect(self._toggle_show_hidden_songs)
+        view_menu.addAction(self.show_hidden_songs_action)
         
         # Tools menu
         tools_menu = menubar.addMenu("&Tools")
@@ -8634,10 +8645,11 @@ class AudioBrowser(QMainWindow):
         # Check if file is currently excluded from fingerprinting
         is_excluded = self.file_proxy._is_file_excluded_cached(dirpath, filename)
         
-        # Check current best take, partial take, and reference song status
+        # Check current best take, partial take, reference song, and hidden song status
         is_best_take = self.file_best_takes.get(filename, False)
         is_partial_take = self.file_partial_takes.get(filename, False)
         is_reference_song = self.file_reference_songs.get(filename, False)
+        is_hidden = self.file_hidden_songs.get(filename, False)
         
         # Create context menu
         menu = QMenu(self)
@@ -8701,6 +8713,14 @@ class AudioBrowser(QMainWindow):
         else:
             reference_song_action = menu.addAction("Mark as Reference Song")
             reference_song_action.setToolTip("Mark this file as a reference song for fingerprinting")
+        
+        # Add Hidden Song option
+        if is_hidden:
+            hidden_song_action = menu.addAction("👁 Unhide Song")
+            hidden_song_action.setToolTip("Make this file visible in the file list")
+        else:
+            hidden_song_action = menu.addAction("🚫 Hide Song")
+            hidden_song_action.setToolTip("Hide this file from the file list (can be shown via View menu)")
         
         # Add separator before file operations
         menu.addSeparator()
@@ -8772,6 +8792,9 @@ class AudioBrowser(QMainWindow):
         elif result == reference_song_action:
             # Toggle reference song status
             self._toggle_reference_song_for_file(filename, file_path)
+        elif result == hidden_song_action:
+            # Toggle hidden song status
+            self._toggle_hidden_song_for_file(filename, file_path)
         elif export_mono_action and result == export_mono_action:
             # Export to mono
             self._export_to_mono_for_file(file_path)
@@ -8956,6 +8979,35 @@ class AudioBrowser(QMainWindow):
         QMessageBox.information(self, "Reference Song", 
                               f"File '{filename}' is now {status_text} a reference song.\n"
                               "Reference songs are weighted higher in fingerprint matching.")
+
+    def _toggle_hidden_song_for_file(self, filename: str, file_path: Path):
+        """Toggle hidden status for a file from the context menu."""
+        # Toggle hidden status for current set
+        is_currently_hidden = self.file_hidden_songs.get(filename, False)
+        new_hidden_state = not is_currently_hidden
+        self.file_hidden_songs[filename] = new_hidden_state
+        
+        # Save the metadata
+        self._save_notes()
+        
+        # Refresh UI to reflect hidden status (will filter out if not showing hidden)
+        self._refresh_right_table()
+        self._refresh_tree_display()
+        
+        # Show confirmation message
+        status_text = "hidden" if new_hidden_state else "unhidden"
+        QMessageBox.information(self, "Hidden Song", 
+                              f"File '{filename}' is now {status_text}.\n"
+                              "Hidden songs can be shown via View > Show Hidden Songs.")
+    
+    def _toggle_show_hidden_songs(self):
+        """Toggle the visibility of hidden songs."""
+        self.show_hidden_songs = self.show_hidden_songs_action.isChecked()
+        
+        # Refresh the file list to apply the filter
+        self._refresh_right_table()
+        self._refresh_tree_display()
+
 
     def _add_annotation_at_position(self, file_path: Path, position_ms: int):
         """Add an annotation at a specific position in the file."""
@@ -9895,7 +9947,17 @@ class AudioBrowser(QMainWindow):
         """List audio files in the directory containing the currently selected song, or current practice folder if no song selected."""
         target_dir = self.current_practice_folder
         if not target_dir.exists(): return []
-        return [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+        all_files = [p for p in sorted(target_dir.iterdir()) if p.is_file() and p.suffix.lower() in AUDIO_EXTS]
+        
+        # Filter out hidden songs unless show_hidden_songs is enabled
+        if not self.show_hidden_songs:
+            visible_files = []
+            for file_path in all_files:
+                if not self.file_hidden_songs.get(file_path.name, False):
+                    visible_files.append(file_path)
+            return visible_files
+        
+        return all_files
 
     def _get_all_best_takes_for_file(self, filename: str) -> List[Dict[str, Any]]:
         """Get all annotation sets that have marked this file as a best take, along with their colors."""
