@@ -43,6 +43,8 @@ class WaveformView(QQuickPaintedItem):
     
     # Signals
     seekRequested = pyqtSignal(int)  # Position in milliseconds
+    peaksChanged = pyqtSignal()  # Emitted when peaks data changes
+    durationMsChanged = pyqtSignal()  # Emitted when duration changes
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -84,9 +86,11 @@ class WaveformView(QQuickPaintedItem):
     def _set_peaks(self, peaks: List[List[float]]) -> None:
         if peaks != self._peaks:
             self._peaks = peaks if peaks else []
-            self.update()
+            print(f"[WaveformView] Peaks updated: {len(self._peaks)} peaks, width={self.width()}, height={self.height()}")
+            self.peaksChanged.emit()  # Notify QML of the change
+            self.update()  # Request repaint
     
-    peaks = pyqtProperty('QVariant', _get_peaks, _set_peaks)
+    peaks = pyqtProperty('QVariant', _get_peaks, _set_peaks, notify=peaksChanged)
     
     def _get_duration_ms(self) -> int:
         return self._duration_ms
@@ -94,9 +98,10 @@ class WaveformView(QQuickPaintedItem):
     def _set_duration_ms(self, duration: int) -> None:
         if duration != self._duration_ms:
             self._duration_ms = int(duration)
-            self.update()
+            self.durationMsChanged.emit()  # Notify QML of the change
+            self.update()  # Request repaint
     
-    durationMs = pyqtProperty(int, _get_duration_ms, _set_duration_ms)
+    durationMs = pyqtProperty(int, _get_duration_ms, _set_duration_ms, notify=durationMsChanged)
     
     def _get_position_ms(self) -> int:
         return self._position_ms
@@ -169,6 +174,8 @@ class WaveformView(QQuickPaintedItem):
         """Paint the waveform or spectrogram."""
         width = int(self.width())
         height = int(self.height())
+        
+        print(f"[WaveformView] paint() called: width={width}, height={height}, peaks={len(self._peaks)}")
         
         if width <= 0 or height <= 0:
             return
