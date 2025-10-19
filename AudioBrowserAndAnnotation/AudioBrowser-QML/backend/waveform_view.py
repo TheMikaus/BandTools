@@ -49,6 +49,12 @@ class WaveformView(QQuickPaintedItem):
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        # Set render target to FramebufferObject for better compatibility
+        self.setRenderTarget(QQuickPaintedItem.RenderTarget.FramebufferObject)
+        
+        # Enable antialiasing for smoother waveforms
+        self.setAntialiasing(True)
+        
         # Waveform data
         self._peaks: List[List[float]] = []
         self._duration_ms: int = 0
@@ -84,9 +90,25 @@ class WaveformView(QQuickPaintedItem):
         return self._peaks
     
     def _set_peaks(self, peaks: List[List[float]]) -> None:
-        if peaks != self._peaks:
-            self._peaks = peaks if peaks else []
-            print(f"[WaveformView] Peaks updated: {len(self._peaks)} peaks, width={self.width()}, height={self.height()}")
+        # Convert QML/JavaScript array to Python list if needed
+        if peaks is not None and not isinstance(peaks, list):
+            try:
+                peaks = list(peaks)
+            except (TypeError, ValueError):
+                peaks = []
+        
+        # Normalize empty peaks
+        if not peaks:
+            peaks = []
+        
+        # Check if peaks actually changed (simple length check to avoid deep comparison)
+        peaks_changed = (len(peaks) != len(self._peaks))
+        
+        # Update peaks
+        self._peaks = peaks
+        
+        # Only emit signals and update if changed
+        if peaks_changed:
             self.peaksChanged.emit()  # Notify QML of the change
             self.update()  # Request repaint
     
@@ -174,8 +196,6 @@ class WaveformView(QQuickPaintedItem):
         """Paint the waveform or spectrogram."""
         width = int(self.width())
         height = int(self.height())
-        
-        print(f"[WaveformView] paint() called: width={width}, height={height}, peaks={len(self._peaks)}")
         
         if width <= 0 or height <= 0:
             return
