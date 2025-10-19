@@ -7508,6 +7508,13 @@ class AudioBrowser(QMainWindow):
         reset_layout_action.triggered.connect(self._reset_workspace_layout)
         view_menu.addAction(reset_layout_action)
         
+        view_menu.addSeparator()
+        
+        self.show_hidden_songs_action = QAction("Show &Hidden Songs", self, checkable=True)
+        self.show_hidden_songs_action.setChecked(False)
+        self.show_hidden_songs_action.triggered.connect(self._toggle_show_hidden_songs)
+        view_menu.addAction(self.show_hidden_songs_action)
+        
         # Tools menu
         tools_menu = menubar.addMenu("&Tools")
         
@@ -8638,10 +8645,11 @@ class AudioBrowser(QMainWindow):
         # Check if file is currently excluded from fingerprinting
         is_excluded = self.file_proxy._is_file_excluded_cached(dirpath, filename)
         
-        # Check current best take, partial take, and reference song status
+        # Check current best take, partial take, reference song, and hidden song status
         is_best_take = self.file_best_takes.get(filename, False)
         is_partial_take = self.file_partial_takes.get(filename, False)
         is_reference_song = self.file_reference_songs.get(filename, False)
+        is_hidden = self.file_hidden_songs.get(filename, False)
         
         # Create context menu
         menu = QMenu(self)
@@ -8705,6 +8713,14 @@ class AudioBrowser(QMainWindow):
         else:
             reference_song_action = menu.addAction("Mark as Reference Song")
             reference_song_action.setToolTip("Mark this file as a reference song for fingerprinting")
+        
+        # Add Hidden Song option
+        if is_hidden:
+            hidden_song_action = menu.addAction("👁 Unhide Song")
+            hidden_song_action.setToolTip("Make this file visible in the file list")
+        else:
+            hidden_song_action = menu.addAction("🚫 Hide Song")
+            hidden_song_action.setToolTip("Hide this file from the file list (can be shown via View menu)")
         
         # Add separator before file operations
         menu.addSeparator()
@@ -8776,6 +8792,9 @@ class AudioBrowser(QMainWindow):
         elif result == reference_song_action:
             # Toggle reference song status
             self._toggle_reference_song_for_file(filename, file_path)
+        elif result == hidden_song_action:
+            # Toggle hidden song status
+            self._toggle_hidden_song_for_file(filename, file_path)
         elif export_mono_action and result == export_mono_action:
             # Export to mono
             self._export_to_mono_for_file(file_path)
@@ -8960,6 +8979,35 @@ class AudioBrowser(QMainWindow):
         QMessageBox.information(self, "Reference Song", 
                               f"File '{filename}' is now {status_text} a reference song.\n"
                               "Reference songs are weighted higher in fingerprint matching.")
+
+    def _toggle_hidden_song_for_file(self, filename: str, file_path: Path):
+        """Toggle hidden status for a file from the context menu."""
+        # Toggle hidden status for current set
+        is_currently_hidden = self.file_hidden_songs.get(filename, False)
+        new_hidden_state = not is_currently_hidden
+        self.file_hidden_songs[filename] = new_hidden_state
+        
+        # Save the metadata
+        self._save_notes()
+        
+        # Refresh UI to reflect hidden status (will filter out if not showing hidden)
+        self._refresh_right_table()
+        self._refresh_tree_display()
+        
+        # Show confirmation message
+        status_text = "hidden" if new_hidden_state else "unhidden"
+        QMessageBox.information(self, "Hidden Song", 
+                              f"File '{filename}' is now {status_text}.\n"
+                              "Hidden songs can be shown via View > Show Hidden Songs.")
+    
+    def _toggle_show_hidden_songs(self):
+        """Toggle the visibility of hidden songs."""
+        self.show_hidden_songs = self.show_hidden_songs_action.isChecked()
+        
+        # Refresh the file list to apply the filter
+        self._refresh_right_table()
+        self._refresh_tree_display()
+
 
     def _add_annotation_at_position(self, file_path: Path, position_ms: int):
         """Add an annotation at a specific position in the file."""
