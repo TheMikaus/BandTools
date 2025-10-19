@@ -4,6 +4,17 @@ This file tracks changes made to the AudioBrowser application. The version numbe
 
 ## [Unreleased]
 
+### Added
+- **Comprehensive Fingerprint Matching Logging** - Added detailed logging to diagnose and fix fingerprint matching issues
+  - Added `debug` parameter to `compare_fingerprints()` function in both AudioBrowserOrig and AudioBrowser-QML
+  - Added `debug` parameter to `find_best_cross_folder_match()` function in both applications
+  - Logs show fingerprint lengths, norms, similarity scores, and comparison details
+  - Logs show top 10 matches, threshold comparisons, and selected match details
+  - Added missing `collect_fingerprints_from_folders()` and `find_best_cross_folder_match()` functions to AudioBrowser-QML
+  - Ensured both applications use identical fingerprinting algorithms and matching logic
+  - Created FINGERPRINT_LOGGING.md documentation explaining the logging system and how to interpret results
+  - Debug logging is enabled by default for auto-labeling operations to help diagnose matching issues
+
 ### Fixed
 - **AudioBrowser-QML: ColorManager Null Reference Errors** - Fixed TypeError exceptions in dialog QML files
   - Added null safety checks to all `colorManager.getColor()` calls in BackupSelectionDialog.qml and AutoGenerationSettingsDialog.qml
