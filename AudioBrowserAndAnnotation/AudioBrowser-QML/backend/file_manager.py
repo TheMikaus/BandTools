@@ -965,7 +965,7 @@ class FileManager(QObject):
     
     def _load_takes_metadata(self, directory: Path) -> Dict[str, Any]:
         """
-        Load takes metadata from .takes_metadata.json file or legacy .audio_notes_*.json files.
+        Load takes metadata from .takes_metadata.json file or annotation sets (.audio_notes_*.json).
         
         Args:
             directory: Directory to check for metadata
@@ -978,7 +978,7 @@ class FileManager(QObject):
         try:
             import json
             
-            # Try new format first
+            # Try new dedicated .takes_metadata.json format first
             takes_file = self._get_takes_file(directory)
             if takes_file.exists():
                 with open(takes_file, 'r', encoding='utf-8') as f:
@@ -986,25 +986,44 @@ class FileManager(QObject):
                     if data:
                         return data
             
-            # Fall back to legacy format: .audio_notes_*.json files
-            # These files contain per-file annotations with best_take and partial_take flags
+            # Fall back to reading from annotation sets (.audio_notes_*.json files)
+            # These files can contain per-file metadata in two formats:
+            # 1. New annotation sets format (version 3): sets[].files[filename].best_take
+            # 2. Old legacy format: {filename: {best_take: true}}
             for notes_file in directory.glob(".audio_notes_*.json"):
                 try:
                     with open(notes_file, 'r', encoding='utf-8') as f:
                         notes_data = json.load(f)
                         
-                        # The old format stores data per filename
-                        # Each entry can have 'best_take' and 'partial_take' boolean flags
-                        for filename, file_data in notes_data.items():
-                            if isinstance(file_data, dict):
-                                if file_data.get('best_take', False):
-                                    if filename not in result['best_takes']:
-                                        result['best_takes'].append(filename)
-                                if file_data.get('partial_take', False):
-                                    if filename not in result['partial_takes']:
-                                        result['partial_takes'].append(filename)
+                        # Check if this is the new annotation sets format (has "sets" key)
+                        if isinstance(notes_data, dict) and "sets" in notes_data:
+                            # New format: Extract metadata from all sets
+                            sets = notes_data.get("sets", [])
+                            for annotation_set in sets:
+                                files = annotation_set.get("files", {})
+                                for filename, file_data in files.items():
+                                    if isinstance(file_data, dict):
+                                        if file_data.get('best_take', False):
+                                            if filename not in result['best_takes']:
+                                                result['best_takes'].append(filename)
+                                        if file_data.get('partial_take', False):
+                                            if filename not in result['partial_takes']:
+                                                result['partial_takes'].append(filename)
+                                        # Note: hidden_songs might be stored differently in sets
+                                        # For now, we don't extract it from sets format
+                        else:
+                            # Old legacy format: data is directly a dict with filenames as keys
+                            # Each entry can have 'best_take' and 'partial_take' boolean flags
+                            for filename, file_data in notes_data.items():
+                                if isinstance(file_data, dict):
+                                    if file_data.get('best_take', False):
+                                        if filename not in result['best_takes']:
+                                            result['best_takes'].append(filename)
+                                    if file_data.get('partial_take', False):
+                                        if filename not in result['partial_takes']:
+                                            result['partial_takes'].append(filename)
                 except Exception as e:
-                    print(f"Warning: Could not load legacy notes file {notes_file}: {e}")
+                    print(f"Warning: Could not load notes file {notes_file}: {e}")
                     continue
                     
         except Exception as e:
