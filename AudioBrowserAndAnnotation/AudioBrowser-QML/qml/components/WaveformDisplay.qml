@@ -81,7 +81,7 @@ Rectangle {
             // Annotation markers layer
             Repeater {
                 id: markersRepeater
-                model: annotationManager.getAnnotations()
+                model: annotationManager ? annotationManager.getAnnotations() : []
                 
                 AnnotationMarker {
                     timestampMs: modelData.timestamp_ms || 0
