@@ -248,6 +248,11 @@ Item {
                 volumeSlider.value = volume
             }
         }
+        
+        function onPlaybackStateChanged(state) {
+            // Update play/pause button icon when playback state changes
+            playPauseButton.text = (state === "playing") ? "⏸" : "▶"
+        }
     }
     
     // Timer to update position display
