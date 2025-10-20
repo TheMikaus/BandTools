@@ -23,12 +23,20 @@ End-user documentation and how-to guides:
 - [FOLDER_NAVIGATION.md](user_guides/FOLDER_NAVIGATION.md) - Folder navigation and hierarchical browsing guide
 - [GOOGLE_DRIVE_SYNC_README.md](user_guides/GOOGLE_DRIVE_SYNC_README.md) - Google Drive sync setup guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
+- [LIBRARY_LAYOUT_MOCKUP.md](user_guides/LIBRARY_LAYOUT_MOCKUP.md) - Library layout mockup and design
 - [PHASE_15_VISUAL_GUIDE.md](user_guides/PHASE_15_VISUAL_GUIDE.md) - Phase 15 visual guide: Confirmation and progress dialogs
 - [PLAY_BUTTON_FIX_VISUAL_GUIDE.md](user_guides/PLAY_BUTTON_FIX_VISUAL_GUIDE.md) - **NEW**: Play button and metadata display fix visual guide
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
+- [README_NOW_PLAYING_FIX.md](user_guides/README_NOW_PLAYING_FIX.md) - Now playing panel fix guide
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
 - [SPECTROGRAM_USER_GUIDE.md](user_guides/SPECTROGRAM_USER_GUIDE.md) - Spectrogram feature guide (Issue 7)
+- [UI_FIXES_VISUAL_GUIDE.md](user_guides/UI_FIXES_VISUAL_GUIDE.md) - UI contrast and logging improvements visual guide
+- [VISUAL_CHANGES.md](user_guides/VISUAL_CHANGES.md) - Library file listing visual changes
+- [VISUAL_CHANGES_FOLDER_MENU.md](user_guides/VISUAL_CHANGES_FOLDER_MENU.md) - Folder context menu visual changes
+- [VISUAL_CHANGES_GUIDE.md](user_guides/VISUAL_CHANGES_GUIDE.md) - Media buttons and layout visual guide
+- [VISUAL_CHANGES_MOCKUP.md](user_guides/VISUAL_CHANGES_MOCKUP.md) - Visual mockups and comparisons
+- [VISUAL_GUIDE_UI_FIXES.md](user_guides/VISUAL_GUIDE_UI_FIXES.md) - UI fixes visual guide
 - [WAVEFORM_GUIDE.md](user_guides/WAVEFORM_GUIDE.md) - Waveform display features
 - [WAVEFORM_AND_PLAYBACK_GUIDE.md](user_guides/WAVEFORM_AND_PLAYBACK_GUIDE.md) - **NEW**: Waveform display and playback user guide
 - [WAVEFORM_DISPLAY_FIX_USER_GUIDE.md](user_guides/WAVEFORM_DISPLAY_FIX_USER_GUIDE.md) - **NEW**: Waveform display fix verification guide
@@ -58,28 +66,60 @@ Developer and technical documentation:
 
 #### Bug Fixes and Improvements
 - [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - Error logging improvements
+- [FEATURE_PARITY_COMPLETE.md](technical/FEATURE_PARITY_COMPLETE.md) - Feature parity completion
+- [FIXES_SUMMARY.md](technical/FIXES_SUMMARY.md) - Now playing panel fix summary
+- [FIX_DUPLICATE_BACKGROUND_PROPERTY.md](technical/FIX_DUPLICATE_BACKGROUND_PROPERTY.md) - Duplicate background property fix
+- [FIX_GEOMETRY_TYPE_ERROR.md](technical/FIX_GEOMETRY_TYPE_ERROR.md) - Geometry type error fix
+- [FIX_QML_PROPERTY_ASSIGNMENT.md](technical/FIX_QML_PROPERTY_ASSIGNMENT.md) - QML property assignment fix
+- [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
+- [FIX_SUMMARY.txt](technical/FIX_SUMMARY.txt) - Additional fix summaries
+- [FIX_SUMMARY_ANNOTATION_TAB.md](technical/FIX_SUMMARY_ANNOTATION_TAB.md) - Annotation tab fix summary
+- [FIX_SUMMARY_WAVEFORM_PLAYBACK.md](technical/FIX_SUMMARY_WAVEFORM_PLAYBACK.md) - Waveform playback fix summary
+- [FOLDER_CONTEXT_MENU_FEATURE_SUMMARY.md](technical/FOLDER_CONTEXT_MENU_FEATURE_SUMMARY.md) - Folder context menu feature summary
 - [FOLDER_CONTEXT_MENU_IMPLEMENTATION.md](technical/folder_context_menu_implementation.md) - **NEW**: Folder context menu technical implementation
+- [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
+- [FOLDER_SELECTION_FIX_ALT.md](technical/FOLDER_SELECTION_FIX_ALT.md) - Alternative folder selection fix
+- [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
+- [IMPLEMENTATION_COMPLETE_FEATURE_PARITY.md](technical/IMPLEMENTATION_COMPLETE_FEATURE_PARITY.md) - Feature parity implementation completion
+- [IMPLEMENTATION_COMPLETE_LIBRARY_LEFT.md](technical/IMPLEMENTATION_COMPLETE_LIBRARY_LEFT.md) - Library left panel implementation
+- [IMPLEMENTATION_COMPLETE_PLAY_BUTTON_AND_METADATA.md](technical/IMPLEMENTATION_COMPLETE_PLAY_BUTTON_AND_METADATA.md) - Play button and metadata implementation
+- [IMPLEMENTATION_COMPLETE_THREAD_CLEANUP.md](technical/IMPLEMENTATION_COMPLETE_THREAD_CLEANUP.md) - Thread cleanup implementation
+- [IMPLEMENTATION_SUMMARY_UI_FIXES.md](technical/IMPLEMENTATION_SUMMARY_UI_FIXES.md) - UI fixes implementation summary
+- [IMPROVEMENTS_SUMMARY.md](technical/IMPROVEMENTS_SUMMARY.md) - General improvements summary
+- [LIBRARY_FIXES_SUMMARY.md](technical/LIBRARY_FIXES_SUMMARY.md) - Library tab fixes summary
+- [LIBRARY_LAYOUT_CHANGES.md](technical/LIBRARY_LAYOUT_CHANGES.md) - Library layout changes
+- [METADATA_FORMAT_COMPATIBILITY_FIX.md](technical/METADATA_FORMAT_COMPATIBILITY_FIX.md) - Metadata format compatibility fix
+- [NOW_PLAYING_FIXES.md](technical/NOW_PLAYING_FIXES.md) - Now playing panel fixes
+- [NULL_REFERENCE_FIX_COMPLETE.md](technical/NULL_REFERENCE_FIX_COMPLETE.md) - Null reference fix completion
+- [NULL_REFERENCE_FIX_SUMMARY.md](technical/NULL_REFERENCE_FIX_SUMMARY.md) - Null reference fix summary
 - [PLAY_BUTTON_AND_METADATA_FIX.md](technical/PLAY_BUTTON_AND_METADATA_FIX.md) - **NEW**: Play button icon and metadata tab display fix
+- [PR_SUMMARY_OLD.md](technical/PR_SUMMARY_OLD.md) - Old pull request summary
+- [PR_SUMMARY_WAVEFORM_FIX.md](technical/PR_SUMMARY_WAVEFORM_FIX.md) - Waveform fix pull request summary
+- [PYDUB_PYAUDIOOP_FIX.md](technical/PYDUB_PYAUDIOOP_FIX.md) - PyDub and PyAudioOp fixes
+- [PYTHON_313_COMPATIBILITY.md](technical/PYTHON_313_COMPATIBILITY.md) - Python 3.13 compatibility
+- [QMEDIADEVICES_FIX.md](technical/QMEDIADEVICES_FIX.md) - **NEW**: QMediaDevices signal connection fix
+- [QML_CONTROLS_BASIC_FIX.md](technical/QML_CONTROLS_BASIC_FIX.md) - QML controls fixes
+- [QML_FIXES_SUMMARY.md](technical/QML_FIXES_SUMMARY.md) - QML fixes summary
+- [QML_FIX_SUMMARY.md](technical/QML_FIX_SUMMARY.md) - QML fix summary
+- [SESSION_ENHANCED_FILE_LIST.md](technical/SESSION_ENHANCED_FILE_LIST.md) - Enhanced file list
+- [SESSION_SUMMARY.md](technical/SESSION_SUMMARY.md) - Session summaries
+- [SIGNAL_HOOKUP_COMPLETE.md](technical/SIGNAL_HOOKUP_COMPLETE.md) - Signal hookup completion
+- [TASK_COMPLETE.md](technical/TASK_COMPLETE.md) - Task completion
+- [TASK_COMPLETE_ANNOTATION_TAB.md](technical/TASK_COMPLETE_ANNOTATION_TAB.md) - Annotation tab task completion
+- [TASK_COMPLETION_SUMMARY.md](technical/TASK_COMPLETION_SUMMARY.md) - Task completion summaries
+- [TASK_COMPLETION_SUMMARY_ALT.md](technical/TASK_COMPLETION_SUMMARY_ALT.md) - Alternative task completion summary
+- [UI_CHANGES_CLOUD_SYNC.md](technical/UI_CHANGES_CLOUD_SYNC.md) - Cloud sync UI changes
+- [UI_FIXES_IMPLEMENTATION_SUMMARY.md](technical/UI_FIXES_IMPLEMENTATION_SUMMARY.md) - UI fixes implementation summary
+- [UI_FIX_SUMMARY.md](technical/UI_FIX_SUMMARY.md) - UI fix summary
 - [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - UI improvements for toolbar and folder navigation
+- [UI_LAYOUT_CHANGES.md](technical/UI_LAYOUT_CHANGES.md) - UI layout changes
+- [UI_RESTRUCTURE_SUMMARY.md](technical/UI_RESTRUCTURE_SUMMARY.md) - UI restructure summary
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
 - [WAVEFORM_VIEW_PROPERTY_FIX.md](technical/WAVEFORM_VIEW_PROPERTY_FIX.md) - WaveformView peaks property type fix
 - [WAVEFORM_AND_PLAYBACK_FIXES.md](technical/WAVEFORM_AND_PLAYBACK_FIXES.md) - **NEW**: Waveform display and playback fixes
 - [WAVEFORM_DISPLAY_FIX.md](technical/WAVEFORM_DISPLAY_FIX.md) - **NEW**: Waveform display NOTIFY signals fix
-- [QMEDIADEVICES_FIX.md](technical/QMEDIADEVICES_FIX.md) - **NEW**: QMediaDevices signal connection fix
-- [FIX_SUMMARY.md](technical/FIX_SUMMARY.md) - Summary of fixes
-- [FOLDER_SELECTION_FIX.md](technical/FOLDER_SELECTION_FIX.md) - Folder selection fix
-- [FOLDER_SELECTION_UX_IMPROVEMENTS.md](technical/FOLDER_SELECTION_UX_IMPROVEMENTS.md) - Folder selection UX improvements
-- [QML_CONTROLS_BASIC_FIX.md](technical/QML_CONTROLS_BASIC_FIX.md) - QML controls fixes
-- [QML_FIXES_SUMMARY.md](technical/QML_FIXES_SUMMARY.md) - QML fixes summary
-- [QML_FIX_SUMMARY.md](technical/QML_FIX_SUMMARY.md) - QML fix summary
-- [PYDUB_PYAUDIOOP_FIX.md](technical/PYDUB_PYAUDIOOP_FIX.md) - PyDub and PyAudioOp fixes
-- [PYTHON_313_COMPATIBILITY.md](technical/PYTHON_313_COMPATIBILITY.md) - Python 3.13 compatibility
-- [SESSION_ENHANCED_FILE_LIST.md](technical/SESSION_ENHANCED_FILE_LIST.md) - Enhanced file list
-- [SESSION_SUMMARY.md](technical/SESSION_SUMMARY.md) - Session summaries
-- [TASK_COMPLETION_SUMMARY.md](technical/TASK_COMPLETION_SUMMARY.md) - Task completion summaries
-- [UI_CHANGES_CLOUD_SYNC.md](technical/UI_CHANGES_CLOUD_SYNC.md) - Cloud sync UI changes
-- [UI_FIX_SUMMARY.md](technical/UI_FIX_SUMMARY.md) - UI fix summary
+- [WAVEFORM_FIX_COMPLETE.md](technical/WAVEFORM_FIX_COMPLETE.md) - Waveform fix completion
 - [QUICK_VERIFICATION.md](technical/QUICK_VERIFICATION.md) - Quick verification procedures
 - [ISSUE_RESOLUTION.md](technical/ISSUE_RESOLUTION.md) - Issue resolution documentation
 - [VERIFICATION_SUMMARY.md](technical/VERIFICATION_SUMMARY.md) - Verification results
@@ -116,7 +156,11 @@ Feature implementation summaries and completion reports:
 
 QA and testing documentation:
 
+- [FIX_VERIFICATION_GUIDE.md](test_plans/FIX_VERIFICATION_GUIDE.md) - Fix verification guide
 - [TEST_PLAN_SPECTROGRAM.md](test_plans/TEST_PLAN_SPECTROGRAM.md) - Spectrogram feature test plan (Issue 7)
+- [TEST_PLAN_UI_FIXES.md](test_plans/TEST_PLAN_UI_FIXES.md) - UI contrast and logging improvements test plan
+- [VALIDATION_OUTPUT.txt](test_plans/VALIDATION_OUTPUT.txt) - Validation output results
+- [VALIDATION_SUMMARY.txt](test_plans/VALIDATION_SUMMARY.txt) - Validation summary results
 - [COLLATED_TEST_PLAN.md](test_plans/COLLATED_TEST_PLAN.md) - Collated test plan
 - [TEST_PLAN_SUMMARY.md](test_plans/TEST_PLAN_SUMMARY.md) - Test plan summary
 
