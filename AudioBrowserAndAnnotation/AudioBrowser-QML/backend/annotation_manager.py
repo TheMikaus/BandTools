@@ -87,8 +87,12 @@ class AnnotationManager(QObject):
             self.currentFileChanged.emit(file_path)
             
             # Load annotations for this file if not already loaded
+            # Only load legacy annotations if we're not using annotation sets
             if file_path and file_path not in self._annotations:
-                self._load_annotations(file_path)
+                # If we have annotation sets loaded, don't try to load legacy format
+                # The annotations are already in the sets structure
+                if not self._annotation_sets:
+                    self._load_annotations(file_path)
     
     @pyqtSlot(result=str)
     def getCurrentFile(self) -> str:
