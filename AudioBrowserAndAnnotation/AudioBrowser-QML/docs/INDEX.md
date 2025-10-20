@@ -108,6 +108,7 @@ Developer and technical documentation:
 - [TASK_COMPLETE_ANNOTATION_TAB.md](technical/TASK_COMPLETE_ANNOTATION_TAB.md) - Annotation tab task completion
 - [TASK_COMPLETION_SUMMARY.md](technical/TASK_COMPLETION_SUMMARY.md) - Task completion summaries
 - [TASK_COMPLETION_SUMMARY_ALT.md](technical/TASK_COMPLETION_SUMMARY_ALT.md) - Alternative task completion summary
+- [THREAD_CLEANUP_FIX_CHANGELOG.md](technical/THREAD_CLEANUP_FIX_CHANGELOG.md) - Thread cleanup fix changelog
 - [UI_CHANGES_CLOUD_SYNC.md](technical/UI_CHANGES_CLOUD_SYNC.md) - Cloud sync UI changes
 - [UI_FIXES_IMPLEMENTATION_SUMMARY.md](technical/UI_FIXES_IMPLEMENTATION_SUMMARY.md) - UI fixes implementation summary
 - [UI_FIX_SUMMARY.md](technical/UI_FIX_SUMMARY.md) - UI fix summary
