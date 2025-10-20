@@ -25,6 +25,7 @@ Quality assurance and testing documentation, including test cases, validation pr
 
 **Key Documents:**
 - [Audio Timing Fix Test Plan](test_plans/audio_timing_fix_test_plan.md) - Validation tests for wave/MP3 pre-loading fix
+- [TESTING.md](test_plans/TESTING.md) - General testing documentation
 
 ## Quick Links
 

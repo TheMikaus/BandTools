@@ -9,7 +9,11 @@ User-facing documentation for end users and musicians.
 
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
+- [Changes Visualization](user_guides/CHANGES_VISUALIZATION.txt) - Visual comparison of UI changes
 - [Timing Diagnostics Guide](user_guides/TIMING_DIAGNOSTICS_GUIDE.md) - NEW: Diagnosing and troubleshooting timing issues (v1.7.0)
+- [Timing Troubleshooting Quick Reference](user_guides/TIMING_TROUBLESHOOTING_QUICK_REF.md) - Quick reference for timing issues
+- [UI Changes Visualization](user_guides/UI_CHANGES_VISUALIZATION.md) - Visual guide to UI changes
+- [UI Timing Diagnostics Visual Guide](user_guides/UI_TIMING_DIAGNOSTICS_VISUAL.md) - Visual guide to timing diagnostics
 - [Accent Frequency Guide](user_guides/accent_frequency_guide.md) - Using different pitches for accent beats in tone mode
 - [MP3 Tick Sounds Guide](user_guides/MP3_TICK_SOUNDS.md) - Using custom MP3 metronome sounds
 - [v1.2 Improvements Guide](user_guides/v1.2_improvements.md) - What's new in v1.2 with visual examples
@@ -24,6 +28,17 @@ Developer-focused documentation for understanding and modifying the code.
 
 - [Architecture Overview](technical/ARCHITECTURE.md) - System design and structure
 - [Audio Implementation](technical/AUDIO_IMPLEMENTATION.md) - Audio playback system details (v1.1)
+- [Feature Enhancements Summary](technical/FEATURE_ENHANCEMENTS_SUMMARY.md) - Summary of feature enhancements
+- [Implementation Complete](technical/IMPLEMENTATION_COMPLETE.md) - Implementation completion documentation
+- [MP3 Implementation Summary](technical/MP3_IMPLEMENTATION_SUMMARY.md) - MP3 feature implementation summary
+- [Setup Complete](technical/SETUP_COMPLETE.md) - Setup completion documentation
+- [Timing Diagnostics Implementation Summary](technical/TIMING_DIAGNOSTICS_IMPLEMENTATION_SUMMARY.md) - Timing diagnostics implementation details
+- [Timing Diagram](technical/TIMING_DIAGRAM.md) - Timing system diagrams
+- [Timing Fix Summary](technical/TIMING_FIX_SUMMARY.md) - Timing fixes summary
+- [UI Fixes Summary](technical/UI_FIXES_SUMMARY.md) - UI fixes summary
+- [UI Layout Changes](technical/UI_LAYOUT_CHANGES.md) - UI layout changes documentation
+- [V1.6.0 Implementation Summary](technical/V1.6.0_IMPLEMENTATION_SUMMARY.md) - Version 1.6.0 implementation details
+- [V1.7.0 Timing Diagnostics Complete](technical/V1.7.0_TIMING_DIAGNOSTICS_COMPLETE.md) - Version 1.7.0 completion summary
 - [Timing Debug Implementation](technical/TIMING_DEBUG_IMPLEMENTATION.md) - NEW: v1.7.0 timing diagnostics system implementation details
 - [Per-Layer Threading](technical/PER_LAYER_THREADING.md) - v1.6.0 per-layer threading architecture explanation
 - [AudioTrack Reliability Fix](technical/AUDIOTRACK_RELIABILITY_FIX.md) - v1.6.0 tone playback consistency improvements
@@ -38,6 +53,7 @@ Developer-focused documentation for understanding and modifying the code.
 Quality assurance and testing documentation.
 
 - [Test Plan](test_plans/TEST_PLAN.md) - Testing strategy and cases
+- [Manual Test Plan](test_plans/MANUAL_TEST_PLAN.md) - Manual testing procedures
 - [Timing Diagnostics Test Plan](test_plans/timing_diagnostics_test_plan.md) - NEW: Test plan for v1.7.0 timing diagnostics feature
 - [v1.6 Per-Layer Threading Test Plan](test_plans/v1.6_per_layer_threading_test_plan.md) - Comprehensive test plan for v1.6.0 per-layer threading and AudioTrack fixes
 - [Bug Fixes v1.1 Test Plan](test_plans/bug_fixes_v1.1_test_plan.md) - Comprehensive test plan for v1.1 bug fixes
