@@ -91,11 +91,10 @@ def test_annotation_loading_with_sets():
         assert "Second annotation" in texts, "Second annotation missing"
         print("✓ Annotation data preserved correctly")
         
-        # Test that the internal _annotations dict is NOT populated
-        # (this would indicate legacy loading was skipped)
-        assert str(audio_file1) not in manager._annotations, \
-            "Legacy _annotations dict should be empty when using sets"
-        print("✓ Legacy _annotations dict is empty (correct behavior)")
+        # Note: The _annotations dict might be populated from the first setCurrentFile call
+        # (before annotations were added to the set), but that's OK because getAnnotations()
+        # returns data from the set when the set has data
+        print("✓ Annotation data preserved correctly (getAnnotations returns from set)")
         
         # Save and reload to test persistence
         manager._save_annotation_sets()
@@ -120,20 +119,179 @@ def test_annotation_loading_with_sets():
         assert len(annotations2) == 2, f"Expected 2 annotations from loaded sets, got {len(annotations2)}"
         print(f"✓ Retrieved {len(annotations2)} annotations from loaded sets")
         
-        # Verify the legacy _annotations dict is still empty
-        assert str(audio_file1) not in manager2._annotations, \
-            "Legacy _annotations dict should remain empty after loading sets"
-        print("✓ Legacy loading still skipped after reload (correct)")
+        # The fix ensures that getAnnotations() returns the right data from sets
+        # even if legacy annotations were loaded initially
+        print("✓ Annotations loaded from sets (getAnnotations returns correct data)")
         
         print("\n" + "=" * 80)
-        print("✅ ANNOTATION LOADING BUG FIX VERIFIED!")
+        print("✅ ANNOTATION LOADING BUG FIXED!")
         print("=" * 80)
         print("\nThe fix ensures that:")
-        print("  1. setCurrentFile() checks if annotation sets exist")
-        print("  2. If sets exist, legacy annotation loading is skipped")
-        print("  3. Annotations are correctly retrieved from sets")
-        print("  4. Legacy _annotations dict remains empty when using sets")
-        print("  5. This behavior is consistent across file switches and reloads")
+        print("  1. When annotation sets have data for a file, legacy format is NOT loaded")
+        print("  2. Annotations are correctly retrieved from sets")
+        print("  3. Legacy fallback still works when sets are empty for a file")
+        print("  4. Behavior is consistent across file switches and reloads")
+        return 0
+
+
+def test_no_legacy_load_when_set_has_data():
+    """Test that legacy annotations are not loaded when set already has data."""
+    print("\n" + "=" * 80)
+    print("Testing: No legacy load when set has data...")
+    print("=" * 80)
+    
+    app = QCoreApplication(sys.argv)
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_dir = Path(tmpdir)
+        
+        # Create test audio file
+        audio_file = test_dir / "song.wav"
+        audio_file.touch()
+        
+        # Create annotation sets file with annotations (simulating existing data)
+        import json
+        sets_data = {
+            "version": 3,
+            "updated": "2024-01-01T00:00:00",
+            "sets": [
+                {
+                    "id": "set1",
+                    "name": "TestUser",
+                    "color": "#00cc66",
+                    "visible": True,
+                    "folder_notes": "",
+                    "files": {
+                        "song.wav": {
+                            "general": "",
+                            "best_take": False,
+                            "partial_take": False,
+                            "reference_song": False,
+                            "notes": [
+                                {
+                                    "uid": 1,
+                                    "ms": 1000,
+                                    "text": "Annotation from set",
+                                    "important": True
+                                }
+                            ]
+                        }
+                    }
+                }
+            ],
+            "current_set_id": "set1"
+        }
+        
+        sets_file = test_dir / ".audio_notes_TestUser.json"
+        with open(sets_file, 'w') as f:
+            json.dump(sets_data, f, indent=2)
+        print("✓ Created sets file with annotation for song.wav")
+        
+        # Create manager and load sets
+        manager = AnnotationManager()
+        manager.setCurrentUser("TestUser")
+        manager.setCurrentDirectory(test_dir)
+        print("✓ Loaded annotation sets")
+        
+        # Now call setCurrentFile - this should NOT load legacy annotations
+        # because the set already has data for this file
+        manager.setCurrentFile(str(audio_file))
+        
+        # Verify legacy annotations were NOT loaded
+        assert str(audio_file) not in manager._annotations, \
+            "Legacy annotations should NOT be loaded when set has data"
+        print("✓ Legacy annotations NOT loaded (set has data - CORRECT!)")
+        
+        # Verify we can still get the annotations from the set
+        annotations = manager.getAnnotations()
+        assert len(annotations) == 1, f"Expected 1 annotation from set, got {len(annotations)}"
+        assert annotations[0]["text"] == "Annotation from set"
+        print(f"✓ Retrieved annotation from set: '{annotations[0]['text']}'")
+        
+        print("\n✅ Fix verified: Legacy loading skipped when set has data!")
+        return 0
+
+
+def test_legacy_fallback_when_set_empty():
+    """Test that legacy annotations ARE loaded when set exists but is empty for file."""
+    print("\n" + "=" * 80)
+    print("Testing: Legacy fallback when set is empty...")
+    print("=" * 80)
+    
+    app = QCoreApplication(sys.argv)
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_dir = Path(tmpdir)
+        
+        # Create test audio file
+        audio_file = test_dir / "song.wav"
+        audio_file.touch()
+        
+        # Create legacy annotation file
+        import json
+        legacy_annotations = [
+            {
+                "uid": 1,
+                "timestamp_ms": 2000,
+                "ms": 2000,
+                "text": "Legacy annotation",
+                "category": "notes",
+                "important": False,
+                "color": "#3498db",
+                "user": "TestUser",
+                "created_at": "2024-01-01T00:00:00",
+                "updated_at": "2024-01-01T00:00:00"
+            }
+        ]
+        legacy_file = test_dir / ".song_annotations.json"
+        with open(legacy_file, 'w') as f:
+            json.dump(legacy_annotations, f)
+        print("✓ Created legacy annotation file")
+        
+        # Create empty annotation sets file
+        sets_data = {
+            "version": 3,
+            "updated": "2024-01-01T00:00:00",
+            "sets": [
+                {
+                    "id": "set1",
+                    "name": "TestUser",
+                    "color": "#00cc66",
+                    "visible": True,
+                    "folder_notes": "",
+                    "files": {}  # Empty - no annotations for song.wav
+                }
+            ],
+            "current_set_id": "set1"
+        }
+        
+        sets_file = test_dir / ".audio_notes_TestUser.json"
+        with open(sets_file, 'w') as f:
+            json.dump(sets_data, f, indent=2)
+        print("✓ Created empty sets file (no annotation for song.wav)")
+        
+        # Create manager and load sets
+        manager = AnnotationManager()
+        manager.setCurrentUser("TestUser")
+        manager.setCurrentDirectory(test_dir)
+        print("✓ Loaded annotation sets")
+        
+        # Now call setCurrentFile - this SHOULD load legacy annotations
+        # because the set doesn't have data for this file
+        manager.setCurrentFile(str(audio_file))
+        
+        # Verify legacy annotations WERE loaded
+        assert str(audio_file) in manager._annotations, \
+            "Legacy annotations SHOULD be loaded when set is empty"
+        print("✓ Legacy annotations loaded (set empty - CORRECT!)")
+        
+        # Verify we get the legacy annotations
+        annotations = manager.getAnnotations()
+        assert len(annotations) == 1, f"Expected 1 legacy annotation, got {len(annotations)}"
+        assert annotations[0]["text"] == "Legacy annotation"
+        print(f"✓ Retrieved legacy annotation: '{annotations[0]['text']}'")
+        
+        print("\n✅ Fallback verified: Legacy loading works when set is empty!")
         return 0
 
 
@@ -206,9 +364,11 @@ def test_legacy_mode_still_works():
 if __name__ == "__main__":
     try:
         result1 = test_annotation_loading_with_sets()
-        result2 = test_legacy_mode_still_works()
+        result2 = test_no_legacy_load_when_set_has_data()
+        result3 = test_legacy_fallback_when_set_empty()
+        result4 = test_legacy_mode_still_works()
         
-        if result1 == 0 and result2 == 0:
+        if result1 == 0 and result2 == 0 and result3 == 0 and result4 == 0:
             print("\n" + "=" * 80)
             print("✅ ALL TESTS PASSED!")
             print("=" * 80)
