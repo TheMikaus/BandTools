@@ -9,6 +9,7 @@ User-facing documentation for end users and musicians.
 
 - [Quick Start Guide](user_guides/QUICK_START.md) - Get started quickly
 - [User Manual](user_guides/USER_MANUAL.md) - Complete feature guide
+- [Changes Visualization](user_guides/CHANGES_VISUALIZATION.txt) - Visual comparison of UI changes
 - [Timing Diagnostics Guide](user_guides/TIMING_DIAGNOSTICS_GUIDE.md) - NEW: Diagnosing and troubleshooting timing issues (v1.7.0)
 - [Timing Troubleshooting Quick Reference](user_guides/TIMING_TROUBLESHOOTING_QUICK_REF.md) - Quick reference for timing issues
 - [UI Changes Visualization](user_guides/UI_CHANGES_VISUALIZATION.md) - Visual guide to UI changes
