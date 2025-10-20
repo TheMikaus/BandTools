@@ -24,6 +24,7 @@ End-user documentation and how-to guides:
 - [GOOGLE_DRIVE_SYNC_README.md](user_guides/GOOGLE_DRIVE_SYNC_README.md) - Google Drive sync setup guide
 - [KEYBOARD_SHORTCUTS.md](user_guides/KEYBOARD_SHORTCUTS.md) - Available keyboard shortcuts
 - [PHASE_15_VISUAL_GUIDE.md](user_guides/PHASE_15_VISUAL_GUIDE.md) - Phase 15 visual guide: Confirmation and progress dialogs
+- [PLAY_BUTTON_FIX_VISUAL_GUIDE.md](user_guides/PLAY_BUTTON_FIX_VISUAL_GUIDE.md) - **NEW**: Play button and metadata display fix visual guide
 - [QML_ERROR_TROUBLESHOOTING.md](user_guides/QML_ERROR_TROUBLESHOOTING.md) - QML error troubleshooting guide
 - [QUICK_START.md](user_guides/QUICK_START.md) - Quick start guide
 - [SETLIST_BUILDER_GUIDE.md](user_guides/SETLIST_BUILDER_GUIDE.md) - Setlist builder guide
@@ -58,6 +59,7 @@ Developer and technical documentation:
 #### Bug Fixes and Improvements
 - [ERROR_LOGGING_IMPROVEMENT.md](technical/ERROR_LOGGING_IMPROVEMENT.md) - Error logging improvements
 - [FOLDER_CONTEXT_MENU_IMPLEMENTATION.md](technical/folder_context_menu_implementation.md) - **NEW**: Folder context menu technical implementation
+- [PLAY_BUTTON_AND_METADATA_FIX.md](technical/PLAY_BUTTON_AND_METADATA_FIX.md) - **NEW**: Play button icon and metadata tab display fix
 - [UI_IMPROVEMENTS.md](technical/UI_IMPROVEMENTS.md) - UI improvements for toolbar and folder navigation
 - [BINDING_LOOP_FIXES.md](technical/BINDING_LOOP_FIXES.md) - QML binding loop fixes
 - [BINDING_LOOP_FIX_SUMMARY.md](technical/BINDING_LOOP_FIX_SUMMARY.md) - Binding loop fix summary
