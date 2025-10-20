@@ -332,6 +332,12 @@ def main():
     saved_device = settings_manager.getAudioOutputDevice()
     if saved_device:
         audio_engine.setAudioOutputDevice(saved_device)
+    
+    # Connect audio engine's currentFileChanged to update all metadata managers
+    # This ensures tabs like annotations, clips, sections, folder notes, and fingerprints
+    # display the correct metadata when a file is selected
+    audio_engine.currentFileChanged.connect(annotation_manager.setCurrentFile)
+    audio_engine.currentFileChanged.connect(clip_manager.setCurrentFile)
 
     # Expose backend objects to QML before loading QML file
     logging.info("Exposing backend objects to QML context...")
