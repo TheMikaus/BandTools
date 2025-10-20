@@ -33,9 +33,11 @@ Item {
             
             onAnnotationDoubleClicked: function(annotationData) {
                 // Edit annotation when double-clicked on waveform marker
-                var index = annotationManager.findAnnotationIndex(annotationData.timestamp_ms)
-                if (index >= 0) {
-                    openEditDialog(index)
+                if (annotationManager) {
+                    var index = annotationManager.findAnnotationIndex(annotationData.timestamp_ms)
+                    if (index >= 0) {
+                        openEditDialog(index)
+                    }
                 }
             }
             
@@ -78,7 +80,7 @@ Item {
                     spacing: Theme.spacingNormal
                     
                     Label {
-                        text: "Annotations (" + annotationManager.getAnnotationCount() + ")"
+                        text: "Annotations (" + (annotationManager ? annotationManager.getAnnotationCount() : 0) + ")"
                         font.pixelSize: Theme.fontSizeNormal
                         font.bold: true
                         color: Theme.textColor
@@ -111,7 +113,7 @@ Item {
                     
                     StyledButton {
                         text: "Clear All"
-                        enabled: annotationManager.getAnnotationCount() > 0
+                        enabled: annotationManager && annotationManager.getAnnotationCount() > 0
                         Layout.preferredWidth: 80
                         onClicked: clearAllDialog.open()
                     }
@@ -119,7 +121,7 @@ Item {
                     StyledButton {
                         text: "Export..."
                         success: true
-                        enabled: annotationManager.getAnnotationCount() > 0
+                        enabled: annotationManager && annotationManager.getAnnotationCount() > 0
                         Layout.preferredWidth: 80
                         onClicked: exportAnnotationsDialog.open()
                     }
@@ -222,6 +224,7 @@ Item {
                         Layout.preferredWidth: 180
                         
                         model: {
+                            if (!annotationManager) return []
                             var sets = annotationManager.getAnnotationSets()
                             return sets.map(function(set) { return set.name })
                         }
@@ -242,7 +245,7 @@ Item {
                         }
                         
                         onCurrentIndexChanged: {
-                            if (currentIndex >= 0) {
+                            if (currentIndex >= 0 && annotationManager) {
                                 var sets = annotationManager.getAnnotationSets()
                                 if (currentIndex < sets.length) {
                                     annotationManager.setCurrentSetId(sets[currentIndex].id)
@@ -264,7 +267,7 @@ Item {
                     StyledButton {
                         text: "Rename"
                         Layout.preferredWidth: 80
-                        enabled: annotationManager.getAnnotationSets().length > 0
+                        enabled: annotationManager && annotationManager.getAnnotationSets().length > 0
                         onClicked: renameSetDialog.open()
                     }
                     
@@ -272,14 +275,14 @@ Item {
                         text: "Delete"
                         danger: true
                         Layout.preferredWidth: 80
-                        enabled: annotationManager.getAnnotationSets().length > 1
+                        enabled: annotationManager && annotationManager.getAnnotationSets().length > 1
                         onClicked: deleteSetDialog.open()
                     }
                     
                     CheckBox {
                         id: showAllSetsCheckbox
                         text: "Show all visible sets in table"
-                        checked: annotationManager.getShowAllSets()
+                        checked: annotationManager ? annotationManager.getShowAllSets() : false
                         
                         indicator: Rectangle {
                             implicitWidth: 16
@@ -309,8 +312,10 @@ Item {
                         }
                         
                         onCheckedChanged: {
-                            annotationManager.setShowAllSets(checked)
-                            refreshAnnotations()
+                            if (annotationManager) {
+                                annotationManager.setShowAllSets(checked)
+                                refreshAnnotations()
+                            }
                         }
                     }
                     
@@ -370,9 +375,11 @@ Item {
                                 onClicked: {
                                     annotationsTable.selectedRow = row
                                     // Seek to annotation time
-                                    var annotations = annotationManager.getAnnotations()
-                                    if (row < annotations.length) {
-                                        audioEngine.seek(annotations[row].timestamp_ms)
+                                    if (annotationManager) {
+                                        var annotations = annotationManager.getAnnotations()
+                                        if (row < annotations.length && audioEngine) {
+                                            audioEngine.seek(annotations[row].timestamp_ms)
+                                        }
                                     }
                                 }
                                 onDoubleClicked: {
@@ -385,7 +392,7 @@ Item {
                     
                     // Empty state
                     Label {
-                        visible: annotationManager.getAnnotationCount() === 0
+                        visible: annotationManager && annotationManager.getAnnotationCount() === 0
                         anchors.centerIn: parent
                         text: "No annotations yet\nClick 'Add' or double-click on waveform to create"
                         font.pixelSize: Theme.fontSizeNormal
@@ -403,13 +410,17 @@ Item {
         anchors.centerIn: Overlay.overlay
         
         onAnnotationAccepted: function(timestampMs, text, category, important, color) {
-            annotationManager.addAnnotation(timestampMs, text, category, important, color)
-            refreshAnnotations()
+            if (annotationManager) {
+                annotationManager.addAnnotation(timestampMs, text, category, important, color)
+                refreshAnnotations()
+            }
         }
         
         onAnnotationUpdated: function(index, timestampMs, text, category, important, color) {
-            annotationManager.updateAnnotation(index, timestampMs, text, category, important, color)
-            refreshAnnotations()
+            if (annotationManager) {
+                annotationManager.updateAnnotation(index, timestampMs, text, category, important, color)
+                refreshAnnotations()
+            }
         }
     }
     
@@ -428,8 +439,10 @@ Item {
         }
         
         onAccepted: {
-            annotationManager.clearAnnotations()
-            refreshAnnotations()
+            if (annotationManager) {
+                annotationManager.clearAnnotations()
+                refreshAnnotations()
+            }
         }
     }
     
@@ -438,7 +451,7 @@ Item {
         target: audioEngine
         
         function onCurrentFileChanged(path) {
-            if (path !== "") {
+            if (path !== "" && annotationManager) {
                 // TODO: Re-enable when WaveformDisplay is added to this tab
                 // waveformDisplay.setFilePath(path)
                 annotationManager.setCurrentFile(path)
@@ -446,10 +459,12 @@ Item {
                 refreshAnnotations()
                 
                 // Set BPM for tempo markers
-                var fileName = fileManager.getFileName(path)
-                var bpm = tempoManager.getBPM(fileName)
-                // TODO: Re-enable when WaveformDisplay is added to this tab
-                // waveformDisplay.bpm = bpm
+                if (fileManager && tempoManager) {
+                    var fileName = fileManager.getFileName(path)
+                    var bpm = tempoManager.getBPM(fileName)
+                    // TODO: Re-enable when WaveformDisplay is added to this tab
+                    // waveformDisplay.bpm = bpm
+                }
             }
         }
     }
@@ -478,7 +493,7 @@ Item {
         target: annotationManager
         
         function onAnnotationsChanged(path) {
-            if (path === audioEngine.getCurrentFile()) {
+            if (audioEngine && path === audioEngine.getCurrentFile()) {
                 updateUserFilter()  // Update user list when annotations change
                 refreshAnnotations()
             }
@@ -491,12 +506,14 @@ Item {
         
         function onTempoDataChanged() {
             // Update BPM for current file
-            var currentPath = audioEngine.getCurrentFile()
-            if (currentPath !== "") {
-                var fileName = fileManager.getFileName(currentPath)
-                var bpm = tempoManager.getBPM(fileName)
-                // TODO: Re-enable when WaveformDisplay is added to this tab
-                // waveformDisplay.bpm = bpm
+            if (audioEngine && fileManager && tempoManager) {
+                var currentPath = audioEngine.getCurrentFile()
+                if (currentPath !== "") {
+                    var fileName = fileManager.getFileName(currentPath)
+                    var bpm = tempoManager.getBPM(fileName)
+                    // TODO: Re-enable when WaveformDisplay is added to this tab
+                    // waveformDisplay.bpm = bpm
+                }
             }
         }
     }
@@ -554,7 +571,7 @@ Item {
                     enabled: newSetNameField.text.trim().length > 0
                     onClicked: {
                         var setName = newSetNameField.text.trim()
-                        if (setName.length > 0) {
+                        if (setName.length > 0 && annotationManager) {
                             annotationManager.addAnnotationSet(setName, "")
                             updateSetCombo()
                             newSetDialog.close()
@@ -595,6 +612,7 @@ Item {
                 Layout.fillWidth: true
                 placeholderText: "Enter new name..."
                 text: {
+                    if (!annotationManager) return ""
                     var currentId = annotationManager.getCurrentSetId()
                     var sets = annotationManager.getAnnotationSets()
                     for (var i = 0; i < sets.length; i++) {
@@ -625,7 +643,7 @@ Item {
                     enabled: renameSetNameField.text.trim().length > 0
                     onClicked: {
                         var newName = renameSetNameField.text.trim()
-                        if (newName.length > 0) {
+                        if (newName.length > 0 && annotationManager) {
                             var currentId = annotationManager.getCurrentSetId()
                             annotationManager.renameAnnotationSet(currentId, newName)
                             updateSetCombo()
@@ -658,6 +676,7 @@ Item {
             
             Label {
                 text: {
+                    if (!annotationManager) return "Delete this annotation set?"
                     var currentId = annotationManager.getCurrentSetId()
                     var sets = annotationManager.getAnnotationSets()
                     for (var i = 0; i < sets.length; i++) {
@@ -690,10 +709,12 @@ Item {
                     danger: true
                     Layout.preferredWidth: 100
                     onClicked: {
-                        var currentId = annotationManager.getCurrentSetId()
-                        if (annotationManager.deleteAnnotationSet(currentId)) {
-                            updateSetCombo()
-                            refreshAnnotations()
+                        if (annotationManager) {
+                            var currentId = annotationManager.getCurrentSetId()
+                            if (annotationManager.deleteAnnotationSet(currentId)) {
+                                updateSetCombo()
+                                refreshAnnotations()
+                            }
                         }
                         deleteSetDialog.close()
                     }
@@ -704,6 +725,8 @@ Item {
     
     // Helper functions
     function updateSetCombo() {
+        if (!annotationManager) return
+        
         // Update combo box model
         var sets = annotationManager.getAnnotationSets()
         var setNames = sets.map(function(set) { return set.name })
@@ -720,6 +743,7 @@ Item {
     }
     
     function openAddDialog() {
+        if (!audioEngine) return
         annotationDialog.resetDialog()
         annotationDialog.timestampMs = audioEngine.getPosition()
         annotationDialog.updateFields()
@@ -727,7 +751,7 @@ Item {
     }
     
     function openEditDialog(index) {
-        if (index < 0) return
+        if (index < 0 || !annotationManager) return
         
         var annotation = annotationManager.getAnnotation(index)
         if (annotation && annotation.timestamp_ms !== undefined) {
@@ -744,13 +768,15 @@ Item {
     }
     
     function deleteAnnotation(index) {
-        if (index >= 0) {
+        if (index >= 0 && annotationManager) {
             annotationManager.deleteAnnotation(index)
             annotationsTable.selectedRow = -1
         }
     }
     
     function refreshAnnotations() {
+        if (!annotationManager || !annotationsModel) return
+        
         // Get all annotations (no user filtering - always show all users)
         var annotations = annotationManager.getAnnotations()
         
@@ -776,7 +802,7 @@ Item {
     
     // Initialize
     Component.onCompleted: {
-        if (audioEngine.getCurrentFile() !== "") {
+        if (audioEngine && annotationManager && audioEngine.getCurrentFile() !== "") {
             annotationManager.setCurrentFile(audioEngine.getCurrentFile())
             refreshAnnotations()
         }
