@@ -103,6 +103,10 @@ class AnnotationManager(QObject):
                 
                 if should_load_legacy:
                     self._load_annotations(file_path)
+            
+            # Always emit annotationsChanged to update UI when file changes
+            # This ensures the annotations model is updated even when using annotation sets
+            self.annotationsChanged.emit(file_path)
     
     @pyqtSlot(result=str)
     def getCurrentFile(self) -> str:
