@@ -640,12 +640,34 @@ class AnnotationManager(QObject):
         Returns:
             List of important annotations for the file
         """
-        # Load annotations if not already loaded
-        if file_path not in self._annotations:
-            self._load_annotations(file_path)
-        
-        annotations = self._annotations.get(file_path, [])
-        return [a for a in annotations if a.get("important", False)]
+        # Check if we have annotation sets
+        if len(self._annotation_sets) > 0:
+            # Get annotations from sets for this file
+            file_name = Path(file_path).name
+            important_annotations = []
+            
+            # Check all visible sets
+            for aset in self._annotation_sets:
+                if not aset.get("visible", True):
+                    continue
+                
+                # Get file data from this set
+                file_data = aset.get("files", {}).get(file_name, {})
+                notes = file_data.get("notes", [])
+                
+                # Find important annotations
+                for note in notes:
+                    if note.get("important", False):
+                        important_annotations.append(note)
+            
+            return important_annotations
+        else:
+            # Legacy mode: Load annotations if not already loaded
+            if file_path not in self._annotations:
+                self._load_annotations(file_path)
+            
+            annotations = self._annotations.get(file_path, [])
+            return [a for a in annotations if a.get("important", False)]
     
     @pyqtSlot(result=list)
     def getSubsections(self) -> List[Dict[str, Any]]:
