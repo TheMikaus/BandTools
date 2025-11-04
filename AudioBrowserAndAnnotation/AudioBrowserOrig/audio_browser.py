@@ -4060,10 +4060,14 @@ class DirectoryDiscoveryWorker(QObject):
                     self.finished.emit([], [])
                     return
                 
+                # Efficiently collect audio files in a single pass
                 directory_audio_files = []
-                for ext in AUDIO_EXTS:
-                    found_files = list(directory.glob(f"*{ext}"))
-                    directory_audio_files.extend(found_files)
+                try:
+                    for item in directory.iterdir():
+                        if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                            directory_audio_files.append(item)
+                except (OSError, PermissionError):
+                    pass  # Skip directories we can't read
                 
                 if directory_audio_files:
                     all_audio_files.extend(directory_audio_files)
@@ -4076,7 +4080,11 @@ class DirectoryDiscoveryWorker(QObject):
             self.finished.emit([], [])
     
     def _discover_directories(self, root_path: Path) -> List[Path]:
-        """Recursively discover all directories that contain audio files."""
+        """Recursively discover all directories that contain audio files.
+        
+        Note: This duplicates logic from discover_directories_with_audio_files() 
+        but is intentionally separate to support cancellation and progress signals.
+        """
         directories_with_audio = []
         
         def scan_directory(directory: Path):
