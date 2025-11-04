@@ -4022,6 +4022,111 @@ class AutoWaveformWorker(QObject):
         
         self.finished.emit(generated_count, False)
 
+class DirectoryDiscoveryWorker(QObject):
+    """Worker to discover directories with audio files asynchronously.
+    
+    This prevents UI blocking when scanning large directory trees.
+    """
+    progress = pyqtSignal(str)  # current_directory_path
+    finished = pyqtSignal(list, list)  # directories_to_process, all_audio_files
+    
+    def __init__(self, folder_path: Path):
+        super().__init__()
+        self._folder_path = folder_path
+        self._canceled = False
+    
+    def cancel(self):
+        self._canceled = True
+    
+    def run(self):
+        """Discover directories and audio files asynchronously."""
+        try:
+            # Discover all directories with audio files recursively
+            directories_with_audio = []
+            
+            if self._folder_path.exists() and self._folder_path.is_dir():
+                directories_with_audio = self._discover_directories(self._folder_path)
+            
+            if self._canceled:
+                self.finished.emit([], [])
+                return
+            
+            # Collect all audio files from all discovered directories
+            all_audio_files = []
+            directories_to_process = []
+            
+            for directory in directories_with_audio:
+                if self._canceled:
+                    self.finished.emit([], [])
+                    return
+                
+                # Efficiently collect audio files in a single pass
+                directory_audio_files = []
+                try:
+                    for item in directory.iterdir():
+                        if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                            directory_audio_files.append(item)
+                except (OSError, PermissionError):
+                    pass  # Skip directories we can't read
+                
+                if directory_audio_files:
+                    all_audio_files.extend(directory_audio_files)
+                    directories_to_process.append(directory)
+            
+            self.finished.emit(directories_to_process, all_audio_files)
+            
+        except Exception as e:
+            log_print(f"ERROR in DirectoryDiscoveryWorker: {e}")
+            self.finished.emit([], [])
+    
+    def _discover_directories(self, root_path: Path) -> List[Path]:
+        """Recursively discover all directories that contain audio files.
+        
+        Note: This duplicates logic from discover_directories_with_audio_files() 
+        but is intentionally separate to support cancellation and progress signals.
+        """
+        directories_with_audio = []
+        
+        def scan_directory(directory: Path):
+            """Recursively scan directory for audio files."""
+            if self._canceled:
+                return
+            
+            try:
+                has_audio_files = False
+                subdirectories = []
+                
+                # Emit progress
+                self.progress.emit(str(directory))
+                
+                for item in directory.iterdir():
+                    if self._canceled:
+                        return
+                    
+                    if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                        has_audio_files = True
+                    elif item.is_dir():
+                        # Skip hidden directories and common non-audio directories
+                        if not item.name.startswith('.') and item.name.lower() not in {'__pycache__', 'node_modules', '.git'}:
+                            subdirectories.append(item)
+                
+                # Add this directory if it contains audio files
+                if has_audio_files:
+                    directories_with_audio.append(directory)
+                
+                # Recursively scan subdirectories
+                for subdir in subdirectories:
+                    if self._canceled:
+                        return
+                    scan_directory(subdir)
+                    
+            except (OSError, PermissionError):
+                # Skip directories we can't read
+                pass
+        
+        scan_directory(root_path)
+        return directories_with_audio
+
 class AutoFingerprintWorker(QObject):
     """Worker to automatically generate fingerprints for all audio files in a folder"""
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
@@ -6288,6 +6393,8 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_waveform_thread: Optional[QThread] = None
         self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
         self._auto_gen_fingerprint_thread: Optional[QThread] = None
+        self._auto_gen_discovery_worker: Optional['DirectoryDiscoveryWorker'] = None
+        self._auto_gen_discovery_thread: Optional[QThread] = None
         self._auto_gen_in_progress: bool = False
         
         # Recursive auto-generation state
@@ -15697,59 +15804,78 @@ class AudioBrowser(QMainWindow):
             log_print("  Skipped: auto-generation disabled in settings")
             self.statusBar().showMessage("Auto-generation skipped: disabled in settings", 3000)
             return  # Nothing to generate
-            
-        # Discover all directories with audio files recursively
-        log_print("  Discovering directories with audio files...")
-        directories_with_audio = discover_directories_with_audio_files(folder_path)
         
-        if not directories_with_audio:
-            log_print("  Skipped: no directories with audio files found")
-            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
-            return  # No directories with audio files to process
-        
-        log_print(f"  Found {len(directories_with_audio)} directories with audio files:")
-        for i, directory in enumerate(directories_with_audio):
-            log_print(f"    {i+1}. {directory}")
-            
-        # Collect all audio files from all discovered directories
-        all_audio_files = []
-        directories_to_process = []
-        
-        try:
-            for directory in directories_with_audio:
-                directory_audio_files = []
-                for ext in AUDIO_EXTS:
-                    found_files = list(directory.glob(f"*{ext}"))
-                    directory_audio_files.extend(found_files)
-                
-                if directory_audio_files:
-                    log_print(f"    {directory}: {len(directory_audio_files)} audio files")
-                    all_audio_files.extend(directory_audio_files)
-                    directories_to_process.append(directory)
-                    
-        except Exception as e:
-            log_print(f"  ERROR: Failed to scan directories for audio files: {e}")
-            self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
-            return
-            
-        if not all_audio_files:
-            log_print("  Skipped: no audio files found in any directories")
-            self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
-            return  # No audio files to process
-            
-        log_print(f"  Starting recursive auto-generation for {len(all_audio_files)} audio files across {len(directories_to_process)} directories")
+        # Mark as in progress before starting the discovery worker
         self._auto_gen_in_progress = True
         
-        # Start with waveforms if needed, then fingerprints
+        # Start directory discovery in a background thread to avoid UI blocking
+        log_print("  Starting directory discovery in background thread...")
+        self.statusBar().showMessage("Scanning for audio files...")
+        
         try:
-            if needs_waveforms:
-                self._start_auto_waveform_generation_recursive(directories_to_process, needs_fingerprints)
-            elif needs_fingerprints:
-                self._start_auto_fingerprint_generation_recursive(directories_to_process)
+            # Create worker and thread for directory discovery
+            self._auto_gen_discovery_thread = QThread(self)
+            self._auto_gen_discovery_worker = DirectoryDiscoveryWorker(folder_path)
+            self._auto_gen_discovery_worker.moveToThread(self._auto_gen_discovery_thread)
         except Exception as e:
-            log_print(f"  ERROR: Failed to start auto-generation: {e}")
+            log_print(f"  ERROR: Failed to create discovery worker: {e}")
             self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
-            self._auto_gen_in_progress = False  # Reset flag on error
+            self._auto_gen_in_progress = False
+            return
+        
+        def on_discovery_progress(directory_path: str):
+            """Update status bar with current directory being scanned."""
+            # Extract just the directory name from the path string
+            dir_name = directory_path.split('/')[-1] if '/' in directory_path else directory_path.split('\\')[-1]
+            self.statusBar().showMessage(f"Scanning: {dir_name}")
+        
+        def on_discovery_finished(directories_to_process: List[Path], all_audio_files: List[Path]):
+            """Handle completion of directory discovery."""
+            self._cleanup_auto_discovery_thread()
+            
+            if not directories_to_process:
+                log_print("  Skipped: no directories with audio files found")
+                self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
+                self._auto_gen_in_progress = False
+                return
+            
+            if not all_audio_files:
+                log_print("  Skipped: no audio files found in any directories")
+                self.statusBar().showMessage("Auto-generation skipped: no audio files found", 3000)
+                self._auto_gen_in_progress = False
+                return
+            
+            log_print(f"  Found {len(directories_to_process)} directories with audio files:")
+            for i, directory in enumerate(directories_to_process):
+                log_print(f"    {i+1}. {directory}")
+            
+            log_print(f"  Starting recursive auto-generation for {len(all_audio_files)} audio files across {len(directories_to_process)} directories")
+            
+            # Start with waveforms if needed, then fingerprints
+            try:
+                if needs_waveforms:
+                    self._start_auto_waveform_generation_recursive(directories_to_process, needs_fingerprints)
+                elif needs_fingerprints:
+                    self._start_auto_fingerprint_generation_recursive(directories_to_process)
+            except Exception as e:
+                log_print(f"  ERROR: Failed to start auto-generation: {e}")
+                self.statusBar().showMessage(f"Auto-generation failed: {str(e)}", 3000)
+                self._auto_gen_in_progress = False
+        
+        # Connect signals and start thread
+        try:
+            self._auto_gen_discovery_thread.started.connect(self._auto_gen_discovery_worker.run)
+            self._auto_gen_discovery_worker.progress.connect(on_discovery_progress)
+            self._auto_gen_discovery_worker.finished.connect(on_discovery_finished)
+            
+            # Start thread
+            self._auto_gen_discovery_thread.start()
+            log_print("  Directory discovery thread started successfully")
+        except Exception as e:
+            log_print(f"  ERROR: Failed to start discovery thread: {e}")
+            self.statusBar().showMessage(f"Auto-generation failed to start: {str(e)}", 3000)
+            self._cleanup_auto_discovery_thread()
+            self._auto_gen_in_progress = False
             return
             
     def _start_auto_waveform_generation_recursive(self, directories: List[Path], follow_with_fingerprints: bool = False):
@@ -15986,6 +16112,8 @@ class AudioBrowser(QMainWindow):
     def _cancel_auto_generation(self):
         """Cancel the currently running auto-generation."""
         log_print("Canceling auto-generation...")
+        if self._auto_gen_discovery_worker:
+            self._auto_gen_discovery_worker.cancel()
         if self._auto_gen_waveform_worker:
             self._auto_gen_waveform_worker.cancel()
         if self._auto_gen_fingerprint_worker:
@@ -16018,6 +16146,23 @@ class AudioBrowser(QMainWindow):
             self._auto_gen_fingerprint_thread.wait()
             self._auto_gen_fingerprint_thread.deleteLater()
             self._auto_gen_fingerprint_thread = None
+    
+    def _cleanup_auto_discovery_thread(self):
+        """Clean up auto discovery worker and thread."""
+        if self._auto_gen_discovery_worker:
+            # Disconnect signals to prevent delivery to deleted objects
+            try:
+                self._auto_gen_discovery_worker.progress.disconnect()
+                self._auto_gen_discovery_worker.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass  # Signals may already be disconnected
+            self._auto_gen_discovery_worker.deleteLater()
+            self._auto_gen_discovery_worker = None
+        if self._auto_gen_discovery_thread:
+            self._auto_gen_discovery_thread.quit()
+            self._auto_gen_discovery_thread.wait()
+            self._auto_gen_discovery_thread.deleteLater()
+            self._auto_gen_discovery_thread = None
     
     def _show_setlist_builder_dialog(self):
         """Show setlist builder dialog for managing performance setlists."""
