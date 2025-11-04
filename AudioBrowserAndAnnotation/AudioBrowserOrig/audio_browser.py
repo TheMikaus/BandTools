@@ -15825,7 +15825,9 @@ class AudioBrowser(QMainWindow):
         
         def on_discovery_progress(directory_path: str):
             """Update status bar with current directory being scanned."""
-            self.statusBar().showMessage(f"Scanning: {Path(directory_path).name}")
+            # Extract just the directory name from the path string
+            dir_name = directory_path.split('/')[-1] if '/' in directory_path else directory_path.split('\\')[-1]
+            self.statusBar().showMessage(f"Scanning: {dir_name}")
         
         def on_discovery_finished(directories_to_process: List[Path], all_audio_files: List[Path]):
             """Handle completion of directory discovery."""
@@ -16148,6 +16150,12 @@ class AudioBrowser(QMainWindow):
     def _cleanup_auto_discovery_thread(self):
         """Clean up auto discovery worker and thread."""
         if self._auto_gen_discovery_worker:
+            # Disconnect signals to prevent delivery to deleted objects
+            try:
+                self._auto_gen_discovery_worker.progress.disconnect()
+                self._auto_gen_discovery_worker.finished.disconnect()
+            except (TypeError, RuntimeError):
+                pass  # Signals may already be disconnected
             self._auto_gen_discovery_worker.deleteLater()
             self._auto_gen_discovery_worker = None
         if self._auto_gen_discovery_thread:
