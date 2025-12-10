@@ -40,8 +40,9 @@ QA and testing documentation (to be added as needed).
 
 Documentation for bug analysis and fixes:
 
-- [BUG_ANALYSIS_COMPREHENSIVE.md](BUG_ANALYSIS_COMPREHENSIVE.md) - Comprehensive analysis of potential bugs in both AudioBrowser versions
-- [BUG_FIX_TASKS.md](BUG_FIX_TASKS.md) - Prioritized task list for fixing identified bugs
+- [BUG_ANALYSIS_EXECUTIVE_SUMMARY.md](BUG_ANALYSIS_EXECUTIVE_SUMMARY.md) - **START HERE** - Quick overview of findings and recommendations
+- [BUG_ANALYSIS_COMPREHENSIVE.md](BUG_ANALYSIS_COMPREHENSIVE.md) - Comprehensive technical analysis of potential bugs in both AudioBrowser versions
+- [BUG_FIX_TASKS.md](BUG_FIX_TASKS.md) - Prioritized task list with code examples for fixing identified bugs
 
 ## Project Variants
 
