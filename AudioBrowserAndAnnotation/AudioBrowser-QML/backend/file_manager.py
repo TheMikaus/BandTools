@@ -678,8 +678,12 @@ class FileManager(QObject):
                     with wave.open(str(path), 'rb') as wf:
                         frames = wf.getnframes()
                         rate = wf.getframerate()
-                        duration_ms = int((frames / rate) * 1000)
-                        return duration_ms
+                        if rate > 0:
+                            duration_ms = int((frames / rate) * 1000)
+                            return duration_ms
+                        else:
+                            logging.warning(f"Invalid sample rate (0) for {path}")
+                            return 0
                 except Exception:
                     return 0
             
@@ -909,10 +913,14 @@ class FileManager(QObject):
                     with wave.open(str(path), 'rb') as wav_file:
                         frames = wav_file.getnframes()
                         rate = wav_file.getframerate()
-                        duration_ms = int((frames / rate) * 1000)
-                        # Cache the duration
-                        self._cache_duration(file_path, duration_ms)
-                        return duration_ms
+                        if rate > 0:
+                            duration_ms = int((frames / rate) * 1000)
+                            # Cache the duration
+                            self._cache_duration(file_path, duration_ms)
+                            return duration_ms
+                        else:
+                            logging.warning(f"Invalid sample rate (0) for {path}")
+                            return 0
                 except Exception as e:
                     print(f"Wave extraction failed for {path.name}: {e}")
                     
