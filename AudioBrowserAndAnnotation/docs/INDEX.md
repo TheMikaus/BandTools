@@ -36,6 +36,15 @@ End-user documentation and how-to guides:
 
 QA and testing documentation (to be added as needed).
 
+### Bug Analysis and Fixes
+
+Documentation for bug analysis and fixes:
+
+- [BUG_ANALYSIS_README.md](BUG_ANALYSIS_README.md) - **NAVIGATION GUIDE** - How to use the bug analysis documentation
+- [BUG_ANALYSIS_EXECUTIVE_SUMMARY.md](BUG_ANALYSIS_EXECUTIVE_SUMMARY.md) - **START HERE** - Quick overview of findings and recommendations  
+- [BUG_ANALYSIS_COMPREHENSIVE.md](BUG_ANALYSIS_COMPREHENSIVE.md) - Comprehensive technical analysis of potential bugs in both AudioBrowser versions
+- [BUG_FIX_TASKS.md](BUG_FIX_TASKS.md) - Prioritized task list with code examples for fixing identified bugs
+
 ## Project Variants
 
 This project has multiple implementations:
