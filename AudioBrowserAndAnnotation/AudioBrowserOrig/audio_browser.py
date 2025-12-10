@@ -3557,7 +3557,7 @@ class MonoConvertWorker(QObject):
             self.file_done.emit(src.name, True, f"Converted to mono (stereo backup: {backup_name})")
             
         except Exception as e:
-            # TODO: add appropriate logging for the exception
+            logging.error(f"Failed to convert {src.name} to mono: {e}")
             self.file_done.emit(src.name, False, str(e))
         
         self.progress.emit(1, 1, src.name)
