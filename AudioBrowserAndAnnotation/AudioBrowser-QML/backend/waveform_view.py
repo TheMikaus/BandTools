@@ -241,7 +241,7 @@ class WaveformView(QQuickPaintedItem):
     def _paint_waveform(self, painter: QPainter, width: int, height: int, mid_y: float) -> None:
         """Paint the waveform peaks."""
         num_peaks = len(self._peaks)
-        if num_peaks == 0:
+        if num_peaks == 0 or width <= 0:
             return
         
         # Calculate scale
@@ -369,7 +369,7 @@ class WaveformView(QQuickPaintedItem):
     
     def mousePressEvent(self, event) -> None:
         """Handle mouse press for click-to-seek."""
-        if self._duration_ms > 0:
+        if self._duration_ms > 0 and self.width() > 0:
             # Calculate position from click
             progress = event.pos().x() / self.width()
             position_ms = int(progress * self._duration_ms)
@@ -566,7 +566,7 @@ class WaveformView(QQuickPaintedItem):
         num_time_frames = len(self._spectrogram_data)
         num_freq_bins = len(self._spectrogram_data[0]) if num_time_frames > 0 else 0
         
-        if num_time_frames == 0 or num_freq_bins == 0:
+        if num_time_frames == 0 or num_freq_bins == 0 or width <= 0 or height <= 0:
             return
         
         # Scale factors
