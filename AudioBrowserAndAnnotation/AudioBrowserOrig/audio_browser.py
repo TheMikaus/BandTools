@@ -4670,7 +4670,9 @@ class WaveformView(QWidget):
             self._spectrogram_worker = None
         if self._spectrogram_thread:
             self._spectrogram_thread.quit()
-            self._spectrogram_thread.wait()
+            # Use timeout to prevent indefinite blocking
+            if not self._spectrogram_thread.wait(5000):
+                log_print("Warning: Spectrogram thread did not terminate within 5 seconds")
             self._spectrogram_thread.deleteLater()
             self._spectrogram_thread = None
 
@@ -11710,7 +11712,9 @@ class AudioBrowser(QMainWindow):
             self._song_search_worker = None
         if self._song_search_thread:
             self._song_search_thread.quit()
-            self._song_search_thread.wait()
+            # Use timeout to prevent indefinite blocking
+            if not self._song_search_thread.wait(5000):
+                log_print("Warning: Song search thread did not terminate within 5 seconds")
             self._song_search_thread.deleteLater()
             self._song_search_thread = None
 
