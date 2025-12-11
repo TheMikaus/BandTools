@@ -4127,6 +4127,110 @@ class DirectoryDiscoveryWorker(QObject):
         scan_directory(root_path)
         return directories_with_audio
 
+class SongNameSearchWorker(QObject):
+    """Worker to search for files with a specific song name asynchronously.
+    
+    This prevents UI blocking when scanning large directory trees during song rename.
+    """
+    progress = pyqtSignal(str, int)  # current_directory_path, files_found_so_far
+    finished = pyqtSignal(list)  # matching_files
+    
+    def __init__(self, root_path: Path, song_name: str):
+        super().__init__()
+        self._root_path = root_path
+        self._song_name = song_name
+        self._canceled = False
+    
+    def cancel(self):
+        self._canceled = True
+    
+    def run(self):
+        """Search for files with matching song name asynchronously."""
+        try:
+            matching_files = []
+            
+            # Normalize the search song name for comparison
+            search_name_lower = self._song_name.strip().lower()
+            
+            # Discover all directories with audio files
+            directories = self._discover_directories(self._root_path)
+            
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # Search each directory for matching song names
+            for folder_path in directories:
+                if self._canceled:
+                    self.finished.emit([])
+                    return
+                
+                # Emit progress
+                self.progress.emit(str(folder_path), len(matching_files))
+                
+                # Load provided names from this folder
+                names_json_path = folder_path / NAMES_JSON
+                provided_names = load_json(names_json_path, {}) or {}
+                
+                # Check each file's provided name
+                for filename, provided_name in provided_names.items():
+                    if provided_name.strip().lower() == search_name_lower:
+                        matching_files.append({
+                            "folder": folder_path,
+                            "filename": filename,
+                            "current_name": provided_name
+                        })
+            
+            self.finished.emit(matching_files)
+            
+        except Exception as e:
+            log_print(f"ERROR in SongNameSearchWorker: {e}")
+            self.finished.emit([])
+    
+    def _discover_directories(self, root_path: Path) -> List[Path]:
+        """Recursively discover all directories that contain audio files."""
+        directories_with_audio = []
+        
+        if not root_path.exists() or not root_path.is_dir():
+            return directories_with_audio
+        
+        def scan_directory(directory: Path):
+            """Recursively scan directory for audio files."""
+            if self._canceled:
+                return
+            
+            try:
+                has_audio_files = False
+                subdirectories = []
+                
+                for item in directory.iterdir():
+                    if self._canceled:
+                        return
+                    
+                    if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                        has_audio_files = True
+                    elif item.is_dir():
+                        # Skip hidden directories and common non-audio directories
+                        if not item.name.startswith('.') and item.name.lower() not in {'__pycache__', 'node_modules', '.git'}:
+                            subdirectories.append(item)
+                
+                # Add this directory if it contains audio files
+                if has_audio_files:
+                    directories_with_audio.append(directory)
+                
+                # Recursively scan subdirectories
+                for subdir in subdirectories:
+                    if self._canceled:
+                        return
+                    scan_directory(subdir)
+                    
+            except (OSError, PermissionError):
+                # Skip directories we can't read
+                pass
+        
+        scan_directory(root_path)
+        return directories_with_audio
+
 class AutoFingerprintWorker(QObject):
     """Worker to automatically generate fingerprints for all audio files in a folder"""
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
@@ -6394,6 +6498,8 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
         self._auto_gen_fingerprint_thread: Optional[QThread] = None
         self._auto_gen_discovery_worker: Optional['DirectoryDiscoveryWorker'] = None
+        self._song_search_worker: Optional['SongNameSearchWorker'] = None
+        self._song_search_thread: Optional[QThread] = None
         self._auto_gen_discovery_thread: Optional[QThread] = None
         self._auto_gen_in_progress: bool = False
         
@@ -11344,34 +11450,9 @@ class AudioBrowser(QMainWindow):
         if old_name != new_name:
             # Check if this is a song rename (old name exists and is being changed)
             if old_name and new_name:
-                # Find all other files with the same old song name
-                matching_files = find_files_with_song_name(self.root_path, old_name)
-                
-                # Filter out the current file
-                other_files = [f for f in matching_files 
-                             if not (f["folder"] == self.current_practice_folder and f["filename"] == fname)]
-                
-                if other_files:
-                    # Ask user if they want to propagate the rename
-                    file_list = "\n".join([f"  • {f['folder'].name}/{f['filename']}" 
-                                          for f in other_files[:10]])
-                    if len(other_files) > 10:
-                        file_list += f"\n  ... and {len(other_files) - 10} more"
-                    
-                    reply = QMessageBox.question(
-                        self,
-                        "Propagate Song Rename?",
-                        f"Found {len(other_files)} other file(s) with the song name '{old_name}'.\n\n"
-                        f"Do you want to rename all instances to '{new_name}'?\n\n"
-                        f"Files:\n{file_list}",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.Yes
-                    )
-                    
-                    if reply == QMessageBox.StandardButton.Yes:
-                        # Propagate the rename
-                        self._propagate_song_rename(old_name, new_name, matching_files)
-                        return  # _propagate_song_rename will save and update UI
+                # Start background search for files with the same old song name
+                self._start_song_name_search(old_name, new_name, fname)
+                return  # Search will call _handle_song_search_results when done
             
             # Apply the rename to just this file
             self.provided_names[fname] = new_name
@@ -11380,6 +11461,109 @@ class AudioBrowser(QMainWindow):
             
             # Update status bar statistics
             self._update_session_status()
+    
+    def _start_song_name_search(self, old_name: str, new_name: str, current_filename: str):
+        """Start background search for files with the given song name."""
+        # Show progress indicator
+        self.statusBar().showMessage(f"Searching for files with song name '{old_name}'...")
+        self._show_progress("Searching", 0, 0, "Scanning directories...")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        
+        # Clean up any existing search worker
+        if self._song_search_worker:
+            self._song_search_worker.cancel()
+        if self._song_search_thread and self._song_search_thread.isRunning():
+            self._song_search_thread.quit()
+            self._song_search_thread.wait()
+        
+        # Create worker and thread
+        self._song_search_thread = QThread(self)
+        self._song_search_worker = SongNameSearchWorker(self.root_path, old_name)
+        self._song_search_worker.moveToThread(self._song_search_thread)
+        
+        # Store context for when search completes
+        self._song_search_context = {
+            'old_name': old_name,
+            'new_name': new_name,
+            'current_filename': current_filename
+        }
+        
+        # Connect signals
+        self._song_search_thread.started.connect(self._song_search_worker.run)
+        self._song_search_worker.progress.connect(self._on_song_search_progress)
+        self._song_search_worker.finished.connect(self._on_song_search_finished)
+        
+        # Start search
+        self._song_search_thread.start()
+    
+    def _on_song_search_progress(self, directory: str, files_found: int):
+        """Update progress during song name search."""
+        dir_name = Path(directory).name
+        self.statusBar().showMessage(f"Searching... {files_found} files found in {dir_name}")
+    
+    def _on_song_search_finished(self, matching_files: List[Dict[str, Any]]):
+        """Handle completion of song name search."""
+        # Clean up UI
+        self._hide_progress()
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage("")
+        
+        # Get context
+        old_name = self._song_search_context.get('old_name', '')
+        new_name = self._song_search_context.get('new_name', '')
+        current_filename = self._song_search_context.get('current_filename', '')
+        
+        # Filter out the current file
+        other_files = [f for f in matching_files 
+                      if not (f["folder"] == self.current_practice_folder and f["filename"] == current_filename)]
+        
+        if other_files:
+            # Ask user if they want to propagate the rename
+            file_list = "\n".join([f"  • {f['folder'].name}/{f['filename']}" 
+                                  for f in other_files[:10]])
+            if len(other_files) > 10:
+                file_list += f"\n  ... and {len(other_files) - 10} more"
+            
+            reply = QMessageBox.question(
+                self,
+                "Propagate Song Rename?",
+                f"Found {len(other_files)} other file(s) with the song name '{old_name}'.\n\n"
+                f"Do you want to rename all instances to '{new_name}'?\n\n"
+                f"Files:\n{file_list}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Propagate the rename
+                self._propagate_song_rename(old_name, new_name, matching_files)
+                # Clean up worker before return
+                self._cleanup_song_search_worker()
+                return  # _propagate_song_rename will save and update UI
+        
+        # Apply the rename to just the current file
+        if self.current_audio_file:
+            fname = self.current_audio_file.name
+            self.provided_names[fname] = new_name
+            self._save_names()
+            self._update_library_provided_name_cell(fname, new_name)
+            
+            # Update status bar statistics
+            self._update_session_status()
+        
+        # Clean up worker
+        self._cleanup_song_search_worker()
+    
+    def _cleanup_song_search_worker(self):
+        """Clean up song search worker and thread."""
+        if self._song_search_worker:
+            self._song_search_worker.deleteLater()
+            self._song_search_worker = None
+        if self._song_search_thread:
+            self._song_search_thread.quit()
+            self._song_search_thread.wait()
+            self._song_search_thread.deleteLater()
+            self._song_search_thread = None
 
     def _propagate_song_rename(self, old_name: str, new_name: str, matching_files: List[Dict[str, Any]]):
         """
