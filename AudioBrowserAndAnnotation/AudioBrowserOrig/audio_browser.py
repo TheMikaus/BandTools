@@ -4127,6 +4127,147 @@ class DirectoryDiscoveryWorker(QObject):
         scan_directory(root_path)
         return directories_with_audio
 
+class SpectrogramWorker(QObject):
+    """Worker to compute spectrogram data asynchronously.
+    
+    This prevents UI blocking when computing spectrogram for large audio files.
+    """
+    progress = pyqtSignal(int, int)  # current_frame, total_frames
+    finished = pyqtSignal(list)  # spectrogram_data (as list)
+    error = pyqtSignal(str)  # error_message
+    
+    def __init__(self, audio_path: str):
+        super().__init__()
+        self._audio_path = audio_path
+        self._canceled = False
+    
+    def cancel(self):
+        self._canceled = True
+    
+    def run(self):
+        """Compute spectrogram data asynchronously."""
+        try:
+            if not HAVE_NUMPY:
+                self.error.emit("NumPy not available for spectrogram computation")
+                return
+            
+            import numpy as np
+            from pathlib import Path
+            
+            audio_path = Path(self._audio_path)
+            
+            # Load audio samples
+            samples = []
+            sample_rate = 44100
+            
+            if audio_path.suffix.lower() == '.wav':
+                with wave.open(str(audio_path), 'rb') as wf:
+                    sample_rate = wf.getframerate()
+                    n_frames = wf.getnframes()
+                    
+                    # Check for cancellation
+                    if self._canceled:
+                        self.finished.emit([])
+                        return
+                    
+                    frames = wf.readframes(n_frames)
+                    
+                    # Convert to numpy array
+                    if wf.getsampwidth() == 2:
+                        arr = np.frombuffer(frames, dtype=np.int16)
+                    else:
+                        arr = np.frombuffer(frames, dtype=np.uint8)
+                    
+                    # Convert to float and normalize
+                    arr = arr.astype(np.float32) / 32768.0
+                    
+                    # If stereo, take left channel only
+                    if wf.getnchannels() == 2:
+                        arr = arr[::2]
+                    
+                    samples = arr.tolist()
+            
+            if not samples:
+                self.error.emit("No audio samples could be loaded")
+                return
+            
+            # Check for cancellation
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # STFT parameters
+            n_fft = 2048
+            hop_length = n_fft // 4
+            
+            # Frequency range: 60-8000 Hz (focus on musical range)
+            min_freq = 60
+            max_freq = min(8000, sample_rate // 2)
+            
+            # Number of frequency bins to display
+            n_bins = 128
+            
+            # Create log-spaced frequency bins
+            freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bins + 1)
+            bin_indices = (freq_bins * n_fft / sample_rate).astype(int)
+            bin_indices = np.clip(bin_indices, 0, n_fft // 2)
+            
+            arr = np.array(samples, dtype=np.float32)
+            window = np.hanning(n_fft)
+            
+            spectrogram = []
+            
+            # Calculate total frames for progress reporting
+            total_frames = (len(arr) - n_fft + 1) // hop_length
+            frame_count = 0
+            
+            # Process windows
+            for i in range(0, len(arr) - n_fft + 1, hop_length):
+                # Check for cancellation periodically
+                if frame_count % 100 == 0:
+                    if self._canceled:
+                        self.finished.emit([])
+                        return
+                    # Emit progress
+                    self.progress.emit(frame_count, total_frames)
+                
+                frame = arr[i:i + n_fft] * window
+                fft = np.fft.rfft(frame)
+                magnitude = np.abs(fft)
+                
+                # Group into frequency bins
+                bin_energies = []
+                for b in range(n_bins):
+                    start_bin = bin_indices[b]
+                    end_bin = bin_indices[b + 1]
+                    if end_bin > start_bin:
+                        energy = float(np.mean(magnitude[start_bin:end_bin]))
+                    else:
+                        energy = 0.0
+                    bin_energies.append(energy)
+                
+                spectrogram.append(bin_energies)
+                frame_count += 1
+            
+            # Check for cancellation before final processing
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # Apply log compression
+            spectrogram = np.array(spectrogram)
+            spectrogram = np.log1p(spectrogram * 100)  # Log scale for better visualization
+            
+            # Normalize to 0-1 range
+            if spectrogram.max() > 0:
+                spectrogram = spectrogram / spectrogram.max()
+            
+            # Emit final result
+            self.finished.emit(spectrogram.tolist())
+            
+        except Exception as e:
+            self.error.emit(f"Error computing spectrogram: {e}")
+
 class SongNameSearchWorker(QObject):
     """Worker to search for files with a specific song name asynchronously.
     
@@ -4385,6 +4526,8 @@ class WaveformView(QWidget):
         # Spectral analysis support
         self._show_spectrogram: bool = False
         self._spectrogram_data: Optional[List] = None  # Stores spectrogram matrix
+        self._spectrogram_worker: Optional['SpectrogramWorker'] = None
+        self._spectrogram_thread: Optional[QThread] = None
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -4431,105 +4574,110 @@ class WaveformView(QWidget):
         
         self._show_spectrogram = enabled
         
-        # If enabled and we have audio data, compute spectrogram
+        # If enabled and we have audio data, compute spectrogram in background
         if enabled and self._path and self._path.exists() and self._peaks:
-            self._compute_spectrogram()
+            self._start_spectrogram_computation()
+        elif not enabled:
+            # Cancel any ongoing computation if disabling
+            self._cancel_spectrogram_computation()
         
         # Force redraw
         self._pixmap = None
         self.update()
     
-    def _compute_spectrogram(self):
-        """Compute spectrogram data from audio file."""
+    def _start_spectrogram_computation(self):
+        """Start background spectrogram computation."""
         if not HAVE_NUMPY or not self._path:
             return
         
-        try:
-            import numpy as np
-            
-            # Load audio samples
-            samples = []
-            sample_rate = 44100
-            
-            if self._path.suffix.lower() == '.wav':
-                with wave.open(str(self._path), 'rb') as wf:
-                    sample_rate = wf.getframerate()
-                    n_frames = wf.getnframes()
-                    frames = wf.readframes(n_frames)
-                    
-                    # Convert to numpy array
-                    if wf.getsampwidth() == 2:
-                        arr = np.frombuffer(frames, dtype=np.int16)
-                    else:
-                        arr = np.frombuffer(frames, dtype=np.uint8)
-                    
-                    # Convert to float and normalize
-                    arr = arr.astype(np.float32) / 32768.0
-                    
-                    # If stereo, take left channel only
-                    if wf.getnchannels() == 2:
-                        arr = arr[::2]
-                    
-                    samples = arr.tolist()
-            
-            if not samples:
-                return
-            
-            # STFT parameters
-            n_fft = 2048
-            hop_length = n_fft // 4
-            
-            # Frequency range: 60-8000 Hz (focus on musical range)
-            min_freq = 60
-            max_freq = min(8000, sample_rate // 2)
-            
-            # Number of frequency bins to display
-            n_bins = 128
-            
-            # Create log-spaced frequency bins
-            freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bins + 1)
-            bin_indices = (freq_bins * n_fft / sample_rate).astype(int)
-            bin_indices = np.clip(bin_indices, 0, n_fft // 2)
-            
-            arr = np.array(samples, dtype=np.float32)
-            window = np.hanning(n_fft)
-            
-            spectrogram = []
-            
-            # Process windows
-            for i in range(0, len(arr) - n_fft + 1, hop_length):
-                frame = arr[i:i + n_fft] * window
-                fft = np.fft.rfft(frame)
-                magnitude = np.abs(fft)
-                
-                # Group into frequency bins
-                bin_energies = []
-                for b in range(n_bins):
-                    start_bin = bin_indices[b]
-                    end_bin = bin_indices[b + 1]
-                    if end_bin > start_bin:
-                        energy = float(np.mean(magnitude[start_bin:end_bin]))
-                    else:
-                        energy = 0.0
-                    bin_energies.append(energy)
-                
-                spectrogram.append(bin_energies)
-            
-            # Apply log compression
-            spectrogram = np.array(spectrogram)
-            spectrogram = np.log1p(spectrogram * 100)  # Log scale for better visualization
-            
-            # Normalize to 0-1 range
-            if spectrogram.max() > 0:
-                spectrogram = spectrogram / spectrogram.max()
-            
-            self._spectrogram_data = spectrogram.tolist()
-            
-        except Exception as e:
-            logger.error(f"Error computing spectrogram: {e}")
-            self._spectrogram_data = None
+        # Cancel any existing computation
+        self._cancel_spectrogram_computation()
+        
+        # Update state to show we're computing
+        self._state = "computing_spectrogram"
+        self._msg = "Computing spectrogram..."
+        self._pixmap = None
+        self.update()
+        
+        # Create worker and thread
+        self._spectrogram_thread = QThread(self)
+        self._spectrogram_worker = SpectrogramWorker(str(self._path))
+        self._spectrogram_worker.moveToThread(self._spectrogram_thread)
+        
+        # Connect signals
+        self._spectrogram_thread.started.connect(self._spectrogram_worker.run)
+        self._spectrogram_worker.progress.connect(self._on_spectrogram_progress)
+        self._spectrogram_worker.finished.connect(self._on_spectrogram_finished)
+        self._spectrogram_worker.error.connect(self._on_spectrogram_error)
+        
+        # Start computation
+        self._spectrogram_thread.start()
+    
+    def _on_spectrogram_progress(self, current_frame: int, total_frames: int):
+        """Update progress during spectrogram computation."""
+        if total_frames > 0:
+            percent = int((current_frame / total_frames) * 100)
+            self._msg = f"Computing spectrogram... {percent}%"
+            self.update()
+    
+    def _on_spectrogram_finished(self, spectrogram_data: List):
+        """Handle completion of spectrogram computation."""
+        self._spectrogram_data = spectrogram_data if spectrogram_data else None
+        
+        # Restore ready state
+        if self._peaks:
+            self._state = "ready"
+        else:
+            self._state = "empty"
+        self._msg = ""
+        
+        # Force redraw with new spectrogram
+        self._pixmap = None
+        self.update()
+        
+        # Clean up worker
+        self._cleanup_spectrogram_worker()
+    
+    def _on_spectrogram_error(self, error_message: str):
+        """Handle error during spectrogram computation."""
+        logger.error(f"Spectrogram computation error: {error_message}")
+        self._spectrogram_data = None
+        
+        # Restore ready state
+        if self._peaks:
+            self._state = "ready"
+        else:
+            self._state = "empty"
+        self._msg = ""
+        
+        # Force redraw without spectrogram
+        self._pixmap = None
+        self.update()
+        
+        # Clean up worker
+        self._cleanup_spectrogram_worker()
+    
+    def _cancel_spectrogram_computation(self):
+        """Cancel any ongoing spectrogram computation."""
+        if self._spectrogram_worker:
+            self._spectrogram_worker.cancel()
+        self._cleanup_spectrogram_worker()
+    
+    def _cleanup_spectrogram_worker(self):
+        """Clean up spectrogram worker and thread."""
+        if self._spectrogram_worker:
+            self._spectrogram_worker.deleteLater()
+            self._spectrogram_worker = None
+        if self._spectrogram_thread:
+            self._spectrogram_thread.quit()
+            self._spectrogram_thread.wait()
+            self._spectrogram_thread.deleteLater()
+            self._spectrogram_thread = None
 
     def clear(self):
+        # Cancel any ongoing spectrogram computation
+        self._cancel_spectrogram_computation()
+        
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
         self._pixmap = None; self._state = "empty"; self._msg = ""
         self._path = None; self._total_cols = 0; self._done_cols = 0
@@ -4538,6 +4686,7 @@ class WaveformView(QWidget):
         self._clip_start_ms = None; self._clip_end_ms = None
         self._loop_start_ms = None; self._loop_end_ms = None
         self._has_stereo_data = False
+        self._spectrogram_data = None
         self.update()
 
     def set_stereo_mode(self, enabled: bool):
