@@ -9718,10 +9718,9 @@ class AudioBrowser(QMainWindow):
                 self.waveform.clear()
                 self._update_stereo_button_state()  # Update button state even on error
                 self._update_channel_muting_state()  # Update channel muting state even on error
-            self._load_loop_markers()  # Load loop markers for this file (if not already loaded earlier)
+            self._load_loop_markers()  # Load loop markers for this file
             self._update_waveform_tempo()  # Update tempo markers on waveform
             self._update_waveform_annotations()
-            self._load_loop_markers()  # Load loop markers for this file
 
     def _highlight_file_in_tree(self, path: Path):
         """Highlight the specified file in the tree view, ensuring it's visible and selected.
