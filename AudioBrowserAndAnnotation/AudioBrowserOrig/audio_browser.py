@@ -4127,6 +4127,251 @@ class DirectoryDiscoveryWorker(QObject):
         scan_directory(root_path)
         return directories_with_audio
 
+class SpectrogramWorker(QObject):
+    """Worker to compute spectrogram data asynchronously.
+    
+    This prevents UI blocking when computing spectrogram for large audio files.
+    """
+    progress = pyqtSignal(int, int)  # current_frame, total_frames
+    finished = pyqtSignal(list)  # spectrogram_data (as list)
+    error = pyqtSignal(str)  # error_message
+    
+    def __init__(self, audio_path: str):
+        super().__init__()
+        self._audio_path = audio_path
+        self._canceled = False
+    
+    def cancel(self):
+        self._canceled = True
+    
+    def run(self):
+        """Compute spectrogram data asynchronously."""
+        try:
+            if not HAVE_NUMPY:
+                self.error.emit("NumPy not available for spectrogram computation")
+                return
+            
+            import numpy as np
+            from pathlib import Path
+            
+            audio_path = Path(self._audio_path)
+            
+            # Load audio samples
+            samples = []
+            sample_rate = 44100
+            
+            if audio_path.suffix.lower() == '.wav':
+                with wave.open(str(audio_path), 'rb') as wf:
+                    sample_rate = wf.getframerate()
+                    n_frames = wf.getnframes()
+                    
+                    # Check for cancellation
+                    if self._canceled:
+                        self.finished.emit([])
+                        return
+                    
+                    frames = wf.readframes(n_frames)
+                    
+                    # Convert to numpy array
+                    if wf.getsampwidth() == 2:
+                        arr = np.frombuffer(frames, dtype=np.int16)
+                    else:
+                        arr = np.frombuffer(frames, dtype=np.uint8)
+                    
+                    # Convert to float and normalize
+                    arr = arr.astype(np.float32) / 32768.0
+                    
+                    # If stereo, take left channel only
+                    if wf.getnchannels() == 2:
+                        arr = arr[::2]
+                    
+                    samples = arr.tolist()
+            
+            if not samples:
+                self.error.emit("No audio samples could be loaded")
+                return
+            
+            # Check for cancellation
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # STFT parameters
+            n_fft = 2048
+            hop_length = n_fft // 4
+            
+            # Frequency range: 60-8000 Hz (focus on musical range)
+            min_freq = 60
+            max_freq = min(8000, sample_rate // 2)
+            
+            # Number of frequency bins to display
+            n_bins = 128
+            
+            # Create log-spaced frequency bins
+            freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bins + 1)
+            bin_indices = (freq_bins * n_fft / sample_rate).astype(int)
+            bin_indices = np.clip(bin_indices, 0, n_fft // 2)
+            
+            arr = np.array(samples, dtype=np.float32)
+            window = np.hanning(n_fft)
+            
+            spectrogram = []
+            
+            # Calculate total frames for progress reporting
+            total_frames = (len(arr) - n_fft + 1) // hop_length
+            frame_count = 0
+            
+            # Process windows
+            for i in range(0, len(arr) - n_fft + 1, hop_length):
+                # Check for cancellation periodically
+                if frame_count % 100 == 0:
+                    if self._canceled:
+                        self.finished.emit([])
+                        return
+                    # Emit progress
+                    self.progress.emit(frame_count, total_frames)
+                
+                frame = arr[i:i + n_fft] * window
+                fft = np.fft.rfft(frame)
+                magnitude = np.abs(fft)
+                
+                # Group into frequency bins
+                bin_energies = []
+                for b in range(n_bins):
+                    start_bin = bin_indices[b]
+                    end_bin = bin_indices[b + 1]
+                    if end_bin > start_bin:
+                        energy = float(np.mean(magnitude[start_bin:end_bin]))
+                    else:
+                        energy = 0.0
+                    bin_energies.append(energy)
+                
+                spectrogram.append(bin_energies)
+                frame_count += 1
+            
+            # Check for cancellation before final processing
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # Apply log compression
+            spectrogram = np.array(spectrogram)
+            spectrogram = np.log1p(spectrogram * 100)  # Log scale for better visualization
+            
+            # Normalize to 0-1 range
+            if spectrogram.max() > 0:
+                spectrogram = spectrogram / spectrogram.max()
+            
+            # Emit final result
+            self.finished.emit(spectrogram.tolist())
+            
+        except Exception as e:
+            self.error.emit(f"Error computing spectrogram: {e}")
+
+class SongNameSearchWorker(QObject):
+    """Worker to search for files with a specific song name asynchronously.
+    
+    This prevents UI blocking when scanning large directory trees during song rename.
+    """
+    progress = pyqtSignal(str, int)  # current_directory_path, files_found_so_far
+    finished = pyqtSignal(list)  # matching_files
+    
+    def __init__(self, root_path: Path, song_name: str):
+        super().__init__()
+        self._root_path = root_path
+        self._song_name = song_name
+        self._canceled = False
+    
+    def cancel(self):
+        self._canceled = True
+    
+    def run(self):
+        """Search for files with matching song name asynchronously."""
+        try:
+            matching_files = []
+            
+            # Normalize the search song name for comparison
+            search_name_lower = self._song_name.strip().lower()
+            
+            # Discover all directories with audio files
+            directories = self._discover_directories(self._root_path)
+            
+            if self._canceled:
+                self.finished.emit([])
+                return
+            
+            # Search each directory for matching song names
+            for folder_path in directories:
+                if self._canceled:
+                    self.finished.emit([])
+                    return
+                
+                # Emit progress
+                self.progress.emit(str(folder_path), len(matching_files))
+                
+                # Load provided names from this folder
+                names_json_path = folder_path / NAMES_JSON
+                provided_names = load_json(names_json_path, {}) or {}
+                
+                # Check each file's provided name
+                for filename, provided_name in provided_names.items():
+                    if provided_name.strip().lower() == search_name_lower:
+                        matching_files.append({
+                            "folder": folder_path,
+                            "filename": filename,
+                            "current_name": provided_name
+                        })
+            
+            self.finished.emit(matching_files)
+            
+        except Exception as e:
+            log_print(f"ERROR in SongNameSearchWorker: {e}")
+            self.finished.emit([])
+    
+    def _discover_directories(self, root_path: Path) -> List[Path]:
+        """Recursively discover all directories that contain audio files."""
+        directories_with_audio = []
+        
+        if not root_path.exists() or not root_path.is_dir():
+            return directories_with_audio
+        
+        def scan_directory(directory: Path):
+            """Recursively scan directory for audio files."""
+            if self._canceled:
+                return
+            
+            try:
+                has_audio_files = False
+                subdirectories = []
+                
+                for item in directory.iterdir():
+                    if self._canceled:
+                        return
+                    
+                    if item.is_file() and item.suffix.lower() in AUDIO_EXTS:
+                        has_audio_files = True
+                    elif item.is_dir():
+                        # Skip hidden directories and common non-audio directories
+                        if not item.name.startswith('.') and item.name.lower() not in {'__pycache__', 'node_modules', '.git'}:
+                            subdirectories.append(item)
+                
+                # Add this directory if it contains audio files
+                if has_audio_files:
+                    directories_with_audio.append(directory)
+                
+                # Recursively scan subdirectories
+                for subdir in subdirectories:
+                    if self._canceled:
+                        return
+                    scan_directory(subdir)
+                    
+            except (OSError, PermissionError):
+                # Skip directories we can't read
+                pass
+        
+        scan_directory(root_path)
+        return directories_with_audio
+
 class AutoFingerprintWorker(QObject):
     """Worker to automatically generate fingerprints for all audio files in a folder"""
     progress = pyqtSignal(int, int, str)  # current_index, total_files, filename
@@ -4281,6 +4526,8 @@ class WaveformView(QWidget):
         # Spectral analysis support
         self._show_spectrogram: bool = False
         self._spectrogram_data: Optional[List] = None  # Stores spectrogram matrix
+        self._spectrogram_worker: Optional['SpectrogramWorker'] = None
+        self._spectrogram_thread: Optional[QThread] = None
 
     def bind_player(self, player: QMediaPlayer):
         self._player = player
@@ -4327,105 +4574,112 @@ class WaveformView(QWidget):
         
         self._show_spectrogram = enabled
         
-        # If enabled and we have audio data, compute spectrogram
+        # If enabled and we have audio data, compute spectrogram in background
         if enabled and self._path and self._path.exists() and self._peaks:
-            self._compute_spectrogram()
+            self._start_spectrogram_computation()
+        elif not enabled:
+            # Cancel any ongoing computation if disabling
+            self._cancel_spectrogram_computation()
         
         # Force redraw
         self._pixmap = None
         self.update()
     
-    def _compute_spectrogram(self):
-        """Compute spectrogram data from audio file."""
+    def _start_spectrogram_computation(self):
+        """Start background spectrogram computation."""
         if not HAVE_NUMPY or not self._path:
             return
         
-        try:
-            import numpy as np
-            
-            # Load audio samples
-            samples = []
-            sample_rate = 44100
-            
-            if self._path.suffix.lower() == '.wav':
-                with wave.open(str(self._path), 'rb') as wf:
-                    sample_rate = wf.getframerate()
-                    n_frames = wf.getnframes()
-                    frames = wf.readframes(n_frames)
-                    
-                    # Convert to numpy array
-                    if wf.getsampwidth() == 2:
-                        arr = np.frombuffer(frames, dtype=np.int16)
-                    else:
-                        arr = np.frombuffer(frames, dtype=np.uint8)
-                    
-                    # Convert to float and normalize
-                    arr = arr.astype(np.float32) / 32768.0
-                    
-                    # If stereo, take left channel only
-                    if wf.getnchannels() == 2:
-                        arr = arr[::2]
-                    
-                    samples = arr.tolist()
-            
-            if not samples:
-                return
-            
-            # STFT parameters
-            n_fft = 2048
-            hop_length = n_fft // 4
-            
-            # Frequency range: 60-8000 Hz (focus on musical range)
-            min_freq = 60
-            max_freq = min(8000, sample_rate // 2)
-            
-            # Number of frequency bins to display
-            n_bins = 128
-            
-            # Create log-spaced frequency bins
-            freq_bins = np.logspace(np.log10(min_freq), np.log10(max_freq), n_bins + 1)
-            bin_indices = (freq_bins * n_fft / sample_rate).astype(int)
-            bin_indices = np.clip(bin_indices, 0, n_fft // 2)
-            
-            arr = np.array(samples, dtype=np.float32)
-            window = np.hanning(n_fft)
-            
-            spectrogram = []
-            
-            # Process windows
-            for i in range(0, len(arr) - n_fft + 1, hop_length):
-                frame = arr[i:i + n_fft] * window
-                fft = np.fft.rfft(frame)
-                magnitude = np.abs(fft)
-                
-                # Group into frequency bins
-                bin_energies = []
-                for b in range(n_bins):
-                    start_bin = bin_indices[b]
-                    end_bin = bin_indices[b + 1]
-                    if end_bin > start_bin:
-                        energy = float(np.mean(magnitude[start_bin:end_bin]))
-                    else:
-                        energy = 0.0
-                    bin_energies.append(energy)
-                
-                spectrogram.append(bin_energies)
-            
-            # Apply log compression
-            spectrogram = np.array(spectrogram)
-            spectrogram = np.log1p(spectrogram * 100)  # Log scale for better visualization
-            
-            # Normalize to 0-1 range
-            if spectrogram.max() > 0:
-                spectrogram = spectrogram / spectrogram.max()
-            
-            self._spectrogram_data = spectrogram.tolist()
-            
-        except Exception as e:
-            logger.error(f"Error computing spectrogram: {e}")
-            self._spectrogram_data = None
+        # Cancel any existing computation
+        self._cancel_spectrogram_computation()
+        
+        # Update state to show we're computing
+        self._state = "computing_spectrogram"
+        self._msg = "Computing spectrogram..."
+        self._pixmap = None
+        self.update()
+        
+        # Create worker and thread
+        self._spectrogram_thread = QThread(self)
+        self._spectrogram_worker = SpectrogramWorker(str(self._path))
+        self._spectrogram_worker.moveToThread(self._spectrogram_thread)
+        
+        # Connect signals
+        self._spectrogram_thread.started.connect(self._spectrogram_worker.run)
+        self._spectrogram_worker.progress.connect(self._on_spectrogram_progress)
+        self._spectrogram_worker.finished.connect(self._on_spectrogram_finished)
+        self._spectrogram_worker.error.connect(self._on_spectrogram_error)
+        
+        # Start computation
+        self._spectrogram_thread.start()
+    
+    def _on_spectrogram_progress(self, current_frame: int, total_frames: int):
+        """Update progress during spectrogram computation."""
+        if total_frames > 0:
+            percent = int((current_frame / total_frames) * 100)
+            self._msg = f"Computing spectrogram... {percent}%"
+            self.update()
+    
+    def _on_spectrogram_finished(self, spectrogram_data: List):
+        """Handle completion of spectrogram computation."""
+        self._spectrogram_data = spectrogram_data if spectrogram_data else None
+        
+        # Restore ready state
+        if self._peaks:
+            self._state = "ready"
+        else:
+            self._state = "empty"
+        self._msg = ""
+        
+        # Force redraw with new spectrogram
+        self._pixmap = None
+        self.update()
+        
+        # Clean up worker
+        self._cleanup_spectrogram_worker()
+    
+    def _on_spectrogram_error(self, error_message: str):
+        """Handle error during spectrogram computation."""
+        logger.error(f"Spectrogram computation error: {error_message}")
+        self._spectrogram_data = None
+        
+        # Restore ready state
+        if self._peaks:
+            self._state = "ready"
+        else:
+            self._state = "empty"
+        self._msg = ""
+        
+        # Force redraw without spectrogram
+        self._pixmap = None
+        self.update()
+        
+        # Clean up worker
+        self._cleanup_spectrogram_worker()
+    
+    def _cancel_spectrogram_computation(self):
+        """Cancel any ongoing spectrogram computation."""
+        if self._spectrogram_worker:
+            self._spectrogram_worker.cancel()
+        self._cleanup_spectrogram_worker()
+    
+    def _cleanup_spectrogram_worker(self):
+        """Clean up spectrogram worker and thread."""
+        if self._spectrogram_worker:
+            self._spectrogram_worker.deleteLater()
+            self._spectrogram_worker = None
+        if self._spectrogram_thread:
+            self._spectrogram_thread.quit()
+            # Use timeout to prevent indefinite blocking
+            if not self._spectrogram_thread.wait(5000):
+                log_print("Warning: Spectrogram thread did not terminate within 5 seconds")
+            self._spectrogram_thread.deleteLater()
+            self._spectrogram_thread = None
 
     def clear(self):
+        # Cancel any ongoing spectrogram computation
+        self._cancel_spectrogram_computation()
+        
         self._peaks = None; self._peaks_loading = []; self._duration_ms = 0
         self._pixmap = None; self._state = "empty"; self._msg = ""
         self._path = None; self._total_cols = 0; self._done_cols = 0
@@ -4434,6 +4688,7 @@ class WaveformView(QWidget):
         self._clip_start_ms = None; self._clip_end_ms = None
         self._loop_start_ms = None; self._loop_end_ms = None
         self._has_stereo_data = False
+        self._spectrogram_data = None
         self.update()
 
     def set_stereo_mode(self, enabled: bool):
@@ -6394,6 +6649,8 @@ class AudioBrowser(QMainWindow):
         self._auto_gen_fingerprint_worker: Optional['AutoFingerprintWorker'] = None
         self._auto_gen_fingerprint_thread: Optional[QThread] = None
         self._auto_gen_discovery_worker: Optional['DirectoryDiscoveryWorker'] = None
+        self._song_search_worker: Optional['SongNameSearchWorker'] = None
+        self._song_search_thread: Optional[QThread] = None
         self._auto_gen_discovery_thread: Optional[QThread] = None
         self._auto_gen_in_progress: bool = False
         
@@ -9718,10 +9975,9 @@ class AudioBrowser(QMainWindow):
                 self.waveform.clear()
                 self._update_stereo_button_state()  # Update button state even on error
                 self._update_channel_muting_state()  # Update channel muting state even on error
-            self._load_loop_markers()  # Load loop markers for this file (if not already loaded earlier)
+            self._load_loop_markers()  # Load loop markers for this file
             self._update_waveform_tempo()  # Update tempo markers on waveform
             self._update_waveform_annotations()
-            self._load_loop_markers()  # Load loop markers for this file
 
     def _highlight_file_in_tree(self, path: Path):
         """Highlight the specified file in the tree view, ensuring it's visible and selected.
@@ -11345,34 +11601,9 @@ class AudioBrowser(QMainWindow):
         if old_name != new_name:
             # Check if this is a song rename (old name exists and is being changed)
             if old_name and new_name:
-                # Find all other files with the same old song name
-                matching_files = find_files_with_song_name(self.root_path, old_name)
-                
-                # Filter out the current file
-                other_files = [f for f in matching_files 
-                             if not (f["folder"] == self.current_practice_folder and f["filename"] == fname)]
-                
-                if other_files:
-                    # Ask user if they want to propagate the rename
-                    file_list = "\n".join([f"  • {f['folder'].name}/{f['filename']}" 
-                                          for f in other_files[:10]])
-                    if len(other_files) > 10:
-                        file_list += f"\n  ... and {len(other_files) - 10} more"
-                    
-                    reply = QMessageBox.question(
-                        self,
-                        "Propagate Song Rename?",
-                        f"Found {len(other_files)} other file(s) with the song name '{old_name}'.\n\n"
-                        f"Do you want to rename all instances to '{new_name}'?\n\n"
-                        f"Files:\n{file_list}",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.Yes
-                    )
-                    
-                    if reply == QMessageBox.StandardButton.Yes:
-                        # Propagate the rename
-                        self._propagate_song_rename(old_name, new_name, matching_files)
-                        return  # _propagate_song_rename will save and update UI
+                # Start background search for files with the same old song name
+                self._start_song_name_search(old_name, new_name, fname)
+                return  # Search will call _handle_song_search_results when done
             
             # Apply the rename to just this file
             self.provided_names[fname] = new_name
@@ -11381,6 +11612,111 @@ class AudioBrowser(QMainWindow):
             
             # Update status bar statistics
             self._update_session_status()
+    
+    def _start_song_name_search(self, old_name: str, new_name: str, current_filename: str):
+        """Start background search for files with the given song name."""
+        # Show progress indicator
+        self.statusBar().showMessage(f"Searching for files with song name '{old_name}'...")
+        self._show_progress("Searching", 0, 0, "Scanning directories...")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        
+        # Clean up any existing search worker
+        if self._song_search_worker:
+            self._song_search_worker.cancel()
+        if self._song_search_thread and self._song_search_thread.isRunning():
+            self._song_search_thread.quit()
+            self._song_search_thread.wait()
+        
+        # Create worker and thread
+        self._song_search_thread = QThread(self)
+        self._song_search_worker = SongNameSearchWorker(self.root_path, old_name)
+        self._song_search_worker.moveToThread(self._song_search_thread)
+        
+        # Store context for when search completes
+        self._song_search_context = {
+            'old_name': old_name,
+            'new_name': new_name,
+            'current_filename': current_filename
+        }
+        
+        # Connect signals
+        self._song_search_thread.started.connect(self._song_search_worker.run)
+        self._song_search_worker.progress.connect(self._on_song_search_progress)
+        self._song_search_worker.finished.connect(self._on_song_search_finished)
+        
+        # Start search
+        self._song_search_thread.start()
+    
+    def _on_song_search_progress(self, directory: str, files_found: int):
+        """Update progress during song name search."""
+        dir_name = Path(directory).name
+        self.statusBar().showMessage(f"Searching... {files_found} files found in {dir_name}")
+    
+    def _on_song_search_finished(self, matching_files: List[Dict[str, Any]]):
+        """Handle completion of song name search."""
+        # Clean up UI
+        self._hide_progress()
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage("")
+        
+        # Get context
+        old_name = self._song_search_context.get('old_name', '')
+        new_name = self._song_search_context.get('new_name', '')
+        current_filename = self._song_search_context.get('current_filename', '')
+        
+        # Filter out the current file
+        other_files = [f for f in matching_files 
+                      if not (f["folder"] == self.current_practice_folder and f["filename"] == current_filename)]
+        
+        if other_files:
+            # Ask user if they want to propagate the rename
+            file_list = "\n".join([f"  • {f['folder'].name}/{f['filename']}" 
+                                  for f in other_files[:10]])
+            if len(other_files) > 10:
+                file_list += f"\n  ... and {len(other_files) - 10} more"
+            
+            reply = QMessageBox.question(
+                self,
+                "Propagate Song Rename?",
+                f"Found {len(other_files)} other file(s) with the song name '{old_name}'.\n\n"
+                f"Do you want to rename all instances to '{new_name}'?\n\n"
+                f"Files:\n{file_list}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Propagate the rename
+                self._propagate_song_rename(old_name, new_name, matching_files)
+                # Clean up worker before return
+                self._cleanup_song_search_worker()
+                return  # _propagate_song_rename will save and update UI
+        
+        # Apply the rename to just the current file
+        if self.current_audio_file:
+            fname = self.current_audio_file.name
+            self.provided_names[fname] = new_name
+            self._save_names()
+            self._update_library_provided_name_cell(fname, new_name)
+            
+            # Update status bar statistics
+            self._update_session_status()
+        
+        # Clean up worker
+        self._cleanup_song_search_worker()
+    
+    def _cleanup_song_search_worker(self):
+        """Clean up song search worker and thread."""
+        if self._song_search_worker:
+            self._song_search_worker.deleteLater()
+            self._song_search_worker = None
+        if self._song_search_thread:
+            self._song_search_thread.quit()
+            # Use timeout to prevent indefinite blocking
+            if not self._song_search_thread.wait(5000):
+                log_print("Warning: Song search thread did not terminate within 5 seconds")
+            self._song_search_thread.deleteLater()
+            self._song_search_thread = None
 
     def _propagate_song_rename(self, old_name: str, new_name: str, matching_files: List[Dict[str, Any]]):
         """

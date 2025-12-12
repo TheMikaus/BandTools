@@ -19,6 +19,7 @@ Developer and technical documentation:
 - [HIDDEN_SONG_IMPLEMENTATION.md](technical/HIDDEN_SONG_IMPLEMENTATION.md) - Hidden song flag feature implementation
 - [IMPLEMENTATION_COMPLETE_HIDDEN_SONGS.md](technical/IMPLEMENTATION_COMPLETE_HIDDEN_SONGS.md) - Hidden songs implementation completion
 - [METADATA_MANAGER_IMPLEMENTATION.md](technical/METADATA_MANAGER_IMPLEMENTATION.md) - Metadata manager implementation details
+- [performance_issues_and_lessons_learned.md](technical/performance_issues_and_lessons_learned.md) - **Performance optimization** - Guide to performance issues and best practices
 - [PYDUB_FIX_SUMMARY.txt](technical/PYDUB_FIX_SUMMARY.txt) - PyDub import fix summary
 - [SHARED_MODULES_MIGRATION.md](technical/SHARED_MODULES_MIGRATION.md) - Shared modules migration documentation
 - [UI_FIXES_SUMMARY.md](technical/UI_FIXES_SUMMARY.md) - UI fixes summary
