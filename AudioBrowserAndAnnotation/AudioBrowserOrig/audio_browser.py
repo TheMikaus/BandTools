@@ -9519,7 +9519,6 @@ class AudioBrowser(QMainWindow):
             cache = load_fingerprint_cache(file_path.parent)
             
             # Get all available algorithms
-            from collections import OrderedDict
             algorithms_to_generate = list(FINGERPRINT_ALGORITHMS.keys())
             
             # Decode audio
