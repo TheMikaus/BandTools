@@ -149,16 +149,34 @@ Access all documentation directly from the application:
 
 ## Key Documentation Files
 
-- **User Guides**: HOWTO_NEW_FEATURES.md, PRACTICE_GOALS_GUIDE.md, SETLIST_BUILDER_GUIDE.md, UI_IMPROVEMENTS.md
+### Performance & Optimization
+- **[PERFORMANCE_FEATURES.md](PERFORMANCE_FEATURES.md)** - Performance optimization guide 🆕
+  - Parallel waveform generation (2-4x speedup)
+  - Library pagination (9-35x faster loading)
+  - Caching systems and benchmarks
+  - Troubleshooting and recommendations
+- **[PERFORMANCE_REVIEW_SUMMARY.md](PERFORMANCE_REVIEW_SUMMARY.md)** - Complete performance review 🆕
+  - Code quality analysis
+  - Security scan results
+  - Test coverage summary
+  - Optimization verification
+
+### User Guides
+- HOWTO_NEW_FEATURES.md, PRACTICE_GOALS_GUIDE.md, SETLIST_BUILDER_GUIDE.md, UI_IMPROVEMENTS.md
 - **Visual Guides**: UI_SCREENSHOTS.md, VISUAL_GUIDE_* files with ASCII diagrams
-- **Technical**: 
-  - INTERFACE_IMPROVEMENT_IDEAS.md (feature roadmap)
-  - **QML_MIGRATION_STRATEGY.md** (Qt Quick/QML modernization plan) 🆕
-  - **CURRENT_ARCHITECTURE_INVENTORY.md** (architecture analysis) 🆕
-  - **SIMPLIFICATION_EXAMPLES.md** (code simplification patterns) 🆕
-  - **IMMEDIATE_SIMPLIFICATION_GUIDE.md** (step-by-step implementation guide) 🆕
-  - BUILD.md (build instructions)
-- **Test Plans**: TEST_PLAN_* files with comprehensive test cases
+
+### Technical Documentation
+- INTERFACE_IMPROVEMENT_IDEAS.md (feature roadmap)
+- **QML_MIGRATION_STRATEGY.md** (Qt Quick/QML modernization plan) 🆕
+- **CURRENT_ARCHITECTURE_INVENTORY.md** (architecture analysis) 🆕
+- **SIMPLIFICATION_EXAMPLES.md** (code simplification patterns) 🆕
+- **IMMEDIATE_SIMPLIFICATION_GUIDE.md** (step-by-step implementation guide) 🆕
+- BUILD.md (build instructions)
+
+### Test Plans
+- TEST_PLAN_* files with comprehensive test cases
+- [TEST_PLAN_SUMMARY.md](AudioBrowser-QML/docs/test_plans/TEST_PLAN_SUMMARY.md) - Quick reference (345 test cases)
+- [COLLATED_TEST_PLAN.md](AudioBrowser-QML/docs/test_plans/COLLATED_TEST_PLAN.md) - Complete test suite
 
 # Note
 - Basically this whole application is ChatGPT or CoPilot generated. The idea was just to have it generate a tool so I can have my workflows go faster.
