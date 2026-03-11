@@ -8,6 +8,7 @@ name: Build AudioBrowser
 permissions:
   contents: write
   packages: write
+  actions: write
 
 on:
   push:
@@ -181,6 +182,36 @@ jobs:
         name: AudioAnnotationBrowser-Orig-${{ steps.version.outputs.version_string }}-windows
         path: ${{ steps.archive.outputs.archive_path }}
         retention-days: 30
+
+    - name: Clean up old artifacts (keep last 5)
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prefix = 'AudioAnnotationBrowser-Orig-';
+          const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            per_page: 100
+          });
+          const matching = artifacts
+            .filter(a => a.name.startsWith(prefix))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          const toDelete = matching.slice(5);
+          let deleted = 0;
+          for (const artifact of toDelete) {
+            try {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id
+              });
+              console.log(`Deleted artifact: ${artifact.name} (id: ${artifact.id})`);
+              deleted++;
+            } catch (err) {
+              console.warn(`Failed to delete artifact ${artifact.name} (id: ${artifact.id}): ${err.message}`);
+            }
+          }
+          console.log(`Kept ${Math.min(matching.length, 5)} artifact(s), deleted ${deleted}.`);
     
     - name: Create Release (manual trigger only)
       if: github.event_name == 'workflow_dispatch' && inputs.create_release == 'true'
@@ -356,6 +387,36 @@ jobs:
         name: AudioBrowser-QML-${{ steps.version.outputs.version_string }}-windows
         path: ${{ steps.archive.outputs.archive_path }}
         retention-days: 30
+
+    - name: Clean up old artifacts (keep last 5)
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prefix = 'AudioBrowser-QML-';
+          const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            per_page: 100
+          });
+          const matching = artifacts
+            .filter(a => a.name.startsWith(prefix))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          const toDelete = matching.slice(5);
+          let deleted = 0;
+          for (const artifact of toDelete) {
+            try {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id
+              });
+              console.log(`Deleted artifact: ${artifact.name} (id: ${artifact.id})`);
+              deleted++;
+            } catch (err) {
+              console.warn(`Failed to delete artifact ${artifact.name} (id: ${artifact.id}): ${err.message}`);
+            }
+          }
+          console.log(`Kept ${Math.min(matching.length, 5)} artifact(s), deleted ${deleted}.`);
     
     - name: Create Release (manual trigger only)
       if: github.event_name == 'workflow_dispatch' && inputs.create_release == 'true'
